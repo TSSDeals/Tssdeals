@@ -1,0 +1,79 @@
+modules = ["nodejs-20", "web", "python-3.11", "postgresql-16"]
+run = "npm run dev"
+hidden = [".config", ".git", "generated-icon.png", "node_modules", "dist"]
+
+[nix]
+channel = "stable-24_05"
+packages = ["imagemagick"]
+
+[[ports]]
+localPort = 5000
+externalPort = 80
+
+[[ports]]
+localPort = 5001
+externalPort = 3000
+
+[env]
+PORT = "5000"
+
+[deployment]
+deploymentTarget = "cloudrun"
+run = ["node", "dist/index.cjs"]
+build = ["npm", "run", "build"]
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Start application"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "classification-dedup"
+
+[[workflows.workflow]]
+name = "Start application"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npm run dev"
+waitForPort = 5000
+
+[[workflows.workflow]]
+name = "classification-dedup"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npx tsx server/ai-classifier.dedup.test.ts"
+
+[workflows.workflow.metadata]
+isValidation = true
+
+[agent]
+integrations = ["javascript_log_in_with_replit:2.0.0", "javascript_database:1.0.0", "github:1.0.0"]
+
+[userenv]
+
+[userenv.shared]
+EBAY_VERIFICATION_TOKEN = "TwinSeam_eBay_2026_EventNotice_ReplitApp"
+AMAZON_ASSOCIATE_TAG = "twinseamdeals-20"
+VAPID_PUBLIC_KEY = "BA337Me0w0CfUWvufjvz1-DAMKhEci3D2C1r5QOCQ7wzkmSN-EfUclAEg4L_nsEnKnXxiSU1jUXsV8qReYQ6cE8"
+VAPID_SUBJECT = "mailto:admin@twinseamdeals.com"
+CJ_PROPERTY_ID = "101681221"
+SMTP_HOST = "smtp.gmail.com"
+SMTP_PORT = "587"
+EMAIL_FROM = "tssadmin@twinseamsports.com"
+VITE_ENABLE_SMS_LOGIN = "true"
+
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 120000
