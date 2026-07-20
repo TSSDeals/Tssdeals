@@ -2,6 +2,7 @@ import { eq, and, asc, desc, gte, ilike, inArray, isNull, isNotNull, not, or, sq
 import { normalizeBrand } from "./brand-normalizer";
 import {
   BASEBALL_BAT_EVIDENCE_PATTERN,
+  BASEBALL_BAT_NEGATIVE_EVIDENCE_PATTERN,
   normalizeDealSearch,
   searchAliasPattern,
 } from "./deal-search";
@@ -348,7 +349,7 @@ export class DatabaseStorage implements IStorage {
     const baseballBatEvidence = params.sportId === "baseball" && requestedEquipmentIds.includes("bb-bats")
       ? and(
           dsql`(COALESCE(${deals.title}, '') || ' ' || COALESCE(${deals.brand}, '') || ' ' || COALESCE(${deals.raw}::text, '')) ~* ${BASEBALL_BAT_EVIDENCE_PATTERN}`,
-          dsql`LOWER(COALESCE(${deals.title}, '') || ' ' || COALESCE(${deals.raw}::text, '')) NOT LIKE '%cricket%'`,
+          dsql`(COALESCE(${deals.title}, '') || ' ' || COALESCE(${deals.brand}, '') || ' ' || COALESCE(${deals.raw}::text, '')) !~* ${BASEBALL_BAT_NEGATIVE_EVIDENCE_PATTERN}`,
         )
       : null;
 

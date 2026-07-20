@@ -38,7 +38,10 @@ const BAT_SIZE_RES = [
 const DROP_RE = /\bdrop\s*-?\s*(\d{1,2})\b|(?:^|\s)-\s*(\d{1,2})\b/i;
 
 export const BASEBALL_BAT_EVIDENCE_PATTERN =
-  "(^|[^a-z0-9])(bbcor|usssa|usa\\s+baseball|baseball\\s+bat|youth\\s+(?:baseball\\s+)?bat|tee[ -]?ball\\s+bat|cat\\s*x|hype[ -]?fire)([^a-z0-9]|$)";
+  "(^|[^a-z0-9])(bbcor|usssa|usa\\s+baseball|baseball\\s+bat|youth\\s+(?:baseball\\s+)?bat|tee[ -]?ball\\s+bat|cat\\s*x|hype[ -]?fire|(?:louisville(?:\\s+slugger)?|ls)\\s+supra|supra\\s+(?:louisville(?:\\s+slugger)?|ls))([^a-z0-9]|$)";
+
+export const BASEBALL_BAT_NEGATIVE_EVIDENCE_PATTERN =
+  "(^|[^a-z0-9])(cricket|fastpitch|softball|slowpitch)([^a-z0-9]|$)";
 
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -108,7 +111,8 @@ export function matchesNormalizedDealSearch(search: NormalizedDealSearch, deal: 
 
 export function hasBaseballBatEvidence(deal: SearchableDeal): boolean {
   const evidence = `${deal.title} ${deal.brand ?? ""} ${JSON.stringify(deal.raw ?? {})}`;
-  return new RegExp(BASEBALL_BAT_EVIDENCE_PATTERN, "i").test(evidence) && !/\bcricket\b/i.test(evidence);
+  return new RegExp(BASEBALL_BAT_EVIDENCE_PATTERN, "i").test(evidence)
+    && !new RegExp(BASEBALL_BAT_NEGATIVE_EVIDENCE_PATTERN, "i").test(evidence);
 }
 
 export function matchesDealClassificationFilters(
