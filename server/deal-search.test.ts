@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   batSizeMatchSpecificity,
+  matchesGloveSize,
   matchesDealClassificationFilters,
   matchesNormalizedDealSearch,
   normalizeDealSearch,
@@ -130,3 +131,41 @@ test("short aliases are boundary matched", () => {
   const unrelated = { title: "Wilson Supra-style Bat Drop -10", brand: "Wilson", dropWeight: 10 };
   assert.equal(matchesNormalizedDealSearch(normalizeDealSearch("LS Supra -10"), unrelated), false);
 });
+
+const a2000: SearchableDeal = {
+  title: "Wilson A2000 1786 11.5",
+  brand: "Wilson",
+  sportId: "baseball",
+  equipmentTypeId: "bb-balls",
+};
+
+test("A2000 1786 11.5 survives search and redundant baseball glove filters", () => {
+  const search = normalizeDealSearch("Wilson A2000 1786 11.5");
+  assert.equal(matchesNormalizedDealSearch(search, a2000), true, "search only");
+  assert.equal(matchesDealClassificationFilters(a2000, { sportId: "baseball" }), true, "Baseball");
+  assert.equal(matchesDealClassificationFilters(a2000, { sportId: "baseball", equipmentTypeId: "bb-gloves" }), true, "Baseball Gloves");
+  assert.equal(matchesGloveSize(a2000, '11.5"'), true, "11.5-inch sub-filter");
+});
+
+for (const notation of ["11.5", '11.5"', "11.5 inch", "11.5-inch"]) {
+  test(`normalizes glove size notation ${notation}`, () => {
+    assert.equal(matchesGloveSize({ title: `Wilson A2000 1786 ${notation}` }, '11.5"'), true);
+  });
+}
+
+test("glove size matches stored size and assigned sub-filter tags", () => {
+  assert.equal(matchesGloveSize({ title: "Wilson A2000 1786", sizeNumber: '11.5"' }, "11.5"), true);
+  assert.equal(matchesGloveSize({ title: "Wilson A2000 1786", subFilterIds: ["size-uuid"] }, "11.5", "size-uuid"), true);
+});
+
+for (const deal of [
+  { title: "Wilson Adult Batting Gloves", sportId: "baseball", equipmentTypeId: "bb-batting-gloves" },
+  { title: "Title Boxing Training Gloves", sportId: "boxing", equipmentTypeId: "boxing-gloves" },
+  { title: "FootJoy Golf Glove", sportId: "golf", equipmentTypeId: "golf-glove" },
+  { title: "Insulated Winter Work Gloves", sportId: null, equipmentTypeId: null },
+  { title: "A2000 Style Batting Gloves", sportId: "baseball", equipmentTypeId: "bb-gloves" },
+]) {
+  test(`Baseball Gloves excludes ${deal.title}`, () => {
+    assert.equal(matchesDealClassificationFilters(deal, { sportId: "baseball", equipmentTypeId: "bb-gloves" }), false);
+  });
+}
