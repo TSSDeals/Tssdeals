@@ -1,5 +1,6 @@
 import { eq, and, asc, desc, gte, ilike, inArray, isNull, isNotNull, not, or, sql as dsql } from "drizzle-orm";
 import { normalizeBrand } from "./brand-normalizer";
+import { normalizeDealSearch } from "./deal-search";
 import {
   autoIncludeRules,
   deals,
@@ -289,8 +290,35 @@ export class DatabaseStorage implements IStorage {
   async listDeals(params: DealsQueryParams): Promise<Deal[]> {
     const whereParts: any[] = [];
     const amzBypass = eq(deals.sourceId, "amazon-manual");
+    const normalizedSearch = params.q?.trim() ? normalizeDealSearch(params.q) : null;
 
-    if (params.q) {
+    if (normalizedSearch?.concepts.length) {
+      const conceptConditions = normalizedSearch.concepts.map((concept) => {
+        if (concept.kind === "text") {
+          return or(
+            ilike(deals.title, `%${concept.value}%`),
+            ilike(deals.brand, `%${concept.value}%`),
+            dsql`search_vector @@ plainto_tsquery('english', ${concept.value})`,
+          )!;
+        }
+        if (concept.kind === "brand") {
+          const pattern = `(^|[^a-z0-9])(louisville\\s+slugger|louisville|ls)([^a-z0-9]|$)`;
+          return or(dsql`${deals.title} ~* ${pattern}`, dsql`COALESCE(${deals.brand}, '') ~* ${pattern}`)!;
+        }
+        const dropPattern = `(^|[^a-z0-9])(drop\\s*-?\\s*|-)${concept.drop}([^a-z0-9]|$)`;
+        const dropCondition = or(
+          eq(deals.dropWeight, concept.drop),
+          dsql`${deals.title} ~* ${dropPattern}`,
+          dsql`COALESCE(${deals.brand}, '') ~* ${dropPattern}`,
+        )!;
+        if (concept.kind === "drop") return dropCondition;
+        const sizePattern = `(^|[^0-9])${concept.length}\\s*(/|x|by)\\s*${concept.weight}([^0-9]|$)`;
+        return or(dsql`${deals.title} ~* ${sizePattern}`, dropCondition)!;
+      });
+      whereParts.push(and(...conceptConditions));
+    }
+
+    if (params.q && !normalizedSearch) {
       const searchTerms = params.q.trim().split(/\s+/).filter(Boolean);
       if (searchTerms.length > 0) {
         const termConditions = searchTerms.map((term) =>
@@ -500,8 +528,8 @@ export class DatabaseStorage implements IStorage {
 
     let orderClause: any[];
     if (params.q) {
-      const searchTerms = params.q.trim().split(/\s+/).filter(Boolean);
-      const qEsc = params.q.trim().replace(/'/g, "''");
+      const searchTerms = (normalizedSearch?.rankQuery || params.q).split(/\s+/).filter(Boolean);
+      const qEsc = (normalizedSearch?.rankQuery || params.q.trim()).replace(/'/g, "''");
 
       // When the user explicitly picks a non-default sort, respect it as the primary
       // ordering. Relevance scoring only applies when using the default sort.
