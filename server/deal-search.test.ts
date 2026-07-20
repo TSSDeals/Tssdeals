@@ -60,6 +60,17 @@ const filteredCases: Array<{ name: string; deal: SearchableDeal; expected: boole
     expected: true,
   },
   {
+    name: "ignores broad softball breadcrumbs for an unclassified Louisville Supra",
+    deal: {
+      title: "Louisville Supra 27/17",
+      brand: "Louisville Slugger",
+      sportId: null,
+      equipmentTypeId: null,
+      raw: { breadcrumbs: ["Sports", "Baseball & Softball", "Bats"] },
+    },
+    expected: true,
+  },
+  {
     name: "does not recover a USSSA fastpitch listing",
     deal: { title: "Easton Ghost USSSA Fastpitch Bat", sportId: "fastpitch-softball", equipmentTypeId: "fp-bats" },
     expected: false,
@@ -67,6 +78,16 @@ const filteredCases: Array<{ name: string; deal: SearchableDeal; expected: boole
   {
     name: "does not recover a USSSA softball listing",
     deal: { title: "USSSA Softball Bat", sportId: "slowpitch-softball", equipmentTypeId: "sp-bats" },
+    expected: false,
+  },
+  {
+    name: "honors a stored fastpitch equipment ID even when the title is ambiguous",
+    deal: { title: "Easton Ghost USSSA Bat", sportId: null, equipmentTypeId: "fp-bats" },
+    expected: false,
+  },
+  {
+    name: "honors a stored slowpitch sport ID even when the title is ambiguous",
+    deal: { title: "USSSA Tournament Bat", sportId: "slowpitch-softball", equipmentTypeId: null },
     expected: false,
   },
   {

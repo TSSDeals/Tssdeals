@@ -43,6 +43,13 @@ export const BASEBALL_BAT_EVIDENCE_PATTERN =
 export const BASEBALL_BAT_NEGATIVE_EVIDENCE_PATTERN =
   "(^|[^a-z0-9])(cricket|fastpitch|softball|slowpitch)([^a-z0-9]|$)";
 
+const SOFTBALL_SPORT_IDS = new Set(["fastpitch-softball", "slowpitch-softball"]);
+
+function hasStoredSoftballClassification(deal: SearchableDeal): boolean {
+  return SOFTBALL_SPORT_IDS.has(deal.sportId ?? "")
+    || /^(?:fp|sp)-/.test(deal.equipmentTypeId ?? "");
+}
+
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 export function searchAliasPattern(values: string[]): string {
@@ -112,7 +119,8 @@ export function matchesNormalizedDealSearch(search: NormalizedDealSearch, deal: 
 export function hasBaseballBatEvidence(deal: SearchableDeal): boolean {
   const evidence = `${deal.title} ${deal.brand ?? ""} ${JSON.stringify(deal.raw ?? {})}`;
   return new RegExp(BASEBALL_BAT_EVIDENCE_PATTERN, "i").test(evidence)
-    && !new RegExp(BASEBALL_BAT_NEGATIVE_EVIDENCE_PATTERN, "i").test(evidence);
+    && !hasStoredSoftballClassification(deal)
+    && !new RegExp(BASEBALL_BAT_NEGATIVE_EVIDENCE_PATTERN, "i").test(deal.title);
 }
 
 export function matchesDealClassificationFilters(

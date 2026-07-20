@@ -349,7 +349,9 @@ export class DatabaseStorage implements IStorage {
     const baseballBatEvidence = params.sportId === "baseball" && requestedEquipmentIds.includes("bb-bats")
       ? and(
           dsql`(COALESCE(${deals.title}, '') || ' ' || COALESCE(${deals.brand}, '') || ' ' || COALESCE(${deals.raw}::text, '')) ~* ${BASEBALL_BAT_EVIDENCE_PATTERN}`,
-          dsql`(COALESCE(${deals.title}, '') || ' ' || COALESCE(${deals.brand}, '') || ' ' || COALESCE(${deals.raw}::text, '')) !~* ${BASEBALL_BAT_NEGATIVE_EVIDENCE_PATTERN}`,
+          dsql`COALESCE(${deals.title}, '') !~* ${BASEBALL_BAT_NEGATIVE_EVIDENCE_PATTERN}`,
+          dsql`(${deals.sportId} IS NULL OR ${deals.sportId} NOT IN ('fastpitch-softball', 'slowpitch-softball'))`,
+          dsql`(${deals.equipmentTypeId} IS NULL OR (${deals.equipmentTypeId} NOT LIKE 'fp-%' AND ${deals.equipmentTypeId} NOT LIKE 'sp-%'))`,
         )
       : null;
 
