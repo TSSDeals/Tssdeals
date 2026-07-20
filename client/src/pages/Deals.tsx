@@ -28,6 +28,7 @@ import { Link } from "wouter";
 import { RetailerBanner } from "@/components/RetailerBanner";
 import { BrandStoreStrip } from "@/components/BrandStoreStrip";
 import { DealCarousel } from "@/components/DealCarousel";
+import { BASEBALL_BAT_GROUP_IDS, CANONICAL_BASEBALL_BAT_ID, curateShopperEquipmentTypes } from "@shared/equipment-groups";
 
 type SortOption = "newest" | "oldest" | "price-low" | "price-high" | "discount-high" | "a-z" | "z-a";
 
@@ -209,21 +210,30 @@ export default function DealsPage() {
   }, [prefs.data]);
 
   const groupedEqTypes = useMemo(() => {
-    const raw = (eqTypes.data ?? []) as any[];
-    if (pending.sportId !== "all") return raw;
+    const fetched = (eqTypes.data ?? []) as any[];
+    const raw = pending.sportId === "all"
+      ? [
+          ...fetched.filter((type) => type.sportId !== "baseball"),
+          ...curateShopperEquipmentTypes(fetched.filter((type) => type.sportId === "baseball"), "baseball"),
+        ]
+      : fetched;
+    if (pending.sportId !== "all") return curateShopperEquipmentTypes(raw, pending.sportId);
     const groups = new Map<string, { name: string; ids: string[] }>();
     for (const t of raw) {
       const name = String(t.name);
       if (!groups.has(name)) {
         groups.set(name, { name, ids: [] });
       }
-      groups.get(name)!.ids.push(String(t.id));
+      groups.get(name)!.ids.push(...((t as any).equivalentIds ?? [String(t.id)]));
     }
     return Array.from(groups.values()).sort((a, b) => a.name.localeCompare(b.name));
   }, [eqTypes.data, pending.sportId]);
 
   const selectedEqTypeIds = useMemo(() => {
     if (applied.equipmentTypeId === "all") return undefined;
+    if (applied.sportId === "baseball" && applied.equipmentTypeId === CANONICAL_BASEBALL_BAT_ID) {
+      return BASEBALL_BAT_GROUP_IDS.join(",");
+    }
     if (applied.sportId !== "all") return undefined;
     const group = groupedEqTypes.find((g: any) => g.name === applied.equipmentTypeId);
     if (group && (group as any).ids) return (group as any).ids.join(",");
@@ -273,7 +283,7 @@ export default function DealsPage() {
     () => ({
       q: applied.q.trim() ? applied.q.trim() : undefined,
       sportId: applied.sportId === "all" ? undefined : applied.sportId,
-      equipmentTypeId: applied.equipmentTypeId === "all" ? undefined : (applied.sportId !== "all" ? applied.equipmentTypeId : undefined),
+      equipmentTypeId: applied.equipmentTypeId === "all" || selectedEqTypeIds ? undefined : (applied.sportId !== "all" ? applied.equipmentTypeId : undefined),
       equipmentTypeIds: selectedEqTypeIds,
       subFilterId: applied.subFilterId === "all" ? undefined : applied.subFilterId,
       ebaySeller: applied.ebaySeller === "all" ? undefined : applied.ebaySeller,
@@ -645,7 +655,7 @@ export default function DealsPage() {
                             {g.name}
                           </SelectItem>
                         ))
-                      : (eqTypes.data ?? []).map((t: any) => (
+                      : groupedEqTypes.map((t: any) => (
                           <SelectItem key={t.id} value={t.id} data-testid={`eqtype-${t.id}`}>
                             {t.name}
                           </SelectItem>

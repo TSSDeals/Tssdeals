@@ -1,3 +1,5 @@
+import { expandEquipmentTypeIds, isBaseballBatGroupId } from "../shared/equipment-groups";
+
 export type DealSearchConcept =
   | { kind: "text"; value: string }
   | { kind: "alias"; canonical: string; values: string[] }
@@ -123,18 +125,33 @@ export function hasBaseballBatEvidence(deal: SearchableDeal): boolean {
     && !new RegExp(BASEBALL_BAT_NEGATIVE_EVIDENCE_PATTERN, "i").test(deal.title);
 }
 
+/** Higher means a bat-size match is more specific; exact length/weight outranks drop fallback. */
+export function batSizeMatchSpecificity(search: NormalizedDealSearch, deal: SearchableDeal): number {
+  const size = search.concepts.find((concept) => concept.kind === "bat-size");
+  if (!size || size.kind !== "bat-size") return 0;
+  const haystack = `${deal.title} ${deal.brand ?? ""}`;
+  const exact = new RegExp(
+    `(^|[^0-9])${size.length}\\s*(?:(?:/|x|by)\\s*${size.weight}|(?:inches?|inch|in|[\"″])\\s*(?:/|x|-|by)?\\s*${size.weight}\\s*(?:ounces?|ounce|oz))([^0-9]|$)`,
+    "i",
+  ).test(haystack);
+  if (exact) return 2;
+  const drop = deal.dropWeight === size.drop
+    || new RegExp(`(^|[^a-z0-9])(?:drop\\s*-?\\s*|-)${size.drop}([^a-z0-9]|$)`, "i").test(haystack);
+  return drop ? 1 : 0;
+}
+
 export function matchesDealClassificationFilters(
   deal: SearchableDeal,
   filters: { sportId?: string; equipmentTypeId?: string; equipmentTypeIds?: string[] },
 ): boolean {
-  const requestedEquipment = filters.equipmentTypeIds?.length
+  const requestedEquipment = expandEquipmentTypeIds(filters.sportId, filters.equipmentTypeIds?.length
     ? filters.equipmentTypeIds
-    : (filters.equipmentTypeId ? [filters.equipmentTypeId] : []);
+    : (filters.equipmentTypeId ? [filters.equipmentTypeId] : []));
   const exactSport = !filters.sportId || deal.sportId === filters.sportId;
   const exactEquipment = requestedEquipment.length === 0 || requestedEquipment.includes(deal.equipmentTypeId ?? "");
   if (exactSport && exactEquipment) return true;
 
   return filters.sportId === "baseball"
-    && requestedEquipment.includes("bb-bats")
+    && requestedEquipment.some(isBaseballBatGroupId)
     && hasBaseballBatEvidence(deal);
 }

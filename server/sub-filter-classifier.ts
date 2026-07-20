@@ -1,6 +1,7 @@
 import { eq, isNull, and, isNotNull, inArray } from "drizzle-orm";
 import { db } from "./db";
 import { deals } from "@shared/schema";
+import { BASEBALL_BAT_GROUP_IDS } from "../shared/equipment-groups";
 
 interface SubFilterRule {
   subFilterId: string;
@@ -670,7 +671,7 @@ const VOLLEYBALL_BALL_RULES: SubFilterRule[] = [
 
 const ALL_CONFIGS: EquipmentSubFilterConfig[] = [
   { equipmentTypeIds: ["bb-gloves", "fp-gloves", "sp-gloves"], rules: GLOVE_RULES },
-  { equipmentTypeIds: ["bb-bats"], rules: BAT_RULES },
+  { equipmentTypeIds: [...BASEBALL_BAT_GROUP_IDS], rules: BAT_RULES },
   { equipmentTypeIds: ["fp-bats", "sp-bats"], rules: BAT_RULES.filter(r => r.subFilterId !== "bbcor") },
   { equipmentTypeIds: ["bb-protective", "fp-protective", "sp-protective"], rules: PROTECTIVE_BASEBALL_RULES },
   { equipmentTypeIds: ["bb-training", "fp-training", "sp-training"], rules: TRAINING_BASEBALL_RULES },
@@ -714,7 +715,7 @@ for (const cfg of ALL_CONFIGS) {
   }
 }
 
-const BAT_EQUIPMENT_TYPE_IDS = new Set(["bb-bats", "fp-bats", "sp-bats"]);
+const BAT_EQUIPMENT_TYPE_IDS = new Set([...BASEBALL_BAT_GROUP_IDS, "fp-bats", "sp-bats"]);
 const BALL_SIZE_EQUIPMENT_TYPE_IDS = new Set([
   "soc-balls",
   "bk-balls",

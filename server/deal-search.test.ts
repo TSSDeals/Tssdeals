@@ -1,11 +1,29 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  batSizeMatchSpecificity,
   matchesDealClassificationFilters,
   matchesNormalizedDealSearch,
   normalizeDealSearch,
   type SearchableDeal,
 } from "./deal-search";
+
+for (const equipmentTypeId of ["baseball-bat", "bat", "bb-bats"]) {
+  test(`canonical Baseball Bats filter includes ${equipmentTypeId}`, () => {
+    assert.equal(matchesDealClassificationFilters(
+      { title: "Generic bat listing", sportId: "baseball", equipmentTypeId },
+      { sportId: "baseball", equipmentTypeId: "bb-bats" },
+    ), true);
+  });
+}
+
+test("exact 27/17 outranks a generic drop-10 fallback", () => {
+  const search = normalizeDealSearch("Louisville Supra 27/17");
+  const exact = { title: "Louisville Supra 27/17 USSSA Bat", dropWeight: 10 };
+  const fallback = { title: "Louisville Supra USSSA Bat Drop -10", dropWeight: 10 };
+  assert.equal(matchesNormalizedDealSearch(search, fallback), true);
+  assert.ok(batSizeMatchSpecificity(search, exact) > batSizeMatchSpecificity(search, fallback));
+});
 
 const searchCases: Array<{ name: string; queries: string[]; deal: SearchableDeal }> = [
   {
