@@ -1,6 +1,10 @@
 import { eq, and, asc, desc, gte, ilike, inArray, isNull, isNotNull, not, or, sql as dsql } from "drizzle-orm";
 import { normalizeBrand } from "./brand-normalizer";
-import { normalizeDealSearch } from "./deal-search";
+import {
+  BASEBALL_BAT_EVIDENCE_PATTERN,
+  normalizeDealSearch,
+  searchAliasPattern,
+} from "./deal-search";
 import {
   autoIncludeRules,
   deals,
@@ -301,8 +305,8 @@ export class DatabaseStorage implements IStorage {
             dsql`search_vector @@ plainto_tsquery('english', ${concept.value})`,
           )!;
         }
-        if (concept.kind === "brand") {
-          const pattern = `(^|[^a-z0-9])(louisville\\s+slugger|louisville|ls)([^a-z0-9]|$)`;
+        if (concept.kind === "alias") {
+          const pattern = searchAliasPattern(concept.values);
           return or(dsql`${deals.title} ~* ${pattern}`, dsql`COALESCE(${deals.brand}, '') ~* ${pattern}`)!;
         }
         const dropPattern = `(^|[^a-z0-9])(drop\\s*-?\\s*|-)${concept.drop}([^a-z0-9]|$)`;
@@ -338,6 +342,15 @@ export class DatabaseStorage implements IStorage {
     // (null sport/equipment). If they ARE tagged, they must match the selected filter.
     const amzNoSport = and(amzBypass, isNull(deals.sportId));
     const amzNoEquip = and(amzBypass, isNull(deals.equipmentTypeId));
+    const requestedEquipmentIds = params.equipmentTypeIds?.length
+      ? params.equipmentTypeIds
+      : (params.equipmentTypeId ? [params.equipmentTypeId] : []);
+    const baseballBatEvidence = params.sportId === "baseball" && requestedEquipmentIds.includes("bb-bats")
+      ? and(
+          dsql`(COALESCE(${deals.title}, '') || ' ' || COALESCE(${deals.brand}, '') || ' ' || COALESCE(${deals.raw}::text, '')) ~* ${BASEBALL_BAT_EVIDENCE_PATTERN}`,
+          dsql`LOWER(COALESCE(${deals.title}, '') || ' ' || COALESCE(${deals.raw}::text, '')) NOT LIKE '%cricket%'`,
+        )
+      : null;
 
     // When a specific source is explicitly selected (e.g. eBay), marketplace listings often have
     // null equipment types because they aren't pre-classified. Extend the bypass so that unclassified
@@ -347,16 +360,20 @@ export class DatabaseStorage implements IStorage {
       : null;
 
     if (params.sportId) {
-      whereParts.push(or(eq(deals.sportId, params.sportId), amzNoSport));
+      const conditions: any[] = [eq(deals.sportId, params.sportId), amzNoSport];
+      if (baseballBatEvidence) conditions.push(baseballBatEvidence);
+      whereParts.push(or(...conditions));
     }
 
     if (params.equipmentTypeIds && params.equipmentTypeIds.length > 0) {
       const conditions: any[] = [inArray(deals.equipmentTypeId, params.equipmentTypeIds), amzNoEquip];
       if (selectedSrcNoEquip) conditions.push(selectedSrcNoEquip);
+      if (baseballBatEvidence) conditions.push(baseballBatEvidence);
       whereParts.push(or(...conditions));
     } else if (params.equipmentTypeId) {
       const conditions: any[] = [eq(deals.equipmentTypeId, params.equipmentTypeId), amzNoEquip];
       if (selectedSrcNoEquip) conditions.push(selectedSrcNoEquip);
+      if (baseballBatEvidence) conditions.push(baseballBatEvidence);
       whereParts.push(or(...conditions));
     }
 
@@ -364,9 +381,7 @@ export class DatabaseStorage implements IStorage {
     // matching. Keep them out of any bat or baseball/softball view.
     const BAT_EQ_IDS = ["bb-bats", "fp-bats", "sp-bats"];
     const BASEBALL_SPORT_IDS = ["baseball", "fastpitch-softball", "slowpitch-softball"];
-    const eqIds = params.equipmentTypeIds && params.equipmentTypeIds.length > 0
-      ? params.equipmentTypeIds
-      : (params.equipmentTypeId ? [params.equipmentTypeId] : []);
+    const eqIds = requestedEquipmentIds;
     const isBatOrBaseballView =
       eqIds.some((id) => BAT_EQ_IDS.includes(id)) ||
       (params.sportId && BASEBALL_SPORT_IDS.includes(params.sportId));
