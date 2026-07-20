@@ -7,6 +7,7 @@ import {
   BASEBALL_GLOVE_EVIDENCE_PATTERN,
   BASEBALL_GLOVE_NEGATIVE_EVIDENCE_PATTERN,
   gloveSizeTitlePattern,
+  hasStrongBaseballGloveSearchIntent,
   normalizeDealSearch,
   normalizeGloveSize,
   searchAliasPattern,
@@ -366,7 +367,11 @@ export class DatabaseStorage implements IStorage {
           dsql`(${deals.equipmentTypeId} IS NULL OR (${deals.equipmentTypeId} NOT LIKE 'fp-%' AND ${deals.equipmentTypeId} NOT LIKE 'sp-%'))`,
         )
       : null;
-    const baseballGloveEvidence = params.sportId === "baseball" && requestedEquipmentIds.some(isBaseballGloveGroupId)
+    const baseballGloveGroupRequest = requestedEquipmentIds.some(isBaseballGloveGroupId);
+    const baseballGloveSportSearchRecovery = params.sportId === "baseball"
+      && requestedEquipmentIds.length === 0
+      && hasStrongBaseballGloveSearchIntent(params.q);
+    const baseballGloveEvidence = params.sportId === "baseball" && (baseballGloveGroupRequest || baseballGloveSportSearchRecovery)
       ? and(
           dsql`(COALESCE(${deals.title}, '') || ' ' || COALESCE(${deals.brand}, '')) ~* ${BASEBALL_GLOVE_EVIDENCE_PATTERN}`,
           dsql`COALESCE(${deals.title}, '') !~* ${BASEBALL_GLOVE_NEGATIVE_EVIDENCE_PATTERN}`,
@@ -397,7 +402,7 @@ export class DatabaseStorage implements IStorage {
       whereParts.push(or(...conditions));
     }
 
-    if (params.sportId === "baseball" && requestedEquipmentIds.some(isBaseballGloveGroupId)) {
+    if (params.sportId === "baseball" && baseballGloveGroupRequest) {
       whereParts.push(dsql`COALESCE(${deals.title}, '') !~* ${BASEBALL_GLOVE_NEGATIVE_EVIDENCE_PATTERN}`);
       whereParts.push(dsql`(${deals.sportId} IS NULL OR ${deals.sportId} NOT IN ('fastpitch-softball', 'slowpitch-softball', 'golf', 'boxing', 'cricket'))`);
       whereParts.push(dsql`(${deals.equipmentTypeId} IS NULL OR (${deals.equipmentTypeId} NOT LIKE 'fp-%' AND ${deals.equipmentTypeId} NOT LIKE 'sp-%' AND ${deals.equipmentTypeId} NOT IN ('bb-batting-gloves', 'golf-glove', 'boxing-gloves')))`);

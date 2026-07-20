@@ -178,6 +178,17 @@ export function hasBaseballGloveNegativeEvidence(deal: SearchableDeal): boolean 
   return storedNegative || new RegExp(BASEBALL_GLOVE_NEGATIVE_EVIDENCE_PATTERN, "i").test(deal.title);
 }
 
+export function hasStrongBaseballGloveSearchIntent(query: string | null | undefined): boolean {
+  return !!query && hasBaseballGloveEvidence({ title: query });
+}
+
+/** Projects recovered search results for display without changing their stored database values. */
+export function projectDealSearchClassification<T extends SearchableDeal>(query: string | undefined, deal: T): T {
+  if (!hasStrongBaseballGloveSearchIntent(query) || !hasBaseballGloveEvidence(deal)) return deal;
+  if (deal.sportId === "baseball" && deal.equipmentTypeId === "bb-gloves") return deal;
+  return { ...deal, sportId: "baseball", equipmentTypeId: "bb-gloves" };
+}
+
 /** Higher means a bat-size match is more specific; exact length/weight outranks drop fallback. */
 export function batSizeMatchSpecificity(search: NormalizedDealSearch, deal: SearchableDeal): number {
   const size = search.concepts.find((concept) => concept.kind === "bat-size");
@@ -195,7 +206,7 @@ export function batSizeMatchSpecificity(search: NormalizedDealSearch, deal: Sear
 
 export function matchesDealClassificationFilters(
   deal: SearchableDeal,
-  filters: { sportId?: string; equipmentTypeId?: string; equipmentTypeIds?: string[] },
+  filters: { q?: string; sportId?: string; equipmentTypeId?: string; equipmentTypeIds?: string[] },
 ): boolean {
   const requestedEquipment = expandEquipmentTypeIds(filters.sportId, filters.equipmentTypeIds?.length
     ? filters.equipmentTypeIds
@@ -207,6 +218,9 @@ export function matchesDealClassificationFilters(
   if (exactSport && exactEquipment) return true;
 
   if (filters.sportId !== "baseball") return false;
+  if (requestedEquipment.length === 0 && hasStrongBaseballGloveSearchIntent(filters.q)) {
+    return hasBaseballGloveEvidence(deal);
+  }
   if (requestedEquipment.some(isBaseballBatGroupId)) return hasBaseballBatEvidence(deal);
   if (baseballGloveRequest) return hasBaseballGloveEvidence(deal);
   return false;

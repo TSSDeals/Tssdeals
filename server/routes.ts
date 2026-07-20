@@ -30,6 +30,7 @@ import { registerMagicLinkRoutes } from "./magic-link-auth";
 import { registerSmsAuthRoutes } from "./sms-auth";
 import { registerTeamStatsRoutes } from "./team-stats";
 import { registerInvoiceRoutes } from "./invoices";
+import { projectDealSearchClassification } from "./deal-search";
 
 const SCHEDULED_TIMES_ET = ["08:00", "12:00", "16:00", "20:00"];
 const FEATURED_RULES = {
@@ -974,10 +975,20 @@ export async function registerRoutes(
       sortBy: input.sortBy,
       userId: currentUserId,
     });
-    const slim = deals.map(({ raw, ...rest }) => ({
-      ...rest,
-      conditionDetail: (raw as any)?.ebayCondition || (raw as any)?.sidelineSwapCondition || null,
-    }));
+    const slim = deals.map((deal) => {
+      const projected = projectDealSearchClassification(input.q, deal);
+      const recovered = projected !== deal;
+      const { raw, ...rest } = projected;
+      return {
+        ...rest,
+        ...(recovered ? {
+          classificationRecovered: true,
+          storedSportId: deal.sportId,
+          storedEquipmentTypeId: deal.equipmentTypeId,
+        } : {}),
+        conditionDetail: (raw as any)?.ebayCondition || (raw as any)?.sidelineSwapCondition || null,
+      };
+    });
     res.json(slim);
   });
 
