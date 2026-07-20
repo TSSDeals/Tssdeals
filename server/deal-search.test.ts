@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   batSizeMatchSpecificity,
+  matchesGloveSize,
   matchesDealClassificationFilters,
   matchesNormalizedDealSearch,
   normalizeDealSearch,
+  projectDealSearchClassification,
   type SearchableDeal,
 } from "./deal-search";
 
@@ -130,3 +132,79 @@ test("short aliases are boundary matched", () => {
   const unrelated = { title: "Wilson Supra-style Bat Drop -10", brand: "Wilson", dropWeight: 10 };
   assert.equal(matchesNormalizedDealSearch(normalizeDealSearch("LS Supra -10"), unrelated), false);
 });
+
+const gloveQuery = "Wilson A2000 1786 11.5";
+const misclassifiedA2000Deals: Array<SearchableDeal & { id: string }> = [
+  { id: "missing-sport", title: gloveQuery, brand: "Wilson", sportId: null, equipmentTypeId: "bb-balls" },
+  { id: "wrong-sport", title: gloveQuery, brand: "Wilson", sportId: "football", equipmentTypeId: "other" },
+  { id: "wrong-equipment", title: gloveQuery, brand: "Wilson", sportId: "baseball", equipmentTypeId: "bb-balls" },
+];
+
+test("strong A2000 query recovers missing and incorrect classifications for Baseball only", () => {
+  for (const deal of misclassifiedA2000Deals) {
+    assert.equal(matchesDealClassificationFilters(deal, { q: gloveQuery, sportId: "baseball" }), true, deal.id);
+  }
+});
+
+test("Baseball-only recovery requires strong fielding-glove query intent", () => {
+  assert.equal(matchesDealClassificationFilters(misclassifiedA2000Deals[0], { sportId: "baseball" }), false);
+  assert.equal(matchesDealClassificationFilters(misclassifiedA2000Deals[1], { q: "football gloves", sportId: "baseball" }), false);
+  assert.equal(matchesDealClassificationFilters(misclassifiedA2000Deals[2], { sportId: "baseball" }), true);
+});
+
+test("search display projects recovered A2000 deals under Baseball Gloves without mutation", () => {
+  for (const deal of misclassifiedA2000Deals) {
+    const projected = projectDealSearchClassification(gloveQuery, deal);
+    assert.equal(projected.sportId, "baseball");
+    assert.equal(projected.equipmentTypeId, "bb-gloves");
+    assert.notEqual(projected, deal);
+  }
+  assert.equal(misclassifiedA2000Deals[0].sportId, null);
+  assert.equal(misclassifiedA2000Deals[0].equipmentTypeId, "bb-balls");
+  const batting = { title: `${gloveQuery} Batting Gloves`, sportId: "baseball", equipmentTypeId: "bb-batting-gloves" };
+  assert.equal(projectDealSearchClassification(gloveQuery, batting), batting);
+});
+
+test("end-to-end A2000 filter stack retains equal IDs and counts at every stage", () => {
+  const search = normalizeDealSearch(gloveQuery);
+  const stages = {
+    searchOnly: misclassifiedA2000Deals.filter((deal) => matchesNormalizedDealSearch(search, deal)),
+    baseball: misclassifiedA2000Deals.filter((deal) =>
+      matchesNormalizedDealSearch(search, deal)
+      && matchesDealClassificationFilters(deal, { q: gloveQuery, sportId: "baseball" })),
+    baseballGloves: misclassifiedA2000Deals.filter((deal) =>
+      matchesNormalizedDealSearch(search, deal)
+      && matchesDealClassificationFilters(deal, { q: gloveQuery, sportId: "baseball", equipmentTypeId: "bb-gloves" })),
+    size115: misclassifiedA2000Deals.filter((deal) =>
+      matchesNormalizedDealSearch(search, deal)
+      && matchesDealClassificationFilters(deal, { q: gloveQuery, sportId: "baseball", equipmentTypeId: "bb-gloves" })
+      && matchesGloveSize(deal, '11.5"')),
+  };
+  const expectedIds = misclassifiedA2000Deals.map((deal) => deal.id);
+  for (const [stage, deals] of Object.entries(stages)) {
+    assert.deepEqual(deals.map((deal) => deal.id), expectedIds, stage);
+  }
+});
+
+for (const notation of ["11.5", '11.5"', "11.5 inch", "11.5-inch"]) {
+  test(`normalizes glove size notation ${notation}`, () => {
+    assert.equal(matchesGloveSize({ title: `Wilson A2000 1786 ${notation}` }, '11.5"'), true);
+  });
+}
+
+test("glove size matches stored size and assigned sub-filter tags", () => {
+  assert.equal(matchesGloveSize({ title: "Wilson A2000 1786", sizeNumber: '11.5"' }, "11.5"), true);
+  assert.equal(matchesGloveSize({ title: "Wilson A2000 1786", subFilterIds: ["size-uuid"] }, "11.5", "size-uuid"), true);
+});
+
+for (const deal of [
+  { title: "Wilson Adult Batting Gloves", sportId: "baseball", equipmentTypeId: "bb-batting-gloves" },
+  { title: "Title Boxing Training Gloves", sportId: "boxing", equipmentTypeId: "boxing-gloves" },
+  { title: "FootJoy Golf Glove", sportId: "golf", equipmentTypeId: "golf-glove" },
+  { title: "Insulated Winter Work Gloves", sportId: null, equipmentTypeId: null },
+  { title: `${gloveQuery} Batting Gloves`, sportId: "baseball", equipmentTypeId: "bb-gloves" },
+]) {
+  test(`Baseball Gloves excludes ${deal.title}`, () => {
+    assert.equal(matchesDealClassificationFilters(deal, { sportId: "baseball", equipmentTypeId: "bb-gloves" }), false);
+  });
+}

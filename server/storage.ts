@@ -1,10 +1,15 @@
 import { eq, and, asc, desc, gte, ilike, inArray, isNull, isNotNull, not, or, sql as dsql } from "drizzle-orm";
 import { normalizeBrand } from "./brand-normalizer";
-import { expandEquipmentTypeIds, isBaseballBatGroupId } from "../shared/equipment-groups";
+import { expandEquipmentTypeIds, isBaseballBatGroupId, isBaseballGloveGroupId } from "../shared/equipment-groups";
 import {
   BASEBALL_BAT_EVIDENCE_PATTERN,
   BASEBALL_BAT_NEGATIVE_EVIDENCE_PATTERN,
+  BASEBALL_GLOVE_EVIDENCE_PATTERN,
+  BASEBALL_GLOVE_NEGATIVE_EVIDENCE_PATTERN,
+  gloveSizeTitlePattern,
+  hasStrongBaseballGloveSearchIntent,
   normalizeDealSearch,
+  normalizeGloveSize,
   searchAliasPattern,
 } from "./deal-search";
 import {
@@ -311,6 +316,13 @@ export class DatabaseStorage implements IStorage {
           const pattern = searchAliasPattern(concept.values);
           return or(dsql`${deals.title} ~* ${pattern}`, dsql`COALESCE(${deals.brand}, '') ~* ${pattern}`)!;
         }
+        if (concept.kind === "glove-size") {
+          const sizePattern = gloveSizeTitlePattern(concept.size);
+          return or(
+            dsql`${deals.title} ~* ${sizePattern}`,
+            dsql`TRIM(REGEXP_REPLACE(COALESCE(${deals.sizeNumber}, ''), '[^0-9.]', '', 'g')) = ${concept.size}`,
+          )!;
+        }
         const dropPattern = `(^|[^a-z0-9])(drop\\s*-?\\s*|-)${concept.drop}([^a-z0-9]|$)`;
         const dropCondition = or(
           eq(deals.dropWeight, concept.drop),
@@ -355,6 +367,18 @@ export class DatabaseStorage implements IStorage {
           dsql`(${deals.equipmentTypeId} IS NULL OR (${deals.equipmentTypeId} NOT LIKE 'fp-%' AND ${deals.equipmentTypeId} NOT LIKE 'sp-%'))`,
         )
       : null;
+    const baseballGloveGroupRequest = requestedEquipmentIds.some(isBaseballGloveGroupId);
+    const baseballGloveSportSearchRecovery = params.sportId === "baseball"
+      && requestedEquipmentIds.length === 0
+      && hasStrongBaseballGloveSearchIntent(params.q);
+    const baseballGloveEvidence = params.sportId === "baseball" && (baseballGloveGroupRequest || baseballGloveSportSearchRecovery)
+      ? and(
+          dsql`(COALESCE(${deals.title}, '') || ' ' || COALESCE(${deals.brand}, '')) ~* ${BASEBALL_GLOVE_EVIDENCE_PATTERN}`,
+          dsql`COALESCE(${deals.title}, '') !~* ${BASEBALL_GLOVE_NEGATIVE_EVIDENCE_PATTERN}`,
+          dsql`(${deals.sportId} IS NULL OR ${deals.sportId} NOT IN ('fastpitch-softball', 'slowpitch-softball', 'golf', 'boxing', 'cricket'))`,
+          dsql`(${deals.equipmentTypeId} IS NULL OR (${deals.equipmentTypeId} NOT LIKE 'fp-%' AND ${deals.equipmentTypeId} NOT LIKE 'sp-%' AND ${deals.equipmentTypeId} NOT IN ('bb-batting-gloves', 'golf-glove', 'boxing-gloves')))`
+        )
+      : null;
 
     // When a specific source is explicitly selected (e.g. eBay), marketplace listings often have
     // null equipment types because they aren't pre-classified. Extend the bypass so that unclassified
@@ -366,6 +390,7 @@ export class DatabaseStorage implements IStorage {
     if (params.sportId) {
       const conditions: any[] = [eq(deals.sportId, params.sportId), amzNoSport];
       if (baseballBatEvidence) conditions.push(baseballBatEvidence);
+      if (baseballGloveEvidence) conditions.push(baseballGloveEvidence);
       whereParts.push(or(...conditions));
     }
 
@@ -373,7 +398,14 @@ export class DatabaseStorage implements IStorage {
       const conditions: any[] = [inArray(deals.equipmentTypeId, requestedEquipmentIds), amzNoEquip];
       if (selectedSrcNoEquip) conditions.push(selectedSrcNoEquip);
       if (baseballBatEvidence) conditions.push(baseballBatEvidence);
+      if (baseballGloveEvidence) conditions.push(baseballGloveEvidence);
       whereParts.push(or(...conditions));
+    }
+
+    if (params.sportId === "baseball" && baseballGloveGroupRequest) {
+      whereParts.push(dsql`COALESCE(${deals.title}, '') !~* ${BASEBALL_GLOVE_NEGATIVE_EVIDENCE_PATTERN}`);
+      whereParts.push(dsql`(${deals.sportId} IS NULL OR ${deals.sportId} NOT IN ('fastpitch-softball', 'slowpitch-softball', 'golf', 'boxing', 'cricket'))`);
+      whereParts.push(dsql`(${deals.equipmentTypeId} IS NULL OR (${deals.equipmentTypeId} NOT LIKE 'fp-%' AND ${deals.equipmentTypeId} NOT LIKE 'sp-%' AND ${deals.equipmentTypeId} NOT IN ('bb-batting-gloves', 'golf-glove', 'boxing-gloves')))`);
     }
 
     // Cricket bats get misclassified as baseball/softball bats by broad "bat" keyword
@@ -404,7 +436,9 @@ export class DatabaseStorage implements IStorage {
         const keywords: string[] = [sf.name];
         const dropMatch = sf.name.match(/^Drop\s*-?\s*(\d+)$/i);
         // Match whole-number sizes (e.g. "Size 5") as well as decimal sizes (e.g. "Size 11.5", "Size 12.75").
-        const sizeMatch = sf.name.match(/^Size\s*(\d{1,3}(?:\.\d{1,2})?)$/i);
+        const normalizedSize = normalizeGloveSize(sf.name)
+          ?? sf.name.match(/^Size\s*(\d{1,3}(?:\.\d{1,2})?)$/i)?.[1]
+          ?? null;
         if (dropMatch) {
           keywords.push(`-${dropMatch[1]}`, `drop ${dropMatch[1]}`, `drop-${dropMatch[1]}`);
         }
@@ -431,9 +465,10 @@ export class DatabaseStorage implements IStorage {
         if (dropMatch) {
           orParts.push(eq(deals.dropWeight, parseInt(dropMatch[1], 10)));
         }
-        if (sizeMatch) {
-          // size_number is now a free-form string (e.g. "11.5", "5"). Match as text.
-          orParts.push(eq(deals.sizeNumber, sizeMatch[1]));
+        if (normalizedSize) {
+          // Normalize equivalent punctuation in titles and stored size_number values.
+          orParts.push(dsql`${deals.title} ~* ${gloveSizeTitlePattern(normalizedSize)}`);
+          orParts.push(dsql`TRIM(REGEXP_REPLACE(COALESCE(${deals.sizeNumber}, ''), '[^0-9.]', '', 'g')) = ${normalizedSize}`);
         }
         whereParts.push(or(...orParts)!);
       } else {
@@ -594,11 +629,13 @@ export class DatabaseStorage implements IStorage {
         const phraseBonus = dsql.raw(`CASE WHEN title ILIKE '%${qEsc}%' THEN 1 ELSE 0 END`);
 
         const batSize = normalizedSearch?.concepts.find((concept) => concept.kind === "bat-size");
-        const exactSizeBonus = batSize && batSize.kind === "bat-size"
-          ? dsql`CASE WHEN ${deals.title} ~* ${`(^|[^0-9])${batSize.length}\\s*(/|x|by)\\s*${batSize.weight}([^0-9]|$)`} THEN 1 ELSE 0 END`
-          : dsql`0`;
-
-        orderClause = [desc(exactSizeBonus), desc(ftsRank), desc(matchCountExpr), desc(phraseBonus), desc(deals.percentOff), desc(deals.foundAt)];
+        const relevanceOrder = [desc(ftsRank), desc(matchCountExpr), desc(phraseBonus), desc(deals.percentOff), desc(deals.foundAt)];
+        orderClause = batSize && batSize.kind === "bat-size"
+          ? [
+              desc(dsql`CASE WHEN ${deals.title} ~* ${`(^|[^0-9])${batSize.length}\\s*(/|x|by)\\s*${batSize.weight}([^0-9]|$)`} THEN 1 ELSE 0 END`),
+              ...relevanceOrder,
+            ]
+          : relevanceOrder;
       }
     } else {
       switch (params.sortBy) {
