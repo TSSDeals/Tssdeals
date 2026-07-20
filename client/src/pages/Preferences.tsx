@@ -25,6 +25,7 @@ import { Input } from "@/components/ui/input";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { BellRing, Eye, EyeOff, Filter, MessageSquare, Save, SlidersHorizontal, Target, TicketX } from "lucide-react";
+import { curateShopperEquipmentTypes } from "@shared/equipment-groups";
 
 export default function PreferencesPage() {
   const { toast } = useToast();
@@ -111,7 +112,10 @@ export default function PreferencesPage() {
     }
   }, [prefs.data]);
 
-  const equipmentList = useMemo(() => (eq.data ?? []) as any[], [eq.data]);
+  const equipmentList = useMemo(
+    () => curateShopperEquipmentTypes((eq.data ?? []) as any[], sportTab === "all" ? undefined : sportTab),
+    [eq.data, sportTab],
+  );
   const selectedCount = equipmentTypeIds.length;
 
   const toggleEquip = (id: string) => {

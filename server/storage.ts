@@ -1,5 +1,6 @@
 import { eq, and, asc, desc, gte, ilike, inArray, isNull, isNotNull, not, or, sql as dsql } from "drizzle-orm";
 import { normalizeBrand } from "./brand-normalizer";
+import { expandEquipmentTypeIds, isBaseballBatGroupId } from "../shared/equipment-groups";
 import {
   BASEBALL_BAT_EVIDENCE_PATTERN,
   BASEBALL_BAT_NEGATIVE_EVIDENCE_PATTERN,
@@ -343,10 +344,10 @@ export class DatabaseStorage implements IStorage {
     // (null sport/equipment). If they ARE tagged, they must match the selected filter.
     const amzNoSport = and(amzBypass, isNull(deals.sportId));
     const amzNoEquip = and(amzBypass, isNull(deals.equipmentTypeId));
-    const requestedEquipmentIds = params.equipmentTypeIds?.length
+    const requestedEquipmentIds = expandEquipmentTypeIds(params.sportId, params.equipmentTypeIds?.length
       ? params.equipmentTypeIds
-      : (params.equipmentTypeId ? [params.equipmentTypeId] : []);
-    const baseballBatEvidence = params.sportId === "baseball" && requestedEquipmentIds.includes("bb-bats")
+      : (params.equipmentTypeId ? [params.equipmentTypeId] : []));
+    const baseballBatEvidence = params.sportId === "baseball" && requestedEquipmentIds.some(isBaseballBatGroupId)
       ? and(
           dsql`(COALESCE(${deals.title}, '') || ' ' || COALESCE(${deals.brand}, '') || ' ' || COALESCE(${deals.raw}::text, '')) ~* ${BASEBALL_BAT_EVIDENCE_PATTERN}`,
           dsql`COALESCE(${deals.title}, '') !~* ${BASEBALL_BAT_NEGATIVE_EVIDENCE_PATTERN}`,
@@ -368,13 +369,8 @@ export class DatabaseStorage implements IStorage {
       whereParts.push(or(...conditions));
     }
 
-    if (params.equipmentTypeIds && params.equipmentTypeIds.length > 0) {
-      const conditions: any[] = [inArray(deals.equipmentTypeId, params.equipmentTypeIds), amzNoEquip];
-      if (selectedSrcNoEquip) conditions.push(selectedSrcNoEquip);
-      if (baseballBatEvidence) conditions.push(baseballBatEvidence);
-      whereParts.push(or(...conditions));
-    } else if (params.equipmentTypeId) {
-      const conditions: any[] = [eq(deals.equipmentTypeId, params.equipmentTypeId), amzNoEquip];
+    if (requestedEquipmentIds.length > 0) {
+      const conditions: any[] = [inArray(deals.equipmentTypeId, requestedEquipmentIds), amzNoEquip];
       if (selectedSrcNoEquip) conditions.push(selectedSrcNoEquip);
       if (baseballBatEvidence) conditions.push(baseballBatEvidence);
       whereParts.push(or(...conditions));
@@ -597,7 +593,12 @@ export class DatabaseStorage implements IStorage {
         // Tertiary: bonus for exact phrase match in title
         const phraseBonus = dsql.raw(`CASE WHEN title ILIKE '%${qEsc}%' THEN 1 ELSE 0 END`);
 
-        orderClause = [desc(ftsRank), desc(matchCountExpr), desc(phraseBonus), desc(deals.percentOff), desc(deals.foundAt)];
+        const batSize = normalizedSearch?.concepts.find((concept) => concept.kind === "bat-size");
+        const exactSizeBonus = batSize && batSize.kind === "bat-size"
+          ? dsql`CASE WHEN ${deals.title} ~* ${`(^|[^0-9])${batSize.length}\\s*(/|x|by)\\s*${batSize.weight}([^0-9]|$)`} THEN 1 ELSE 0 END`
+          : dsql`0`;
+
+        orderClause = [desc(exactSizeBonus), desc(ftsRank), desc(matchCountExpr), desc(phraseBonus), desc(deals.percentOff), desc(deals.foundAt)];
       }
     } else {
       switch (params.sortBy) {
