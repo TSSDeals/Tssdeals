@@ -9,6 +9,8 @@
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
     "test:search": "tsx --test server/deal-search.test.ts shared/equipment-groups.test.ts",
+    "test:startup-safety": "tsx --test server/startup-safety.test.ts",
+    "maintenance:phase0": "tsx script/phase0-maintenance.ts",
     "db:push": "drizzle-kit push"
   },
   "dependencies": {

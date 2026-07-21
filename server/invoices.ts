@@ -328,8 +328,6 @@ function renderXlsx(inv: Invoice, totals: InvoiceTotals): Buffer {
 }
 
 export function registerInvoiceRoutes(app: Express): void {
-  void ensureInvoicesSchema().catch((e) => console.error("[invoices] schema bootstrap failed:", e));
-
   // List
   app.get("/api/admin/invoices", isAdmin, async (_req, res) => {
     const rows = await db.select().from(invoices).orderBy(desc(invoices.createdAt));

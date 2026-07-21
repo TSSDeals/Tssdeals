@@ -808,7 +808,10 @@ export async function listReviewQueue(status: string = "pending"): Promise<Class
     .limit(200);
 }
 
-export async function approveReviewItem(id: string): Promise<{ success: boolean; message: string }> {
+export async function approveReviewItem(
+  id: string,
+  approvedBy: string,
+): Promise<{ success: boolean; message: string }> {
   const [item] = await db
     .select()
     .from(classificationReviewQueue)
@@ -820,7 +823,11 @@ export async function approveReviewItem(id: string): Promise<{ success: boolean;
   // Resolve / create the sport.
   let sportId = item.suggestedSportId;
   if (!sportId && item.suggestedSportName) {
-    const sport = await storage.createSport(item.suggestedSportName);
+    const sport = await storage.createSport(item.suggestedSportName, {
+      source: "classification-review",
+      approvedBy,
+      proposalId: item.id,
+    });
     sportId = sport.id;
   }
   if (!sportId) {
@@ -830,7 +837,11 @@ export async function approveReviewItem(id: string): Promise<{ success: boolean;
   // Create the equipment type if one was suggested.
   let equipmentTypeId: string | null = null;
   if (item.suggestedEquipmentName) {
-    const eq = await storage.createEquipmentType(item.suggestedEquipmentName, sportId);
+    const eq = await storage.createEquipmentType(item.suggestedEquipmentName, sportId, {
+      source: "classification-review",
+      approvedBy,
+      proposalId: item.id,
+    });
     equipmentTypeId = eq.id;
   }
 

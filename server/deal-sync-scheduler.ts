@@ -1176,10 +1176,8 @@ export function startDealSyncScheduler(storage: IStorage) {
   );
   log("Deal validation scheduler started: every 30 minutes", "deal-sync");
 
-  setTimeout(() => {
-    log("Running initial deal sync on startup...", "deal-sync");
-    runFullSync(storage).catch(err => log(`Initial deal sync error: ${err.message}`, "deal-sync"));
-  }, 10000);
+  // Deliberately do not run a full sync merely because the process restarted.
+  // Import/update remains on the published schedule or an explicit Admin run.
 }
 
 async function runStaleDealCleanup() {
