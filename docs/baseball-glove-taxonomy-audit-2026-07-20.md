@@ -36,3 +36,16 @@ Positive recovery is limited to explicit fielding-glove language and a small set
 Stored fastpitch, slowpitch, golf, boxing, and cricket classifications block recovery. Titles containing batting, golf, boxing, winter, work, garden, football/goalkeeper, hockey, lacrosse, motorcycle/cycling, ski/snow, fastpitch, slowpitch, or softball glove evidence also remain excluded. Glove accessories such as liners, dryers, oil, conditioner, and care kits are excluded.
 
 No taxonomy record or deal assignment is changed by this PR.
+
+## 2026-07-21 focused A2000 findings
+
+Live search confirmed that the remaining misses are evidence-normalization problems, not a reason for a broader taxonomy redesign:
+
+- `2026 Wilson Spring A2000® 1786 11.5” Infield Baseball: WBW104133115` is stored under Baseball / `bb-training` and was not projected. The trademark symbol broke the prior literal `A2000 1786` pattern, while `infield baseball` was not recognized as an explicit fielding phrase.
+- `2025 Wilson Tennis A2000® 1786SS 11.5” :WBW104177115` is stored under Baseball / `bb-other` and was not projected. The trademark symbol and `1786SS` suffix were not handled. “Tennis” is the special-edition theme, not the product sport.
+- Equivalent Tennis and Spring listings from other sellers are already projected from `tennis`/`ten-other` or `bb-other`, proving that read projection is the correct bounded mechanism.
+- The reported Evolusivo listing is assigned to a legacy `Gloves` view. Its explicit `Baseball Glove` phrase and A2000 + 1786 + 11.5 evidence qualify it for canonical projection.
+
+The read evidence now accepts trademark punctuation, up to three intervening theme/collection words between A2000/A2K and the known 1786/1786SS glove pattern, and the explicit phrase `infield baseball`. A2K/family listings may also qualify through a valid glove size plus specific structured seller/category fields. Arbitrary raw JSON is not searched.
+
+Theme words alone do not establish classification. For example, an A2000-labeled tennis racquet with an 11.5 value but no known glove pattern, explicit fielding phrase, or baseball-glove seller/category evidence remains excluded. The expanded audit query reports the stored sport/equipment IDs, proposed canonical read group, and evidence reason for later cleanup; it performs no updates.

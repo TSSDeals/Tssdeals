@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   batSizeMatchSpecificity,
+  hasBaseballGloveEvidence,
   matchesGloveSize,
   matchesDealClassificationFilters,
   matchesNormalizedDealSearch,
@@ -184,6 +185,60 @@ test("end-to-end A2000 filter stack retains equal IDs and counts at every stage"
   for (const [stage, deals] of Object.entries(stages)) {
     assert.deepEqual(deals.map((deal) => deal.id), expectedIds, stage);
   }
+});
+
+const themedA2000Regressions: Array<SearchableDeal & { id: string }> = [
+  {
+    id: "evolusivo-gloves",
+    title: "Wilson Evolusivo A2000® 1786 11.5 Baseball Glove",
+    sportId: "baseball",
+    equipmentTypeId: "gloves",
+  },
+  {
+    id: "tennis-theme-other",
+    title: "2025 Wilson Tennis A2000® 1786SS 11.5”",
+    sportId: "tennis",
+    equipmentTypeId: "ten-other",
+  },
+  {
+    id: "spring-training",
+    title: "2026 Wilson Spring A2000® 1786 11.5” Infield Baseball",
+    sportId: "baseball",
+    equipmentTypeId: "bb-training",
+  },
+];
+
+for (const deal of themedA2000Regressions) {
+  test(`projects ${deal.id} into canonical Baseball Gloves`, () => {
+    assert.equal(hasBaseballGloveEvidence(deal), true);
+    const projected = projectDealSearchClassification(gloveQuery, deal);
+    assert.equal(projected.sportId, "baseball");
+    assert.equal(projected.equipmentTypeId, "bb-gloves");
+    assert.equal(deal.equipmentTypeId === "bb-gloves", false, "stored synthetic classification remains unchanged");
+  });
+}
+
+test("A2K family plus size and structured baseball-glove category is strong evidence", () => {
+  assert.equal(hasBaseballGloveEvidence({
+    title: "Wilson A2K 11.75",
+    sizeNumber: "11.75",
+    raw: { categoryName: "Baseball Gloves & Mitts" },
+  }), true);
+  assert.equal(hasBaseballGloveEvidence({
+    title: "Wilson A2K 11.75",
+    sourceId: "justgloves",
+  }), true);
+});
+
+test("unrelated tennis equipment is not recovered from family and size alone", () => {
+  const racquet = {
+    title: "Wilson A2000 11.5 Tennis Racquet",
+    sportId: "tennis",
+    equipmentTypeId: "ten-racquets",
+    raw: { categoryName: "Tennis Racquets" },
+  };
+  assert.equal(hasBaseballGloveEvidence(racquet), false);
+  assert.equal(projectDealSearchClassification(gloveQuery, racquet), racquet);
 });
 
 for (const notation of ["11.5", '11.5"', "11.5 inch", "11.5-inch"]) {
