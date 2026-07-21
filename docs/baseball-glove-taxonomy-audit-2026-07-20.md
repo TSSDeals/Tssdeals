@@ -68,3 +68,11 @@ The API projection remains non-mutating and emits `baseball` / `bb-gloves` for q
 An additional query-intent loss was confirmed for deal `592b05f7-c149-4a98-a82f-d063fe7f30df`, `MARUCCI CAPITOL SERIES MFG2CP45A3-MT/R BASEBALL GLOVE 12" RH - $359.99`. It is stored as `baseball` / `bb-other` with a null `size_number`. The query `Marucci Capitol Series 12"` retrieves it normally, but previously did not trigger display projection because the query itself omitted “glove” and known glove-family evidence. Its title is nevertheless explicit, unambiguous baseball-glove evidence.
 
 Database candidate expansion remains gated by strong query intent. Display projection is now intentionally separate: for any non-empty search, a deal that was already returned may project from its own strong evidence even when the search phrase is not glove-specific. This changes only the response grouping fields and does not broaden retrieval or update the stored `bb-other` assignment. The existing audit candidate query already reports this row for later cleanup.
+
+## 2026-07-21 Phase 0 preservation note (PR #6)
+
+PR #6 did not generally treat stored Softball classifications as Baseball Gloves. Its override is deliberately narrow: a stored Fastpitch/Slowpitch conflict can project to `baseball` / `bb-gloves` only when the deal title contains both (1) strong Wilson A2000/A2K plus known 1786/1786SS pattern evidence and (2) an explicit `Baseball Glove` or `Infield Baseball` phrase. Explicit `fastpitch`, `slowpitch`, or `softball` title wording remains a hard negative and blocks the override.
+
+The negative controls remain unchanged: batting gloves, golf gloves, boxing gloves, work/winter/garden gloves, cricket gloves, explicit Fastpitch/Slowpitch/Softball products, glove care/accessories, and unrelated tennis equipment are not projected into Baseball Gloves. The Marucci Capitol result is projected only after ordinary search retrieval because its own title explicitly says `BASEBALL GLOVE`; it does not broaden database candidates from a weak query.
+
+Phase 0 removes the former startup-time broad glove correction `UPDATE`. That removal does not change PR #6's read-only candidate recovery, in-memory projection, API canonical ID, or client grouping. Stored classifications remain untouched until a separately reviewed dry run and backfill.

@@ -121,7 +121,10 @@ export async function registerRoutes(
   app.post("/api/sports", isAdmin, async (req: any, res) => {
     try {
       const input = api.taxonomy.sports.create.input.parse(req.body);
-      const sport = await storage.createSport(input.name);
+      const sport = await storage.createSport(input.name, {
+        source: "admin-api",
+        approvedBy: getAuthedUserEmail(req) ?? ADMIN_EMAIL,
+      });
       res.status(201).json(sport);
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -134,7 +137,10 @@ export async function registerRoutes(
   app.post("/api/equipment-types", isAdmin, async (req: any, res) => {
     try {
       const input = api.taxonomy.equipmentTypes.create.input.parse(req.body);
-      const eqType = await storage.createEquipmentType(input.name, input.sportId);
+      const eqType = await storage.createEquipmentType(input.name, input.sportId, {
+        source: "admin-api",
+        approvedBy: getAuthedUserEmail(req) ?? ADMIN_EMAIL,
+      });
       res.status(201).json(eqType);
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -154,7 +160,10 @@ export async function registerRoutes(
   app.post(api.taxonomy.subFilters.create.path, isAdmin, async (req: any, res) => {
     try {
       const input = api.taxonomy.subFilters.create.input.parse(req.body);
-      const subFilter = await storage.createSubFilter(input.name, input.equipmentTypeId);
+      const subFilter = await storage.createSubFilter(input.name, input.equipmentTypeId, {
+        source: "admin-api",
+        approvedBy: getAuthedUserEmail(req) ?? ADMIN_EMAIL,
+      });
       res.status(201).json(subFilter);
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -2211,7 +2220,10 @@ export async function registerRoutes(
   app.post("/api/admin/ai-classification/review/:id/approve", isAdmin, async (req: any, res) => {
     try {
       const { approveReviewItem } = await import("./ai-classifier");
-      const result = await approveReviewItem(req.params.id);
+      const result = await approveReviewItem(
+        req.params.id,
+        getAuthedUserEmail(req) ?? ADMIN_EMAIL,
+      );
       res.status(result.success ? 200 : 400).json(result);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -3957,9 +3969,6 @@ If you cannot identify a sporting goods item, return { "q": "", "sport": "", "br
       res.status(500).json({ message: err.message });
     }
   });
-
-  // Seed database once
-  await storage.seed();
 
   // Start schedulers
   startDealSyncScheduler(storage);

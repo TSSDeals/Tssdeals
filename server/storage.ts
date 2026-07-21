@@ -67,12 +67,15 @@ import {
   type InsertSidelineswapSync,
 } from "@shared/schema";
 import { db } from "./db";
+import { assertTaxonomyApproval, type TaxonomyApprovalContext } from "./taxonomy-approval";
+
+const defaultSeedDatabase = db;
 
 export interface IStorage {
   listSports(): Promise<Sport[]>;
-  createSport(name: string): Promise<Sport>;
+  createSport(name: string, approval: TaxonomyApprovalContext): Promise<Sport>;
   listEquipmentTypes(sportId?: string): Promise<EquipmentType[]>;
-  createEquipmentType(name: string, sportId?: string): Promise<EquipmentType>;
+  createEquipmentType(name: string, sportId: string | undefined, approval: TaxonomyApprovalContext): Promise<EquipmentType>;
   listSources(): Promise<Source[]>;
   createSource(name: string, baseUrl: string): Promise<Source>;
   ensureSource(id: string, name: string, baseUrl: string): Promise<Source>;
@@ -92,7 +95,7 @@ export interface IStorage {
   listBrands(params?: { sportId?: string; equipmentTypeId?: string; source?: string; condition?: string; minPercentOff?: number }): Promise<string[]>;
 
   listSubFilters(equipmentTypeId?: string): Promise<EquipmentSubFilter[]>;
-  createSubFilter(name: string, equipmentTypeId: string): Promise<EquipmentSubFilter>;
+  createSubFilter(name: string, equipmentTypeId: string, approval: TaxonomyApprovalContext): Promise<EquipmentSubFilter>;
   deleteSubFilter(id: string): Promise<void>;
 
   listAutoIncludeRules(): Promise<AutoIncludeRule[]>;
@@ -172,7 +175,7 @@ export interface IStorage {
   updateSidelineswapSync(id: string, data: Partial<InsertSidelineswapSync>): Promise<SidelineswapSync>;
   deleteSidelineswapSync(id: string): Promise<void>;
 
-  seed(): Promise<void>;
+  seed(database?: any): Promise<void>;
 }
 
 // Normalize a US phone to E.164 (+1XXXXXXXXXX). Falls back to a "+"-prefixed
@@ -260,7 +263,8 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(sports).orderBy(sports.name);
   }
 
-  async createSport(name: string): Promise<Sport> {
+  async createSport(name: string, approval: TaxonomyApprovalContext): Promise<Sport> {
+    assertTaxonomyApproval(approval);
     const id = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
     const existing = await db.select().from(sports).where(eq(sports.id, id)).limit(1);
     if (existing.length > 0) return existing[0];
@@ -279,7 +283,8 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(equipmentTypes).orderBy(equipmentTypes.name);
   }
 
-  async createEquipmentType(name: string, sportId?: string): Promise<EquipmentType> {
+  async createEquipmentType(name: string, sportId: string | undefined, approval: TaxonomyApprovalContext): Promise<EquipmentType> {
+    assertTaxonomyApproval(approval);
     const id = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
     const existing = await db.select().from(equipmentTypes).where(eq(equipmentTypes.id, id)).limit(1);
     if (existing.length > 0) return existing[0];
@@ -1067,7 +1072,8 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(equipmentSubFilters).orderBy(equipmentSubFilters.name);
   }
 
-  async createSubFilter(name: string, equipmentTypeId: string): Promise<EquipmentSubFilter> {
+  async createSubFilter(name: string, equipmentTypeId: string, approval: TaxonomyApprovalContext): Promise<EquipmentSubFilter> {
+    assertTaxonomyApproval(approval);
     const [created] = await db
       .insert(equipmentSubFilters)
       .values({ name, equipmentTypeId })
@@ -1687,7 +1693,10 @@ export class DatabaseStorage implements IStorage {
     return results;
   }
 
-  async seed(): Promise<void> {
+  async seed(database?: any): Promise<void> {
+    // Startup migrations pass their transaction here. Keeping the executor
+    // local prevents seed writes from escaping the migration/ledger commit.
+    const db = database ?? defaultSeedDatabase;
     const existingCats = await db.select().from(dealCategories).limit(1);
     if (existingCats.length === 0) {
       await db.insert(dealCategories).values([
@@ -2109,7 +2118,8 @@ export class DatabaseStorage implements IStorage {
       { name: "Emery Gloves (< $180)", equipmentCategory: "gloves", condition: "new", brandKeywords: ["Emery"], maxPriceCents: 18000, enabled: true },
     ]);
 
-    await this.applyAutoIncludeRules();
+    // Classification/auto-inclusion is intentionally not applied by static
+    // seeding. It is an explicit maintenance concern and must never run on boot.
   }
 
   async applyAutoIncludeRules(): Promise<void> {

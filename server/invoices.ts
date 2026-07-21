@@ -17,6 +17,8 @@ import fs from "fs";
 import PDFDocument from "pdfkit";
 import * as XLSX from "xlsx";
 
+const defaultInvoiceDatabase = db;
+
 const ADMIN_EMAIL = "justin@twinseamsports.com";
 
 const COMPANY = {
@@ -32,7 +34,8 @@ const COMPANY = {
 const INVOICE_PREFIX = "TSSStats";
 const INVOICE_START = 1007;
 
-export async function ensureInvoicesSchema(): Promise<void> {
+export async function ensureInvoicesSchema(database?: any): Promise<void> {
+  const db = database ?? defaultInvoiceDatabase;
   await db.execute(dsql`
     CREATE TABLE IF NOT EXISTS invoices (
       id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -328,8 +331,6 @@ function renderXlsx(inv: Invoice, totals: InvoiceTotals): Buffer {
 }
 
 export function registerInvoiceRoutes(app: Express): void {
-  void ensureInvoicesSchema().catch((e) => console.error("[invoices] schema bootstrap failed:", e));
-
   // List
   app.get("/api/admin/invoices", isAdmin, async (_req, res) => {
     const rows = await db.select().from(invoices).orderBy(desc(invoices.createdAt));

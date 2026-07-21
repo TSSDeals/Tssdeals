@@ -28,6 +28,8 @@ import {
   type BbTeamAdmin,
 } from "@shared/schema";
 
+const defaultTeamStatsDatabase = db;
+
 const scryptAsync = promisify(crypto.scrypt) as (
   password: string,
   salt: string,
@@ -36,7 +38,6 @@ const scryptAsync = promisify(crypto.scrypt) as (
 
 const SESSION_DAYS = 30;
 const KNOX_SLUG = "stars7u";
-const KNOX_SLUG_LEGACY = "knox-stars-7u";
 const KNOX_NAME = "Knox Stars 7U";
 // Bootstrap password: prefer env var; falls back to a temporary default the
 // owner can change via the admin "change password" endpoint.
@@ -48,7 +49,8 @@ const ERA_INNINGS_BASIS = 9;
 // Schema migration + seed
 // ---------------------------------------------------------------------------
 
-export async function ensureTeamStatsSchema(): Promise<void> {
+export async function ensureTeamStatsSchema(database?: any): Promise<void> {
+  const db = database ?? defaultTeamStatsDatabase;
   await db.execute(dsql.raw(`
     CREATE TABLE IF NOT EXISTS bb_teams (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -329,11 +331,11 @@ async function verifyPassword(password: string, hash: string, salt: string): Pro
   return crypto.timingSafeEqual(buf, target);
 }
 
-export async function seedKnoxStarsTeam(): Promise<void> {
-  // Idempotent rename: if a row still has the legacy slug, migrate it forward.
-  await db.execute(dsql.raw(
-    `UPDATE bb_teams SET slug='${KNOX_SLUG}' WHERE slug='${KNOX_SLUG_LEGACY}' AND NOT EXISTS (SELECT 1 FROM bb_teams WHERE slug='${KNOX_SLUG}')`
-  ));
+export async function seedKnoxStarsTeam(database?: any): Promise<void> {
+  const db = database ?? defaultTeamStatsDatabase;
+  // Legacy slug correction is maintenance, not seed work. Startup may create
+  // the one approved team on a genuinely empty database, but never rewrites an
+  // existing team record.
   const existing = await db.select().from(bbTeams).where(eq(bbTeams.slug, KNOX_SLUG)).limit(1);
   if (existing[0]) return;
   const { hash, salt } = await hashPassword(KNOX_PASSWORD_DEFAULT);
