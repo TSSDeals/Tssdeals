@@ -19,6 +19,17 @@ export interface MigrationRunResult {
   skipped: string[];
 }
 
+export class MigrationExecutionError extends Error {
+  readonly migrationId: string;
+
+  constructor(migrationId: string, cause: unknown) {
+    const detail = cause instanceof Error ? cause.message : String(cause);
+    super(`Migration ${migrationId} failed: ${detail}`, { cause });
+    this.name = "MigrationExecutionError";
+    this.migrationId = migrationId;
+  }
+}
+
 export async function runVersionedMigrations<Context>(
   ledger: MigrationLedger<Context>,
   migrations: readonly VersionedMigration<Context>[],
@@ -29,13 +40,18 @@ export async function runVersionedMigrations<Context>(
   const skipped: string[] = [];
 
   for (const migration of migrations) {
-    if (await ledger.has(migration.id)) {
-      skipped.push(migration.id);
-      continue;
-    }
+    try {
+      if (await ledger.has(migration.id)) {
+        skipped.push(migration.id);
+        continue;
+      }
 
-    if (await ledger.applyOnce(migration, context)) applied.push(migration.id);
-    else skipped.push(migration.id);
+      if (await ledger.applyOnce(migration, context)) applied.push(migration.id);
+      else skipped.push(migration.id);
+    } catch (error) {
+      if (error instanceof MigrationExecutionError) throw error;
+      throw new MigrationExecutionError(migration.id, error);
+    }
   }
 
   return { applied, skipped };

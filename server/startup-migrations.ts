@@ -8,13 +8,39 @@ import {
   type MigrationLedger,
   type VersionedMigration,
 } from "./migration-runner";
-import { STARTUP_MIGRATION_MANIFEST, STARTUP_POLICY } from "./startup-migration-policy";
+import {
+  classifyApprovedSeedState,
+  STARTUP_MIGRATION_MANIFEST,
+  STARTUP_POLICY,
+  type ApprovedSeedState,
+} from "./startup-migration-policy";
 
 interface StartupContext {
+  database: any;
   execute(statement: ReturnType<typeof sql.raw>): Promise<unknown>;
 }
 
-const execute = (statement: ReturnType<typeof sql.raw>) => db.execute(statement);
+export async function inspectApprovedSeedState(database: any): Promise<ApprovedSeedState> {
+  const result = await database.execute(sql.raw(`
+    SELECT
+      (SELECT count(*)::int FROM sports) AS sports_count,
+      (SELECT count(*)::int FROM equipment_types) AS equipment_count,
+      (SELECT count(*)::int FROM sources) AS sources_count,
+      EXISTS (SELECT 1 FROM equipment_types WHERE id='bb-bats' AND sport_id='baseball') AS has_bb_bats,
+      EXISTS (SELECT 1 FROM equipment_types WHERE id='bb-gloves' AND sport_id='baseball') AS has_bb_gloves
+  `));
+  const row = (result as any).rows?.[0] ?? (result as any)[0];
+  const sportsCount = Number(row?.sports_count ?? 0);
+  const equipmentCount = Number(row?.equipment_count ?? 0);
+  const sourcesCount = Number(row?.sources_count ?? 0);
+  return classifyApprovedSeedState({
+    sportsCount,
+    equipmentCount,
+    sourcesCount,
+    hasBaseballBats: row?.has_bb_bats === true,
+    hasBaseballGloves: row?.has_bb_gloves === true,
+  });
+}
 
 export const STARTUP_MIGRATIONS: readonly VersionedMigration<StartupContext>[] = [
   {
@@ -108,15 +134,22 @@ export const STARTUP_MIGRATIONS: readonly VersionedMigration<StartupContext>[] =
 
       // These feature modules formerly bootstrapped their schema on every
       // registration/restart. The migration ledger now invokes them once.
-      await ensureInvoicesSchema();
-      await ensureTeamStatsSchema();
+      await ensureInvoicesSchema(context.database);
+      await ensureTeamStatsSchema(context.database);
     },
   },
   {
     ...STARTUP_MIGRATION_MANIFEST[1],
-    async up() {
-      await storage.seed();
-      await seedKnoxStarsTeam();
+    async up(context) {
+      const seedState = await inspectApprovedSeedState(context.database);
+      if (seedState === "satisfied") return;
+      if (seedState === "partial") {
+        throw new Error(
+          "Approved seed is partially present; refusing to add or rewrite live taxonomy. Run the read-only Phase 0 preflight and review the mismatch.",
+        );
+      }
+      await storage.seed(context.database);
+      await seedKnoxStarsTeam(context.database);
     },
   },
 ] as const;
@@ -151,9 +184,15 @@ const ledger: MigrationLedger<StartupContext> = {
       const existing = await tx.execute(
         sql`SELECT checksum FROM app_schema_migrations WHERE id = ${migration.id} LIMIT 1`,
       );
-      if (((existing as any).rows?.length ?? 0) > 0) return false;
+      const existingRow = (existing as any).rows?.[0];
+      if (existingRow) {
+        if (existingRow.checksum !== migration.checksum) {
+          throw new Error(`Applied migration ${migration.id} does not match its immutable checksum`);
+        }
+        return false;
+      }
 
-      await migration.up({ execute: (statement) => tx.execute(statement) });
+      await migration.up({ database: tx, execute: (statement) => tx.execute(statement) });
       await tx.execute(sql`
         INSERT INTO app_schema_migrations (id, kind, description, checksum)
         VALUES (${migration.id}, ${migration.kind}, ${migration.description}, ${migration.checksum})
@@ -171,7 +210,10 @@ export async function runVersionedStartupMigrations(): Promise<void> {
     throw new Error(`Forbidden startup migration kinds: ${invalid.map((m) => m.id).join(", ")}`);
   }
 
-  const result = await runVersionedMigrations(ledger, STARTUP_MIGRATIONS, { execute });
+  const result = await runVersionedMigrations(ledger, STARTUP_MIGRATIONS, {
+    database: db,
+    execute: (statement) => db.execute(statement),
+  });
   if (result.applied.length > 0) {
     console.log(`[startup-migrations] applied: ${result.applied.join(", ")}`);
   }

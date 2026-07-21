@@ -11,6 +11,7 @@
     "test:search": "tsx --test server/deal-search.test.ts shared/equipment-groups.test.ts",
     "test:startup-safety": "tsx --test server/startup-safety.test.ts",
     "maintenance:phase0": "tsx script/phase0-maintenance.ts",
+    "preflight:phase0": "tsx script/phase0-preflight.ts",
     "db:push": "drizzle-kit push"
   },
   "dependencies": {

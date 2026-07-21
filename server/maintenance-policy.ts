@@ -16,6 +16,26 @@ export const PHASE0_MAINTENANCE_COMMANDS = [
 
 export type Phase0MaintenanceCommand = (typeof PHASE0_MAINTENANCE_COMMANDS)[number];
 
+/**
+ * Phase 0 may report these operations, but cannot execute them.  Moving a
+ * command out of this list requires its own reviewed change with an approved
+ * ruleset, per-record logging, a verified backup reference, and rollback.
+ */
+export const PHASE0_PREVIEW_ONLY_COMMANDS = new Set<Phase0MaintenanceCommand>([
+  "legacy-taxonomy-reclassification",
+  "baseball-taxonomy-corrections",
+  "source-corrections",
+  "cj-url-rewrite",
+  "ai-classification-deduplication",
+  "deal-sub-filter-backfill",
+  "stale-deal-cleanup",
+  "ebay-seller-seed",
+]);
+
+export function isPhase0PreviewOnly(command: Phase0MaintenanceCommand): boolean {
+  return PHASE0_PREVIEW_ONLY_COMMANDS.has(command);
+}
+
 export interface MaintenanceInvocation {
   command: Phase0MaintenanceCommand;
   dryRun: boolean;
@@ -35,6 +55,11 @@ export function parseMaintenanceInvocation(args: readonly string[]): Maintenance
   }
 
   const execute = args.includes("--execute");
+  if (execute && isPhase0PreviewOnly(command)) {
+    throw new Error(
+      `${command} is preview-only in Phase 0; execution requires a separately reviewed, rollback-capable maintenance change`,
+    );
+  }
   const confirmation = valueAfter("--confirm");
   if (execute && confirmation !== command) {
     throw new Error(`Execution requires --confirm ${command}`);

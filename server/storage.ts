@@ -69,6 +69,8 @@ import {
 import { db } from "./db";
 import { assertTaxonomyApproval, type TaxonomyApprovalContext } from "./taxonomy-approval";
 
+const defaultSeedDatabase = db;
+
 export interface IStorage {
   listSports(): Promise<Sport[]>;
   createSport(name: string, approval: TaxonomyApprovalContext): Promise<Sport>;
@@ -173,7 +175,7 @@ export interface IStorage {
   updateSidelineswapSync(id: string, data: Partial<InsertSidelineswapSync>): Promise<SidelineswapSync>;
   deleteSidelineswapSync(id: string): Promise<void>;
 
-  seed(): Promise<void>;
+  seed(database?: any): Promise<void>;
 }
 
 // Normalize a US phone to E.164 (+1XXXXXXXXXX). Falls back to a "+"-prefixed
@@ -1691,7 +1693,10 @@ export class DatabaseStorage implements IStorage {
     return results;
   }
 
-  async seed(): Promise<void> {
+  async seed(database?: any): Promise<void> {
+    // Startup migrations pass their transaction here. Keeping the executor
+    // local prevents seed writes from escaping the migration/ledger commit.
+    const db = database ?? defaultSeedDatabase;
     const existingCats = await db.select().from(dealCategories).limit(1);
     if (existingCats.length === 0) {
       await db.insert(dealCategories).values([

@@ -22,7 +22,6 @@ const CODE_VERSION = process.env.REPLIT_DEPLOYMENT_ID
   || process.env.COMMIT_SHA
   || "local-unpublished";
 const CJ_PID = process.env.CJ_PROPERTY_ID || process.env.CJ_COMPANY_ID || "";
-const safeCjPid = CJ_PID.replaceAll("'", "''");
 
 interface CommandOperation {
   previewSql: string;
@@ -69,18 +68,12 @@ function operationsFor(command: Phase0MaintenanceCommand): CommandOperation[] {
             WHERE sport_id='baseball'
               AND equipment_type_id IN ('bb-other','bb-shoes-apparel','bb-protective','bb-care-accessories')
               AND lower(title) ~ '(necklace|chain|pendant|sunglasses|sliding (mitt|glove)|arm sleeve|wristband|eye black|phiten)'`,
-          executeSql: `UPDATE deals SET equipment_type_id='bb-drip'
-            WHERE sport_id='baseball'
-              AND equipment_type_id IN ('bb-other','bb-shoes-apparel','bb-protective','bb-care-accessories')
-              AND lower(title) ~ '(necklace|chain|pendant|sunglasses|sliding (mitt|glove)|arm sleeve|wristband|eye black|phiten)'`,
-          note: "Legacy baseball drip correction, unchanged and no longer automatic.",
+          note: "Preview only: legacy baseball drip correction requires reviewed per-record change logging and rollback.",
         },
         {
           previewSql: `SELECT count(*)::int AS proposed_count FROM deals
             WHERE sport_id='baseball' AND equipment_type_id='bb-gloves' AND (${gloveNegativeSql})`,
-          executeSql: `UPDATE deals SET equipment_type_id='bb-other'
-            WHERE sport_id='baseball' AND equipment_type_id='bb-gloves' AND (${gloveNegativeSql})`,
-          note: "Legacy negative-glove correction; current read recovery remains independent.",
+          note: "Preview only: negative-glove reclassification requires reviewed per-record change logging and rollback.",
         },
       ];
     case "source-corrections":
@@ -89,11 +82,7 @@ function operationsFor(command: Phase0MaintenanceCommand): CommandOperation[] {
           previewSql: `SELECT count(*)::int AS proposed_count FROM sources
             WHERE (id='amazon-manual' AND name IS DISTINCT FROM 'Amazon')
                OR (id='dicks-sporting-goods' AND name IS DISTINCT FROM 'DICK''S Sporting Goods')`,
-          executeSql: `UPDATE sources SET name=CASE id
-            WHEN 'amazon-manual' THEN 'Amazon'
-            WHEN 'dicks-sporting-goods' THEN 'DICK''S Sporting Goods' END
-            WHERE id IN ('amazon-manual','dicks-sporting-goods')`,
-          note: "Source display-name correction.",
+          note: "Preview only: source display-name rewrite lacks an approved reversal procedure.",
         },
         {
           previewSql: `SELECT count(*)::int AS proposed_count FROM deals
@@ -103,9 +92,7 @@ function operationsFor(command: Phase0MaintenanceCommand): CommandOperation[] {
         {
           previewSql: `SELECT count(*)::int AS proposed_count FROM sources
             WHERE id='baseball-resale' AND base_url IS DISTINCT FROM 'https://nunnbaseball.shop'`,
-          executeSql: `UPDATE sources SET base_url='https://nunnbaseball.shop'
-            WHERE id='baseball-resale'`,
-          note: "Baseball Resale public-domain correction.",
+          note: "Preview only: source URL rewrite lacks affected-record logging and an approved reversal procedure.",
         },
       ];
     case "cj-url-rewrite": {
@@ -123,21 +110,12 @@ function operationsFor(command: Phase0MaintenanceCommand): CommandOperation[] {
               AND url NOT LIKE '%anrdoezrs.net%' AND url NOT LIKE '%dpbolvw.net%'
               AND url NOT LIKE '%jdoqocy.com%' AND url NOT LIKE '%tkqlhce.com%'
               AND url NOT LIKE '%kqzyfj.com%'`,
-          executeSql: `UPDATE deals
-            SET url='https://www.anrdoezrs.net/links/${safeCjPid}/type/dlg/'||url
-            WHERE source_id IN ('dicks-sporting-goods','golf-galaxy','academy-sports','playbaseball','soccergarage')
-              AND url LIKE 'https://%'
-              AND url NOT LIKE '%anrdoezrs.net%' AND url NOT LIKE '%dpbolvw.net%'
-              AND url NOT LIKE '%jdoqocy.com%' AND url NOT LIKE '%tkqlhce.com%'
-              AND url NOT LIKE '%kqzyfj.com%'`,
-          note: "Credential-scoped CJ wrapping for the original core source set.",
+          note: "Preview only: CJ URL wrapping lacks exact affected-record logging and an approved reversal procedure.",
         },
         {
           previewSql: `SELECT count(*)::int AS proposed_count FROM deals
             WHERE url LIKE '%/links/7630058/%'`,
-          executeSql: `UPDATE deals SET url=replace(url,'/links/7630058/','/links/${safeCjPid}/')
-            WHERE url LIKE '%/links/7630058/%'`,
-          note: "CJ property-ID correction.",
+          note: "Preview only: CJ property-ID rewrite lacks exact before/after logging and an approved reversal procedure.",
         },
       ];
     }
@@ -155,10 +133,7 @@ function operationsFor(command: Phase0MaintenanceCommand): CommandOperation[] {
             SELECT 1 FROM deal_sub_filters dsf
             WHERE dsf.deal_id=d.id AND dsf.sub_filter_id=d.sub_filter_id
           )`,
-        executeSql: `INSERT INTO deal_sub_filters(deal_id,sub_filter_id)
-          SELECT id,sub_filter_id FROM deals WHERE sub_filter_id IS NOT NULL
-          ON CONFLICT(deal_id,sub_filter_id) DO NOTHING`,
-        note: "Legacy single-tag to join-table compatibility backfill.",
+        note: "Preview only: legacy classification-tag backfill requires reviewed per-record logging and rollback.",
       }];
     case "deal-derived-field-backfill":
       return [{
@@ -181,11 +156,7 @@ function operationsFor(command: Phase0MaintenanceCommand): CommandOperation[] {
         previewSql: `SELECT count(*)::int AS proposed_count FROM deals
           WHERE (source_id IN ('ebay','sidelineswap') AND last_seen_at < now()-interval '7 days')
              OR (source_id NOT IN ('ebay','sidelineswap') AND last_seen_at < now()-interval '14 days')`,
-        executeSql: `DELETE FROM deals WHERE id IN (SELECT id FROM deals
-          WHERE (source_id IN ('ebay','sidelineswap') AND last_seen_at < now()-interval '7 days')
-             OR (source_id NOT IN ('ebay','sidelineswap') AND last_seen_at < now()-interval '14 days')
-          LIMIT 10000)`,
-        note: "Batched stale-offer cleanup.",
+        note: "Preview only: stale-offer deletion requires a verified backup, affected-record log, and rollback.",
       }];
     case "ebay-seller-seed":
       return [{

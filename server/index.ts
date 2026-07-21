@@ -3,6 +3,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { runVersionedStartupMigrations } from "./startup-migrations";
+import { bootstrapApplication, createStartupReadiness } from "./startup-readiness";
 
 const app = express();
 // Replit's load balancer terminates TLS upstream and forwards via X-Forwarded-For.
@@ -29,10 +30,22 @@ app.use(
 
 app.use(express.urlencoded({ extended: false, limit: "50mb" }));
 
-let appReady = false;
-app.get("/health", (_req, res) => res.status(200).json({ status: "ok" }));
+const startupReadiness = createStartupReadiness();
+const readinessHandler = (_req: Request, res: Response) => {
+  const state = startupReadiness.get();
+  return res.status(state.phase === "ready" ? 200 : 503).json({
+    status: state.phase === "ready" ? "ok" : "unhealthy",
+    startup: state,
+  });
+};
+app.get("/health", readinessHandler);
+app.get("/ready", readinessHandler);
 app.use((req, res, next) => {
-  if (!appReady && req.method === "GET" && (req.path === "/" || !req.path.startsWith("/api"))) {
+  const startup = startupReadiness.get();
+  if (startup.phase === "failed") {
+    return res.status(503).json({ status: "unhealthy", startup });
+  }
+  if (startup.phase !== "ready" && req.method === "GET" && (req.path === "/" || !req.path.startsWith("/api"))) {
     if (req.path === "/") {
       return res.status(200).set("Content-Type", "text/html").end(
         `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Loading...</title><meta http-equiv="refresh" content="3"></head><body><p>Loading...</p></body></html>`,
@@ -91,35 +104,40 @@ httpServer.listen(
   },
 );
 
-(async () => {
+void bootstrapApplication({
+  readiness: startupReadiness,
   // This runner contains structural compatibility migrations and approved
   // static seeds only. Deal maintenance is never invoked by application boot.
-  await runVersionedStartupMigrations();
-  await registerRoutes(httpServer, app);
+  migrate: runVersionedStartupMigrations,
+  async initialize() {
+    await registerRoutes(httpServer, app);
 
-  app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
+    app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
+      const status = err.status || err.statusCode || 500;
+      const message = err.message || "Internal Server Error";
 
-    console.error("Internal Server Error:", err);
+      console.error("Internal Server Error:", err);
 
-    if (res.headersSent) {
-      return next(err);
+      if (res.headersSent) return next(err);
+      return res.status(status).json({ message });
+    });
+
+    if (process.env.NODE_ENV === "production") {
+      serveStatic(app);
+    } else {
+      const { setupVite } = await import("./vite");
+      await setupVite(httpServer, app);
     }
-
-    return res.status(status).json({ message });
-  });
-
-  if (process.env.NODE_ENV === "production") {
-    serveStatic(app);
-  } else {
-    const { setupVite } = await import("./vite");
-    await setupVite(httpServer, app);
-  }
-
-  appReady = true;
-  log("Application ready");
-})().catch((error) => {
-  console.error("Application startup failed:", error);
-  process.exitCode = 1;
+    log("Application ready");
+  },
+  logFailure(message, error) {
+    console.error(message, error);
+  },
+  async terminate(exitCode) {
+    await new Promise<void>((resolve) => {
+      httpServer.close(() => resolve());
+      httpServer.closeAllConnections?.();
+    });
+    process.exit(exitCode);
+  },
 });
