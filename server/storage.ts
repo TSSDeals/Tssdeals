@@ -6,6 +6,8 @@ import {
   BASEBALL_BAT_NEGATIVE_EVIDENCE_PATTERN,
   BASEBALL_GLOVE_EVIDENCE_PATTERN,
   BASEBALL_GLOVE_FAMILY_PATTERN,
+  BASEBALL_GLOVE_EXPLICIT_BASEBALL_PATTERN,
+  BASEBALL_GLOVE_KNOWN_MODEL_PATTERN,
   BASEBALL_GLOVE_NEGATIVE_EVIDENCE_PATTERN,
   BASEBALL_GLOVE_STRUCTURED_CONTEXT_PATTERN,
   gloveSizeTitlePattern,
@@ -387,6 +389,22 @@ export class DatabaseStorage implements IStorage {
       COALESCE(${deals.raw}->>'sellerName', '') || ' ' ||
       COALESCE(${deals.raw}->>'storeName', '')
     )`;
+    const strongStoredSoftballOverride = and(
+      dsql`${baseballGloveTitleAndBrand} ~* ${BASEBALL_GLOVE_KNOWN_MODEL_PATTERN}`,
+      dsql`${deals.title} ~* ${BASEBALL_GLOVE_EXPLICIT_BASEBALL_PATTERN}`,
+    );
+    const baseballGloveStoredSportAllowed = or(
+      dsql`(${deals.sportId} IS NULL OR ${deals.sportId} NOT IN ('fastpitch-softball', 'slowpitch-softball', 'golf', 'boxing', 'cricket'))`,
+      and(inArray(deals.sportId, ['fastpitch-softball', 'slowpitch-softball']), strongStoredSoftballOverride),
+    );
+    const baseballGloveStoredEquipmentAllowed = or(
+      dsql`(${deals.equipmentTypeId} IS NULL OR (${deals.equipmentTypeId} NOT LIKE 'fp-%' AND ${deals.equipmentTypeId} NOT LIKE 'sp-%' AND ${deals.equipmentTypeId} NOT IN ('bb-batting-gloves', 'golf-glove', 'boxing-gloves')))`,
+      and(
+        or(dsql`${deals.equipmentTypeId} LIKE 'fp-%'`, dsql`${deals.equipmentTypeId} LIKE 'sp-%'`),
+        dsql`${deals.equipmentTypeId} NOT LIKE '%batting%'`,
+        strongStoredSoftballOverride,
+      ),
+    );
     const baseballGloveEvidence = params.sportId === "baseball" && (baseballGloveGroupRequest || baseballGloveSportSearchRecovery)
       ? and(
           or(
@@ -401,8 +419,8 @@ export class DatabaseStorage implements IStorage {
             ),
           ),
           dsql`COALESCE(${deals.title}, '') !~* ${BASEBALL_GLOVE_NEGATIVE_EVIDENCE_PATTERN}`,
-          dsql`(${deals.sportId} IS NULL OR ${deals.sportId} NOT IN ('fastpitch-softball', 'slowpitch-softball', 'golf', 'boxing', 'cricket'))`,
-          dsql`(${deals.equipmentTypeId} IS NULL OR (${deals.equipmentTypeId} NOT LIKE 'fp-%' AND ${deals.equipmentTypeId} NOT LIKE 'sp-%' AND ${deals.equipmentTypeId} NOT IN ('bb-batting-gloves', 'golf-glove', 'boxing-gloves')))`
+          baseballGloveStoredSportAllowed,
+          baseballGloveStoredEquipmentAllowed,
         )
       : null;
 
@@ -430,8 +448,8 @@ export class DatabaseStorage implements IStorage {
 
     if (params.sportId === "baseball" && baseballGloveGroupRequest) {
       whereParts.push(dsql`COALESCE(${deals.title}, '') !~* ${BASEBALL_GLOVE_NEGATIVE_EVIDENCE_PATTERN}`);
-      whereParts.push(dsql`(${deals.sportId} IS NULL OR ${deals.sportId} NOT IN ('fastpitch-softball', 'slowpitch-softball', 'golf', 'boxing', 'cricket'))`);
-      whereParts.push(dsql`(${deals.equipmentTypeId} IS NULL OR (${deals.equipmentTypeId} NOT LIKE 'fp-%' AND ${deals.equipmentTypeId} NOT LIKE 'sp-%' AND ${deals.equipmentTypeId} NOT IN ('bb-batting-gloves', 'golf-glove', 'boxing-gloves')))`);
+      whereParts.push(baseballGloveStoredSportAllowed!);
+      whereParts.push(baseballGloveStoredEquipmentAllowed!);
     }
 
     // Cricket bats get misclassified as baseball/softball bats by broad "bat" keyword

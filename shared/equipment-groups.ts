@@ -27,6 +27,19 @@ export function isBaseballGloveGroupId(id: string | null | undefined): boolean {
   return !!id && BASEBALL_GLOVE_GROUP.has(id);
 }
 
+export function canonicalResultEquipmentTypeId(
+  sportId: string | null | undefined,
+  equipmentTypeId: string | null | undefined,
+): string {
+  if (sportId === "baseball" && isBaseballGloveGroupId(equipmentTypeId)) return CANONICAL_BASEBALL_GLOVE_ID;
+  return equipmentTypeId ?? "other";
+}
+
+export function canonicalEquipmentTypeLabel(equipmentTypeId: string, fallback: string): string {
+  if (equipmentTypeId === CANONICAL_BASEBALL_GLOVE_ID) return "Baseball Gloves";
+  return fallback;
+}
+
 export function expandEquipmentTypeIds(sportId: string | undefined, ids: string[]): string[] {
   if (sportId !== "baseball") return Array.from(new Set(ids));
   return Array.from(new Set(ids.flatMap((id) => {

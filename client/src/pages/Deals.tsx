@@ -28,7 +28,7 @@ import { Link } from "wouter";
 import { RetailerBanner } from "@/components/RetailerBanner";
 import { BrandStoreStrip } from "@/components/BrandStoreStrip";
 import { DealCarousel } from "@/components/DealCarousel";
-import { BASEBALL_BAT_GROUP_IDS, CANONICAL_BASEBALL_BAT_ID, curateShopperEquipmentTypes } from "@shared/equipment-groups";
+import { BASEBALL_BAT_GROUP_IDS, CANONICAL_BASEBALL_BAT_ID, CANONICAL_BASEBALL_GLOVE_ID, canonicalEquipmentTypeLabel, canonicalResultEquipmentTypeId, curateShopperEquipmentTypes } from "@shared/equipment-groups";
 
 type SortOption = "newest" | "oldest" | "price-low" | "price-high" | "discount-high" | "a-z" | "z-a";
 
@@ -354,6 +354,7 @@ export default function DealsPage() {
     for (const t of (eqTypes.data ?? []) as any[]) {
       m.set(t.id, t.name);
     }
+    m.set(CANONICAL_BASEBALL_GLOVE_ID, "Baseball Gloves");
     return m;
   }, [eqTypes.data]);
 
@@ -385,9 +386,9 @@ export default function DealsPage() {
     if (!restDeals.length) return [];
     const groups = new Map<string, { name: string; deals: any[] }>();
     for (const d of restDeals) {
-      const key = d.equipmentTypeId ?? "other";
+      const key = canonicalResultEquipmentTypeId(d.sportId, d.equipmentTypeId);
       if (!groups.has(key)) {
-        groups.set(key, { name: eqTypeMap.get(key) ?? key, deals: [] });
+        groups.set(key, { name: canonicalEquipmentTypeLabel(key, eqTypeMap.get(key) ?? key), deals: [] });
       }
       groups.get(key)!.deals.push(d);
     }

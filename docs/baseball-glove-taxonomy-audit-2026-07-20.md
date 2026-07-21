@@ -49,3 +49,22 @@ Live search confirmed that the remaining misses are evidence-normalization probl
 The read evidence now accepts trademark punctuation, up to three intervening theme/collection words between A2000/A2K and the known 1786/1786SS glove pattern, and the explicit phrase `infield baseball`. A2K/family listings may also qualify through a valid glove size plus specific structured seller/category fields. Arbitrary raw JSON is not searched.
 
 Theme words alone do not establish classification. For example, an A2000-labeled tennis racquet with an 11.5 value but no known glove pattern, explicit fielding phrase, or baseball-glove seller/category evidence remains excluded. The expanded audit query reports the stored sport/equipment IDs, proposed canonical read group, and evidence reason for later cleanup; it performs no updates.
+
+## 2026-07-21 duplicate result-heading trace
+
+The remaining Exclusive listing was traced end to end:
+
+- Deal ID: `eb3f5c0a-efa3-4044-8f0c-95747bd06d0a`.
+- Title: `Wilson Exclusive A2000 1786 11.5" Baseball Glove (WBW103447115)`.
+- Source: `playbaseball` (Baseball Savings / playsbaseball.com).
+- Stored sport/equipment: `slowpitch-softball` / `sp-gloves`; stored size: `11.5`.
+- Candidate recovery and in-memory projection were blocked by the unconditional stored `sp-*`/slowpitch negative rule, so the API returned `sp-gloves` unchanged.
+- The client grouped directly by API `equipmentTypeId`. `bb-gloves` and `sp-gloves` therefore created separate map keys, while raw taxonomy labeled both keys `Gloves`, producing a main `Gloves` heading and a second `Gloves (1)` heading.
+
+The bounded read override now applies only when a stored fastpitch/slowpitch conflict also has both strong A2000/A2K + 1786/1786SS evidence and an explicit `Baseball Glove` or `Infield Baseball` phrase. Any fastpitch, slowpitch, or softball wording in the title still blocks recovery, as do batting, golf, boxing, and unrelated glove classifications.
+
+The API projection remains non-mutating and emits `baseball` / `bb-gloves` for qualifying reads while retaining the stored fields separately. Client result grouping additionally canonicalizes baseball-scoped legacy IDs (`glove`, `gloves`, `baseball-glove`, and `baseball-gloves`) to `bb-gloves` and labels that group `Baseball Gloves`. The audit now lists every raw glove-label ID that can create duplicate headings and its intended read-group behavior.
+
+An additional query-intent loss was confirmed for deal `592b05f7-c149-4a98-a82f-d063fe7f30df`, `MARUCCI CAPITOL SERIES MFG2CP45A3-MT/R BASEBALL GLOVE 12" RH - $359.99`. It is stored as `baseball` / `bb-other` with a null `size_number`. The query `Marucci Capitol Series 12"` retrieves it normally, but previously did not trigger display projection because the query itself omitted “glove” and known glove-family evidence. Its title is nevertheless explicit, unambiguous baseball-glove evidence.
+
+Database candidate expansion remains gated by strong query intent. Display projection is now intentionally separate: for any non-empty search, a deal that was already returned may project from its own strong evidence even when the search phrase is not glove-specific. This changes only the response grouping fields and does not broaden retrieval or update the stored `bb-other` assignment. The existing audit candidate query already reports this row for later cleanup.

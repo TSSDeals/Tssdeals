@@ -4,6 +4,8 @@ import {
   BASEBALL_BAT_GROUP_IDS,
   BASEBALL_GLOVE_GROUP_IDS,
   CANONICAL_BASEBALL_BAT_ID,
+  canonicalEquipmentTypeLabel,
+  canonicalResultEquipmentTypeId,
   curateShopperEquipmentTypes,
   expandEquipmentTypeIds,
 } from "./equipment-groups";
@@ -52,4 +54,11 @@ test("shopper taxonomy curates fielding gloves but preserves batting gloves", ()
     { id: "bb-gloves", name: "Baseball Gloves" },
     { id: "bb-batting-gloves", name: "Batting Gloves" },
   ]);
+});
+
+test("legacy baseball glove result IDs collapse to one canonical display group", () => {
+  const keys = BASEBALL_GLOVE_GROUP_IDS.map((id) => canonicalResultEquipmentTypeId("baseball", id));
+  assert.deepEqual(Array.from(new Set(keys)), ["bb-gloves"]);
+  assert.equal(canonicalEquipmentTypeLabel(keys[0], "Gloves"), "Baseball Gloves");
+  assert.equal(canonicalResultEquipmentTypeId("slowpitch-softball", "sp-gloves"), "sp-gloves");
 });
