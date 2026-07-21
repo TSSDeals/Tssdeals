@@ -31,8 +31,35 @@ SELECT
 FROM deals d
 WHERE d.equipment_type_id IN ('bb-gloves', 'glove', 'gloves', 'baseball-glove', 'baseball-gloves');
 
--- Candidate fielding gloves outside the canonical group. Negative evidence stays manual-review only.
-SELECT d.id, d.title, d.sport_id, d.equipment_type_id, d.size_number,
+-- Strong fielding-glove candidates outside the canonical group, including trademark symbols,
+-- themed A2000 names, 1786SS, structured retailer categories, and known glove sellers.
+WITH glove_candidates AS (
+  SELECT d.*,
+         (COALESCE(d.title, '') || ' ' || COALESCE(d.brand, '')) AS title_brand,
+         (
+           COALESCE(d.source_id, '') || ' ' ||
+           COALESCE(d.raw->>'category', '') || ' ' ||
+           COALESCE(d.raw->>'categoryName', '') || ' ' ||
+           COALESCE(d.raw->>'productType', '') || ' ' ||
+           COALESCE(d.raw->>'shopifyProductType', '') || ' ' ||
+           COALESCE(d.raw->>'collection', '') || ' ' ||
+           COALESCE((d.raw->'collections')::text, '') || ' ' ||
+           COALESCE((d.raw->'breadcrumbs')::text, '') || ' ' ||
+           COALESCE(d.raw->>'seller', '') || ' ' ||
+           COALESCE(d.raw->>'sellerName', '') || ' ' ||
+           COALESCE(d.raw->>'storeName', '')
+         ) AS structured_context
+  FROM deals d
+)
+SELECT d.id, d.title, d.source_id, d.sport_id, d.equipment_type_id, d.size_number,
+       'baseball / bb-gloves' AS proposed_read_group,
+       CASE
+         WHEN d.title_brand ~* 'a(2000|2k)([^a-z0-9]+[a-z][a-z0-9-]*){0,3}[^a-z0-9]+1786(ss)?'
+           THEN 'strong family + 1786/1786SS pattern'
+         WHEN d.title_brand ~* '(baseball\s+(fielding\s+)?glove|fielding\s+glove|infield(er)?\s+glove|outfield(er)?\s+glove|infield\s+baseball)'
+           THEN 'explicit fielding phrase'
+         ELSE 'family + size + structured seller/category evidence'
+       END AS evidence_reason,
        CASE
          WHEN LOWER(d.title) ~ '(batting|golf|boxing|winter|work|garden|football|goalkeeper|hockey|lacrosse|motorcycle|cycling|ski|snow|fastpitch|slowpitch|softball).*\b(glove|mitt)'
            THEN 'manual-review: negative title evidence'
@@ -40,8 +67,17 @@ SELECT d.id, d.title, d.sport_id, d.equipment_type_id, d.size_number,
            THEN 'manual-review: conflicting stored sport'
          ELSE 'read-path recovery candidate'
        END AS disposition
-FROM deals d
-WHERE d.equipment_type_id NOT IN ('bb-gloves', 'glove', 'gloves', 'baseball-glove', 'baseball-gloves')
-  AND (COALESCE(d.title, '') || ' ' || COALESCE(d.brand, '')) ~*
-      '(baseball\s+(fielding\s+)?glove|fielding\s+glove|infield(er)?\s+glove|outfield(er)?\s+glove|catcher(''s)?\s+mitt|first\s+base\s+mitt|wilson\s+a(2000|2k)|a2000\s+1786|heart\s+of\s+the\s+hide|pro\s+preferred)'
+FROM glove_candidates d
+WHERE d.equipment_type_id IS DISTINCT FROM 'bb-gloves'
+  AND (
+    d.title_brand ~* '(baseball\s+(fielding\s+)?glove|fielding\s+glove|infield(er)?\s+glove|outfield(er)?\s+glove|infield\s+baseball|catcher(''s)?\s+mitt|first\s+base\s+mitt|a(2000|2k)([^a-z0-9]+[a-z][a-z0-9-]*){0,3}[^a-z0-9]+1786(ss)?|heart\s+of\s+the\s+hide|pro\s+preferred)'
+    OR (
+      d.title_brand ~* '(^|[^a-z0-9])a(2000|2k)([^a-z0-9]|$)'
+      AND (
+        d.title ~* '(^|[^0-9.])(8|9|1[0-5])(\.[0-9]{1,2})?[\s-]*(["″]|in(ch(es)?)?\.?)?(?=[^0-9.]|$)'
+        OR TRIM(REGEXP_REPLACE(COALESCE(d.size_number, ''), '[^0-9.]', '', 'g')) ~ '^(8|9|1[0-5])(\.[0-9]{1,2})?$'
+      )
+      AND d.structured_context ~* '(baseball.{0,24}(glove|mitt)|(fielding|infield|outfield).{0,16}(glove|mitt)|gloves?\s*&\s*mitts?|justgloves|baseballmonkey|baseball\s+bargains)'
+    )
+  )
 ORDER BY disposition, d.id;

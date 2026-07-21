@@ -5,7 +5,9 @@ import {
   BASEBALL_BAT_EVIDENCE_PATTERN,
   BASEBALL_BAT_NEGATIVE_EVIDENCE_PATTERN,
   BASEBALL_GLOVE_EVIDENCE_PATTERN,
+  BASEBALL_GLOVE_FAMILY_PATTERN,
   BASEBALL_GLOVE_NEGATIVE_EVIDENCE_PATTERN,
+  BASEBALL_GLOVE_STRUCTURED_CONTEXT_PATTERN,
   gloveSizeTitlePattern,
   hasStrongBaseballGloveSearchIntent,
   normalizeDealSearch,
@@ -371,9 +373,33 @@ export class DatabaseStorage implements IStorage {
     const baseballGloveSportSearchRecovery = params.sportId === "baseball"
       && requestedEquipmentIds.length === 0
       && hasStrongBaseballGloveSearchIntent(params.q);
+    const baseballGloveTitleAndBrand = dsql`(COALESCE(${deals.title}, '') || ' ' || COALESCE(${deals.brand}, ''))`;
+    const baseballGloveStructuredContext = dsql`(
+      COALESCE(${deals.sourceId}, '') || ' ' ||
+      COALESCE(${deals.raw}->>'category', '') || ' ' ||
+      COALESCE(${deals.raw}->>'categoryName', '') || ' ' ||
+      COALESCE(${deals.raw}->>'productType', '') || ' ' ||
+      COALESCE(${deals.raw}->>'shopifyProductType', '') || ' ' ||
+      COALESCE(${deals.raw}->>'collection', '') || ' ' ||
+      COALESCE((${deals.raw}->'collections')::text, '') || ' ' ||
+      COALESCE((${deals.raw}->'breadcrumbs')::text, '') || ' ' ||
+      COALESCE(${deals.raw}->>'seller', '') || ' ' ||
+      COALESCE(${deals.raw}->>'sellerName', '') || ' ' ||
+      COALESCE(${deals.raw}->>'storeName', '')
+    )`;
     const baseballGloveEvidence = params.sportId === "baseball" && (baseballGloveGroupRequest || baseballGloveSportSearchRecovery)
       ? and(
-          dsql`(COALESCE(${deals.title}, '') || ' ' || COALESCE(${deals.brand}, '')) ~* ${BASEBALL_GLOVE_EVIDENCE_PATTERN}`,
+          or(
+            dsql`${baseballGloveTitleAndBrand} ~* ${BASEBALL_GLOVE_EVIDENCE_PATTERN}`,
+            and(
+              dsql`${baseballGloveTitleAndBrand} ~* ${BASEBALL_GLOVE_FAMILY_PATTERN}`,
+              or(
+                dsql`${deals.title} ~* ${'(^|[^0-9.])(?:8|9|1[0-5])(?:\\.[0-9]{1,2})?[\\s-]*(?:["″]|in(?:ch(?:es)?)?\\.?)?(?=[^0-9.]|$)'}`,
+                dsql`TRIM(REGEXP_REPLACE(COALESCE(${deals.sizeNumber}, ''), '[^0-9.]', '', 'g')) ~ '^(?:8|9|1[0-5])(?:\\.[0-9]{1,2})?$'`,
+              ),
+              dsql`${baseballGloveStructuredContext} ~* ${BASEBALL_GLOVE_STRUCTURED_CONTEXT_PATTERN}`,
+            ),
+          ),
           dsql`COALESCE(${deals.title}, '') !~* ${BASEBALL_GLOVE_NEGATIVE_EVIDENCE_PATTERN}`,
           dsql`(${deals.sportId} IS NULL OR ${deals.sportId} NOT IN ('fastpitch-softball', 'slowpitch-softball', 'golf', 'boxing', 'cricket'))`,
           dsql`(${deals.equipmentTypeId} IS NULL OR (${deals.equipmentTypeId} NOT LIKE 'fp-%' AND ${deals.equipmentTypeId} NOT LIKE 'sp-%' AND ${deals.equipmentTypeId} NOT IN ('bb-batting-gloves', 'golf-glove', 'boxing-gloves')))`

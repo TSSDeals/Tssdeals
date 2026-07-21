@@ -21,6 +21,7 @@ export interface SearchableDeal {
   subFilterIds?: string[];
   sportId?: string | null;
   equipmentTypeId?: string | null;
+  sourceId?: string | null;
   raw?: unknown;
 }
 
@@ -51,7 +52,11 @@ export const BASEBALL_BAT_NEGATIVE_EVIDENCE_PATTERN =
   "(^|[^a-z0-9])(cricket|fastpitch|softball|slowpitch)([^a-z0-9]|$)";
 
 export const BASEBALL_GLOVE_EVIDENCE_PATTERN =
-  "(^|[^a-z0-9])(baseball\\s+(?:fielding\\s+)?glove|fielding\\s+glove|infield(?:er)?\\s+glove|outfield(?:er)?\\s+glove|pitcher(?:'s)?\\s+glove|catcher(?:'s)?\\s+mitt|first\\s+base\\s+mitt|wilson\\s+a(?:2000|2k)|a2000\\s+1786|heart\\s+of\\s+the\\s+hide|pro\\s+preferred)([^a-z0-9]|$)";
+  "(^|[^a-z0-9])(baseball\\s+(?:fielding\\s+)?glove|fielding\\s+glove|infield(?:er)?\\s+glove|outfield(?:er)?\\s+glove|infield\\s+baseball|pitcher(?:'s)?\\s+glove|catcher(?:'s)?\\s+mitt|first\\s+base\\s+mitt|a(?:2000|2k)(?:[^a-z0-9]+[a-z][a-z0-9-]*){0,3}[^a-z0-9]+1786(?:ss)?|heart\\s+of\\s+the\\s+hide|pro\\s+preferred)([^a-z0-9]|$)";
+
+export const BASEBALL_GLOVE_FAMILY_PATTERN = "(^|[^a-z0-9])a(?:2000|2k)([^a-z0-9]|$)";
+export const BASEBALL_GLOVE_STRUCTURED_CONTEXT_PATTERN =
+  "(baseball.{0,24}(glove|mitt)|(fielding|infield|outfield).{0,16}(glove|mitt)|gloves?\\s*&\\s*mitts?|justgloves|baseballmonkey|baseball\\s+bargains)";
 
 export const BASEBALL_GLOVE_NEGATIVE_EVIDENCE_PATTERN =
   "(^|[^a-z0-9])(batting|golf|boxing|winter|work|working|garden|gardening|football|goalkeeper|hockey|lacrosse|motorcycle|cycling|ski|snow|driving|weightlifting|fitness|fastpitch|slowpitch|softball)\\s+(?:glove|mitt)|(?:glove|mitt)\\s+(?:liner|dryer|oil|conditioner|care\\s+kit)([^a-z0-9]|$)";
@@ -167,8 +172,21 @@ export function hasBaseballBatEvidence(deal: SearchableDeal): boolean {
 }
 
 export function hasBaseballGloveEvidence(deal: SearchableDeal): boolean {
-  return !hasBaseballGloveNegativeEvidence(deal)
-    && new RegExp(BASEBALL_GLOVE_EVIDENCE_PATTERN, "i").test(`${deal.title} ${deal.brand ?? ""}`);
+  if (hasBaseballGloveNegativeEvidence(deal)) return false;
+  const titleAndBrand = `${deal.title} ${deal.brand ?? ""}`;
+  if (new RegExp(BASEBALL_GLOVE_EVIDENCE_PATTERN, "i").test(titleAndBrand)) return true;
+  const hasFamily = new RegExp(BASEBALL_GLOVE_FAMILY_PATTERN, "i").test(titleAndBrand);
+  const hasSize = !!normalizeGloveSize(deal.sizeNumber)
+    || Array.from(deal.title.matchAll(/(^|[^0-9.])(\d{1,2}(?:\.\d{1,2})?)[\s-]*(?:["″]|in(?:ch(?:es)?)?\.?)?(?=[^0-9.]|$)/gi))
+      .some((match) => !!normalizeGloveSize(match[2]));
+  return hasFamily && hasSize
+    && new RegExp(BASEBALL_GLOVE_STRUCTURED_CONTEXT_PATTERN, "i").test(structuredGloveContext(deal));
+}
+
+function structuredGloveContext(deal: SearchableDeal): string {
+  const raw = deal.raw && typeof deal.raw === "object" ? deal.raw as Record<string, unknown> : {};
+  const keys = ["category", "categoryName", "productType", "shopifyProductType", "collection", "collections", "breadcrumbs", "seller", "sellerName", "storeName"];
+  return [deal.sourceId ?? "", ...keys.map((key) => JSON.stringify(raw[key] ?? ""))].join(" ");
 }
 
 export function hasBaseballGloveNegativeEvidence(deal: SearchableDeal): boolean {
