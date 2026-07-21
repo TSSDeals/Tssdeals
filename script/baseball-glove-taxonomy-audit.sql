@@ -9,6 +9,23 @@ WHERE LOWER(et.id) LIKE '%glove%' OR LOWER(et.name) LIKE '%glove%'
 GROUP BY et.sport_id, et.id, et.name, et.user_created
 ORDER BY et.sport_id, et.name, et.id;
 
+-- IDs whose raw label can render as a duplicate "Gloves" result heading.
+-- Only baseball-scoped legacy fielding IDs project to bb-gloves; softball/golf remain separate.
+SELECT et.sport_id, et.id AS stored_equipment_type_id, et.name AS raw_display_label,
+       COUNT(d.id) AS deal_count,
+       CASE
+         WHEN et.sport_id = 'baseball'
+          AND et.id IN ('bb-gloves', 'glove', 'gloves', 'baseball-glove', 'baseball-gloves')
+           THEN 'bb-gloves / Baseball Gloves'
+         ELSE 'preserve separate taxonomy'
+       END AS projected_result_group
+FROM equipment_types et
+LEFT JOIN deals d ON d.equipment_type_id = et.id
+WHERE LOWER(et.name) IN ('glove', 'gloves', 'baseball glove', 'baseball gloves')
+   OR et.id IN ('bb-gloves', 'glove', 'gloves', 'baseball-glove', 'baseball-gloves', 'fp-gloves', 'sp-gloves')
+GROUP BY et.sport_id, et.id, et.name
+ORDER BY LOWER(et.name), et.sport_id, et.id;
+
 -- Compatibility IDs proposed for the canonical Baseball Gloves read group.
 SELECT d.equipment_type_id, COUNT(*) AS deal_count
 FROM deals d
@@ -64,7 +81,7 @@ SELECT d.id, d.title, d.source_id, d.sport_id, d.equipment_type_id, d.size_numbe
          WHEN LOWER(d.title) ~ '(batting|golf|boxing|winter|work|garden|football|goalkeeper|hockey|lacrosse|motorcycle|cycling|ski|snow|fastpitch|slowpitch|softball).*\b(glove|mitt)'
            THEN 'manual-review: negative title evidence'
          WHEN d.sport_id IN ('fastpitch-softball', 'slowpitch-softball', 'golf', 'boxing', 'cricket')
-           THEN 'manual-review: conflicting stored sport'
+           THEN 'manual-review: conflicting stored sport (strong explicit baseball evidence may project on read)'
          ELSE 'read-path recovery candidate'
        END AS disposition
 FROM glove_candidates d

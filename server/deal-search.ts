@@ -55,6 +55,10 @@ export const BASEBALL_GLOVE_EVIDENCE_PATTERN =
   "(^|[^a-z0-9])(baseball\\s+(?:fielding\\s+)?glove|fielding\\s+glove|infield(?:er)?\\s+glove|outfield(?:er)?\\s+glove|infield\\s+baseball|pitcher(?:'s)?\\s+glove|catcher(?:'s)?\\s+mitt|first\\s+base\\s+mitt|a(?:2000|2k)(?:[^a-z0-9]+[a-z][a-z0-9-]*){0,3}[^a-z0-9]+1786(?:ss)?|heart\\s+of\\s+the\\s+hide|pro\\s+preferred)([^a-z0-9]|$)";
 
 export const BASEBALL_GLOVE_FAMILY_PATTERN = "(^|[^a-z0-9])a(?:2000|2k)([^a-z0-9]|$)";
+export const BASEBALL_GLOVE_KNOWN_MODEL_PATTERN =
+  "(^|[^a-z0-9])a(?:2000|2k)(?:[^a-z0-9]+[a-z][a-z0-9-]*){0,3}[^a-z0-9]+1786(?:ss)?([^a-z0-9]|$)";
+export const BASEBALL_GLOVE_EXPLICIT_BASEBALL_PATTERN =
+  "(^|[^a-z0-9])(baseball\\s+(?:fielding\\s+)?glove|infield\\s+baseball)([^a-z0-9]|$)";
 export const BASEBALL_GLOVE_STRUCTURED_CONTEXT_PATTERN =
   "(baseball.{0,24}(glove|mitt)|(fielding|infield|outfield).{0,16}(glove|mitt)|gloves?\\s*&\\s*mitts?|justgloves|baseballmonkey|baseball\\s+bargains)";
 
@@ -190,10 +194,15 @@ function structuredGloveContext(deal: SearchableDeal): string {
 }
 
 export function hasBaseballGloveNegativeEvidence(deal: SearchableDeal): boolean {
-  const storedNegative = /^(?:fp|sp)-/.test(deal.equipmentTypeId ?? "")
-    || ["fastpitch-softball", "slowpitch-softball", "golf", "boxing", "cricket"].includes(deal.sportId ?? "")
+  if (new RegExp(BASEBALL_GLOVE_NEGATIVE_EVIDENCE_PATTERN, "i").test(deal.title)) return true;
+  const titleAndBrand = `${deal.title} ${deal.brand ?? ""}`;
+  const strongStoredSoftballOverride = new RegExp(BASEBALL_GLOVE_KNOWN_MODEL_PATTERN, "i").test(titleAndBrand)
+    && new RegExp(BASEBALL_GLOVE_EXPLICIT_BASEBALL_PATTERN, "i").test(deal.title);
+  const storedSoftball = /^(?:fp|sp)-/.test(deal.equipmentTypeId ?? "")
+    || SOFTBALL_SPORT_IDS.has(deal.sportId ?? "");
+  const storedUnrelated = ["golf", "boxing", "cricket"].includes(deal.sportId ?? "")
     || /(?:batting-gloves|golf-glove|boxing-gloves)/.test(deal.equipmentTypeId ?? "");
-  return storedNegative || new RegExp(BASEBALL_GLOVE_NEGATIVE_EVIDENCE_PATTERN, "i").test(deal.title);
+  return storedUnrelated || (storedSoftball && !strongStoredSoftballOverride);
 }
 
 export function hasStrongBaseballGloveSearchIntent(query: string | null | undefined): boolean {
@@ -202,7 +211,9 @@ export function hasStrongBaseballGloveSearchIntent(query: string | null | undefi
 
 /** Projects recovered search results for display without changing their stored database values. */
 export function projectDealSearchClassification<T extends SearchableDeal>(query: string | undefined, deal: T): T {
-  if (!hasStrongBaseballGloveSearchIntent(query) || !hasBaseballGloveEvidence(deal)) return deal;
+  // Candidate retrieval remains query-aware in storage. Once a search has returned a deal,
+  // its own unambiguous evidence is sufficient to canonicalize display grouping.
+  if (!query?.trim() || !hasBaseballGloveEvidence(deal)) return deal;
   if (deal.sportId === "baseball" && deal.equipmentTypeId === "bb-gloves") return deal;
   return { ...deal, sportId: "baseball", equipmentTypeId: "bb-gloves" };
 }

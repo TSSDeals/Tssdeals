@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   batSizeMatchSpecificity,
   hasBaseballGloveEvidence,
+  hasStrongBaseballGloveSearchIntent,
   matchesGloveSize,
   matchesDealClassificationFilters,
   matchesNormalizedDealSearch,
@@ -10,6 +11,7 @@ import {
   projectDealSearchClassification,
   type SearchableDeal,
 } from "./deal-search";
+import { canonicalResultEquipmentTypeId } from "../shared/equipment-groups";
 
 for (const equipmentTypeId of ["baseball-bat", "bat", "bb-bats"]) {
   test(`canonical Baseball Bats filter includes ${equipmentTypeId}`, () => {
@@ -239,6 +241,59 @@ test("unrelated tennis equipment is not recovered from family and size alone", (
   };
   assert.equal(hasBaseballGloveEvidence(racquet), false);
   assert.equal(projectDealSearchClassification(gloveQuery, racquet), racquet);
+});
+
+test("Exclusive A2000 stored as slowpitch projects into the canonical Baseball Gloves group", () => {
+  const exclusive = {
+    id: "eb3f5c0a-efa3-4044-8f0c-95747bd06d0a",
+    sourceId: "playbaseball",
+    title: 'Wilson Exclusive A2000 1786 11.5" Baseball Glove (WBW103447115)',
+    brand: "Wilson",
+    sportId: "slowpitch-softball",
+    equipmentTypeId: "sp-gloves",
+    sizeNumber: "11.5",
+  };
+  const search = normalizeDealSearch(gloveQuery);
+  assert.equal(matchesNormalizedDealSearch(search, exclusive), true);
+  assert.equal(matchesDealClassificationFilters(exclusive, {
+    q: gloveQuery,
+    sportId: "baseball",
+    equipmentTypeId: "bb-gloves",
+  }), true);
+  const projected = projectDealSearchClassification(gloveQuery, exclusive);
+  assert.equal(projected.sportId, "baseball");
+  assert.equal(projected.equipmentTypeId, "bb-gloves");
+  assert.equal(canonicalResultEquipmentTypeId(projected.sportId, projected.equipmentTypeId), "bb-gloves");
+  assert.equal(exclusive.sportId, "slowpitch-softball", "stored classification is unchanged");
+});
+
+test("explicit softball A2000 glove remains excluded despite stored-softball override", () => {
+  const softball = {
+    title: 'Wilson A2000 1786 11.5" Slowpitch Softball Glove',
+    sportId: "slowpitch-softball",
+    equipmentTypeId: "sp-gloves",
+  };
+  assert.equal(hasBaseballGloveEvidence(softball), false);
+  assert.equal(projectDealSearchClassification(gloveQuery, softball), softball);
+});
+
+test("explicit eBay baseball-glove evidence projects without glove-specific query intent", () => {
+  const query = 'Marucci Capitol Series 12"';
+  const ebay = {
+    id: "592b05f7-c149-4a98-a82f-d063fe7f30df",
+    sourceId: "ebay",
+    title: 'MARUCCI CAPITOL SERIES MFG2CP45A3-MT/R BASEBALL GLOVE 12" RH -  $359.99',
+    sportId: "baseball",
+    equipmentTypeId: "bb-other",
+    sizeNumber: null,
+  };
+  assert.equal(hasStrongBaseballGloveSearchIntent(query), false, "candidate recovery stays bounded");
+  assert.equal(matchesNormalizedDealSearch(normalizeDealSearch(query), ebay), true, "deal was already retrieved by search");
+  const projected = projectDealSearchClassification(query, ebay);
+  assert.equal(projected.sportId, "baseball");
+  assert.equal(projected.equipmentTypeId, "bb-gloves");
+  assert.equal(canonicalResultEquipmentTypeId(projected.sportId, projected.equipmentTypeId), "bb-gloves");
+  assert.equal(ebay.equipmentTypeId, "bb-other", "stored classification remains unchanged");
 });
 
 for (const notation of ["11.5", '11.5"', "11.5 inch", "11.5-inch"]) {
