@@ -693,6 +693,37 @@ test("identifier consensus requires two supported records that agree", () => {
   assert.equal(correctionFor(report, "wrong-consensus-target")?.proposedCanonicalEquipmentTypeId, null);
 });
 
+test("ordinary SKU consensus requires the same source and a known seller", () => {
+  const report = buildTaxonomyAuditReport(hardeningFixture([
+    { id: "sellerless-reference-1", sourceId: "justbats", title: "Marucci CATX USSSA Baseball Bat", sportId: "baseball", equipmentTypeId: "bb-bats", raw: { sku: "CATX-NOSELLER-42" } },
+    { id: "sellerless-reference-2", sourceId: "justbats", title: "Marucci CATX BBCOR Baseball Bat", sportId: "baseball", equipmentTypeId: "bb-bats", raw: { sku: "CATX-NOSELLER-42" } },
+    { id: "sellerless-target", sourceId: "justbats", title: "Marucci CATX USSSA Baseball Bat", sportId: "baseball", equipmentTypeId: "bb-other", raw: { sku: "CATX-NOSELLER-42" } },
+    { id: "known-seller-reference-1", sourceId: "justbats", title: "Easton Hype Fire USSSA Baseball Bat", sportId: "baseball", equipmentTypeId: "bb-bats", raw: { seller: "catalog", sku: "HYPE-KNOWN-42" } },
+    { id: "known-seller-reference-2", sourceId: "justbats", title: "Easton Hype Fire USA Baseball Bat", sportId: "baseball", equipmentTypeId: "bb-bats", raw: { seller: "catalog", sku: "HYPE-KNOWN-42" } },
+    { id: "known-seller-target", sourceId: "justbats", title: "Easton Hype Fire USSSA Baseball Bat", sportId: "baseball", equipmentTypeId: "bb-other", raw: { seller: "catalog", sku: "HYPE-KNOWN-42" } },
+    { id: "different-seller-target", sourceId: "justbats", title: "Easton Hype Fire USSSA Baseball Bat", sportId: "baseball", equipmentTypeId: "bb-other", raw: { seller: "marketplace", sku: "HYPE-KNOWN-42" } },
+    { id: "numeric-sku-target", sourceId: "justbats", title: "Louisville Slugger Supra USSSA Baseball Bat", sportId: "baseball", equipmentTypeId: "bb-other", raw: { seller: "catalog", sku: "23576" } },
+    { id: "generic-sku-target", sourceId: "justbats", title: "Louisville Slugger Supra USSSA Baseball Bat", sportId: "baseball", equipmentTypeId: "bb-other", raw: { seller: "catalog", sku: "SKU123" } },
+  ]));
+
+  assert.equal(correctionFor(report, "sellerless-target")?.confidence, "medium");
+  assert.equal(correctionFor(report, "sellerless-target")?.humanApprovalRequired, true);
+  assert.equal(correctionFor(report, "known-seller-target")?.confidence, "high");
+  assert.equal(correctionFor(report, "known-seller-target")?.humanApprovalRequired, false);
+  assert.equal(correctionFor(report, "different-seller-target")?.confidence, "medium");
+  assert.equal(correctionFor(report, "different-seller-target")?.humanApprovalRequired, true);
+  assert.equal(correctionFor(report, "numeric-sku-target")?.confidence, "medium");
+  assert.equal(correctionFor(report, "generic-sku-target")?.confidence, "medium");
+
+  const sellerlessFinding = report.identifierFindings.find((finding) =>
+    finding.kind === "invalid-identifier"
+    && finding.identifierType === "sku"
+    && finding.identifierValue === "CATX-NOSELLER-42");
+  assert.ok(sellerlessFinding);
+  assert.equal(sellerlessFinding.scope, "source:justbats|seller:unknown-seller");
+  assert.match(sellerlessFinding.evidence.join(" "), /no known seller identity/i);
+});
+
 test("keeps ambiguous Other products pending and audits other sports", () => {
   const report = buildTaxonomyAuditReport(fixture());
   const ambiguous = report.correctionGroups.find((group) =>
@@ -711,9 +742,23 @@ test("keeps ambiguous Other products pending and audits other sports", () => {
 });
 
 test("identifier analysis scopes SKUs, validates GTINs, and separates collision kinds", () => {
+  assert.equal(isValidGtin("95012346"), true);
   assert.equal(isValidGtin("036000291452"), true);
+  assert.equal(isValidGtin("4006381333931"), true);
+  assert.equal(isValidGtin("10012345000017"), true);
   assert.equal(isValidGtin("036000291453"), false);
   assert.equal(isValidGtin("12345"), false);
+  for (const placeholder of [
+    "00000000",
+    "000000000000",
+    "00000000000000",
+    "55555555",
+    "555555555555",
+    "2222222222222",
+    "55555555555555",
+  ]) {
+    assert.equal(isValidGtin(placeholder), false, placeholder);
+  }
 
   const report = buildTaxonomyAuditReport(phase14Fixture([
     { id: "numeric-sku-shorts", sourceId: "direct-sports", title: "Miken Men's Slowpitch Shorts: MSPSM20", sportId: "baseball", equipmentTypeId: "bb-bats", raw: { sku: "23576" } },

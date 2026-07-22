@@ -12,7 +12,7 @@ import {
   canonicalResultEquipmentTypeId,
 } from "../shared/equipment-groups";
 
-export const TAXONOMY_AUDIT_RULE_VERSION = "phase1.4-read-only-v5";
+export const TAXONOMY_AUDIT_RULE_VERSION = "phase1.4-read-only-v6";
 
 export interface AuditSportRow {
   id: string;
@@ -670,6 +670,7 @@ export function isValidGtin(value: string): boolean {
   if (/[^\d\s-]/.test(value)) return false;
   const digits = value.replace(/[^\d]/g, "");
   if (![8, 12, 13, 14].includes(digits.length)) return false;
+  if (/^(\d)\1+$/.test(digits)) return false;
   let sum = 0;
   let weight = 3;
   for (let index = digits.length - 2; index >= 0; index -= 1) {
@@ -705,9 +706,11 @@ function identifierObservations(deal: AuditDealRow): IdentifierObservation[] {
       const scope = identifierScope(deal, type);
       let invalidReason: string | null = null;
       if (type === "upc" && !isValidGtin(item.value)) {
-        invalidReason = "UPC/GTIN has an invalid length, character set, or check digit";
+        invalidReason = "UPC/GTIN is a placeholder or has an invalid length, character set, or check digit";
       } else if (type === "sku" && !isUsableSku(normalized)) {
         invalidReason = "SKU is numeric, generic, malformed, or too weak for product identity";
+      } else if (type === "sku" && !normalizeText(sellerFor(deal) ?? "")) {
+        invalidReason = "ordinary SKU has no known seller identity and is ineligible for source/seller consensus";
       } else if (type === "itemNumber" && (normalized.length < 5 || normalized.length > 80)) {
         invalidReason = "item number is too short or malformed for product identity";
       }
@@ -1762,7 +1765,7 @@ export function taxonomyAuditMarkdown(report: TaxonomyAuditReport): string {
     "",
     "A sport name alone is never ball evidence. Explicit softball/fastpitch/slowpitch, mixed Baseball/Softball, training-ball, ball-container, glove-accessory, ball-memorabilia, and batting-tee replacement-component evidence is evaluated before ordinary equipment destinations. Canonical stored sport/equipment families use an explicit compatibility layer so compatible products are counted as no action rather than pending. High confidence still requires two independent compatible signal types; proposed corrections, genuine conflicts, unresolved Other records, ambiguous evidence, and compatible no-action records are reported separately.",
     "",
-    "Validated UPC/GTIN values must pass a structural check digit. SKU identity is source- and seller-scoped, numeric or generic SKUs cannot provide consensus, and source item numbers are source-scoped. Identifier consensus can only reinforce matching direct product-family evidence; it cannot create a destination by itself.",
+    "Validated UPC/GTIN values must pass a structural check digit and cannot be repeated-digit placeholders. SKU identity is source- and known-seller-scoped; sellerless, numeric, or generic SKUs cannot provide consensus. Source item numbers are source-scoped. Identifier consensus can only reinforce matching direct product-family evidence; it cannot create a destination by itself.",
     "",
     "## Assignment-path assessment",
     "",
