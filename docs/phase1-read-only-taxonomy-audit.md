@@ -1,6 +1,6 @@
 # Phase 1 database-wide taxonomy audit
 
-Date: 2026-07-21
+Date: 2026-07-22
 
 Status: implementation and test fixtures only. The command was **not** run against production, and this phase contains no database mutation mode.
 
@@ -72,6 +72,10 @@ Null, orphaned, generic Other, numbered Other, and conflicting records without o
 
 Phase 1.2 adds product-form and sport-conflict precedence. Explicit fastpitch, slowpitch, or softball evidence blocks Baseball destinations. Mixed `Baseball/Softball` and `BB/SB` titles remain ambiguous pending records until a shared-category policy is approved. Ball buckets/containers, weighted or limited-flight balls, pitching-machine balls, training aids, glove laces, repair kits, and glove accessories cannot become ordinary Balls or fielding Gloves. Sport-specific training-ball evidence may produce a reviewable Training Equipment candidate; ambiguous and mixed forms remain pending.
 
+Phase 1.3 tightens product form again. Bat holders, racks, organizers, display/storage products, and grip tape/wrap are protected accessories rather than Bats; incidental phrases such as `new grip`, `bad grip`, or a grip brand do not block an otherwise explicit bat. Fastpitch/slowpitch Balls now require a discrete ball term instead of the sport phrase alone. A bounded adult/youth bat-dimension rule requires a 26–35 inch length, a 15–31 ounce weight, and drop, barrel, alloy, or composite evidence before a fastpitch/slowpitch title that omits `bat` can become a Bat. That range deliberately excludes 11-inch, 12-inch, and 16-inch softball sizes.
+
+Ball buckets and containers are detected in either word order with intervening product wording; holders, stands, racks, novelty/noisemaker references, and explicit training-ball forms cannot become ordinary Balls. Cycling accessories such as pedals, grips, pegs, pumps, tires, tubes, wheels, racks, helmets, and replacement parts cannot become Bicycles. Goal/hoop shooting targets, weights, sandbag covers, and replacement weights cannot become Nets or Hoops/Nets. Genuine bicycles, goals, hoops, rims, backboards, and nets remain eligible.
+
 Stored taxonomy compatibility is now explicit rather than inferred from exact family-string equality. Canonical Shoes/Apparel, socks, shorts, bags, protective equipment, training equipment, Balls, Bats, Gloves, Cleats, and corresponding sport-owned categories are no-action when their stored sport/equipment owner and product evidence agree. Explicit sport or product-family conflicts still override compatibility.
 
 ## Ingestion and classification findings
@@ -107,6 +111,16 @@ Tests cover:
 Phase 1.1 adds report-derived regressions for Baseball apparel, cleats, helmets, gloves, bags and bats; Basketball shoes and hoops; Football facemasks; FIFA/soccer-style football wording; Fanatics autographs, apparel and memorabilia; two-signal high-confidence gating; and agreeing, conflicting, or incorrectly classified identifier cohorts.
 
 Phase 1.2 adds production-report regressions for Easton Jen Schro and Wilson C200 fastpitch catcher gear, CIF-SS and Dream Seam softballs, a mixed Easton ball bucket, Play It Again weighted softball and `BB/SB` training aids, a Liberty Advanced fastpitch catcher's mitt, and a mixed glove-lace repair kit. It also covers canonical Golf, Running, Basketball, and Baseball no-action families plus Fanatics apparel, non-fielding gloves, and dedicated softball equipment that must remain genuine review conflicts.
+
+Phase 1.3 adds production-report regressions for six bat-holder/rack/grip products; real bats with incidental grip wording; straight and curly possessive HIVIZ fielder-mask titles; 33-inch/23-ounce/-10 fastpitch and 34-inch/27-ounce slowpitch bats that omit `bat`; 11-inch, 12-inch, and 16-inch softball sizes; bucket combinations, ball holders, party horns, and training balls; Bell bike pedals/grips/pegs and a genuine Huffy bicycle; and goal-target and hoop-weight accessories alongside genuine goals, hoops, rims, backboards, and nets.
+
+## Phase 1.3 supplied Phase 1.2 evidence and representative replay
+
+The supplied Phase 1.2 read-only report (`phase1.2-read-only-v3`, generated 2026-07-22T19:31:21.733Z) covered 179,997 deals. It reported 1,317 proposed corrections, 75,272 pending/review records, 103,408 compatible/no-action records, 40,093 records in Other, and zero high-confidence proposals. The archive was reviewed and replayed offline only; this change did not connect to production or run another production audit.
+
+The report retained 15,429 unique representative deal examples across its correction groups. Replaying those titles and stored sport/equipment IDs through Phase 1.3 changed the representative sample from 570 proposed and 14,859 pending records to 543 proposed, 14,780 pending, and 106 compatible/no-action records. This is directional fixture evidence, not a production-wide after-count: correction groups retain at most five examples, and their examples omit most original structured retailer fields.
+
+The replay specifically removed the unsafe Bat destination from the requested holder/rack/grip examples; removed ordinary Ball destinations from the two Wilson bucket combinations, practice-ball bucket, ball holder, stadium horns, and training-ball forms; removed Bicycle from Bell pedals, grips, and pegs while retaining `cyc-bikes` for the Huffy Granite; and removed Nets/Hoops destinations from the shooting-target and sandbag-cover examples. Both Rawlings HIVIZ masks resolved to `fp-protective`; the Easton 33-inch/23-ounce/-10 product resolved to `fp-bats`; and the Miken 34-inch/27-ounce alloy product resolved to `sp-bats`.
 
 ## Phase 1.2 production evidence and expected pending effect
 
