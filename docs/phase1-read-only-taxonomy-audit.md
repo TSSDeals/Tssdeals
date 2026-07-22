@@ -58,9 +58,13 @@ The CSV is the flattened correction/pending cohort table. The Markdown file summ
 
 ## Evidence and confidence policy
 
-Known Bat/Glove alias groups and the already-reviewed bounded Bat/Glove evidence helpers are high confidence. Their negative controls remain authoritative, including Fastpitch, Slowpitch, Softball, cricket, batting gloves, golf, boxing, work, winter, and unrelated glove products.
+Phase 1.1 replaces the original one-match policy. A sport name alone (`baseball`, `basketball`, `football`, `softball`, or another sport) is never ball evidence. Specific equipment matches and explicit apparel, footwear, protective-equipment, bag, glove, bat, hoop/net, memorabilia, and multi-product conflicts are evaluated before conservative ball rules.
 
-Other sports use deliberately explicit title evidence (for example, `soccer ball`, `hockey stick`, `fishing rod`, or `running shoe`). These are medium-confidence report proposals and require human approval. Generic `ball`, `bag`, `glove`, `driver`, or merchandise/theme wording is not sufficient by itself.
+The audit collects independent signals from specific title/model evidence, structured retailer category/product-type/tag fields, validated UPC/SKU/item-number consensus, and compatible stored taxonomy. High confidence requires at least two independent compatible signal types and no stored or protected-family conflict. A single compatible signal is medium confidence and always requires human approval. Legacy Bat/Glove aliases without a second compatible signal are also medium confidence.
+
+Identifier consensus is emitted only when at least two distinct records have a valid, non-Other stored classification, their conservative direct evidence supports that classification, and every qualifying record for the normalized identifier agrees. Conflicted identifiers and identifiers backed only by incorrectly classified records produce no consensus signal.
+
+Fanatics apparel, collectibles, autographs, memorabilia, and other ambiguous merchandise remain pending. Generic `ball`, `bag`, `glove`, `driver`, sport, merchandise, or theme wording is not sufficient by itself.
 
 Null, orphaned, generic Other, numbered Other, and conflicting records without one unique strong destination remain low-confidence pending records. Phase 1 never converts a pending record into a proposed destination.
 
@@ -94,4 +98,36 @@ Tests cover:
 - mutation-flag rejection and the database transaction's read-only declaration;
 - every inventoried assignment path pointing to a real source file.
 
-The existing Bat/Glove and Phase 0 startup-safety suites are run unchanged. No production counts appear in this document because the user explicitly prohibited running the new audit against production in this task.
+Phase 1.1 adds report-derived regressions for Baseball apparel, cleats, helmets, gloves, bags and bats; Basketball shoes and hoops; Football facemasks; FIFA/soccer-style football wording; Fanatics autographs, apparel and memorabilia; two-signal high-confidence gating; and agreeing, conflicting, or incorrectly classified identifier cohorts.
+
+## Phase 1.1 baseline and representative replay
+
+The supplied read-only Phase 1 report (`phase1-read-only-v1`, generated 2026-07-22T14:54:16.321Z) covered 178,888 deals. It reported 20,435 proposed records and 37,161 pending records. Unsafe destination totals included:
+
+- 12,959 records proposed as `bb-balls`;
+- 1,241 proposed as `bk-balls`;
+- 876 proposed as `fb-balls`;
+- 500 high-confidence records proposed as `bb-bats`.
+
+The report stores at most five examples per correction cohort and does not retain every deal's raw evidence, so it cannot reproduce an exact full-database Phase 1.1 run. No local/test database or `DATABASE_URL` was available, and production was deliberately not queried. Instead, both engines were replayed over the 15,570 unique representative examples in the supplied report:
+
+| Representative-example metric | Phase 1 v1 | Phase 1.1 v2 |
+|---|---:|---:|
+| Proposed records | 11,786 | 1,245 |
+| Pending records | 3,775 | 6,802 |
+| `bb-balls` proposals | 9,409 | 70 |
+| `bk-balls` proposals | 750 | 0 |
+| `fb-balls` proposals | 556 | 1 |
+| `bb-bats` proposals | 392 | 291 |
+
+The remaining sampled Baseball-ball proposals are medium-confidence titles that explicitly say `baseballs`, `dozen`, or equivalent ball packaging. The one remaining Football-ball proposal is an explicit `Game Football` title and remains medium-confidence review-only. The remaining sampled Baseball-bat proposals are predominantly explicit bat titles; absent their original raw retailer fields, the replay conservatively keeps title-only matches at medium confidence. Exact production-wide after-counts require a separately supplied non-production database snapshot.
+
+## Remaining limitations
+
+- The classifier is intentionally an explicit, bounded audit ruleset rather than a complete canonical taxonomy engine; unsupported product families remain pending.
+- Structured evidence currently reads the audited top-level retailer aliases. Supplier-specific evidence nested under unrecognized raw objects is inventoried but does not become a classification signal.
+- Identifier consensus requires two supported agreeing records. This avoids propagating bad classifications but leaves many legitimate one-record UPC/SKU/item-number matches review-only.
+- Bundles and titles containing multiple protected equipment families remain pending even when one component appears dominant.
+- The representative replay cannot preserve raw category, tag, UPC, SKU, or item-number fields omitted from the Phase 1 correction examples, so its after-counts are deliberately more conservative than a full non-production snapshot run.
+
+The existing Bat/Glove and Phase 0 startup-safety suites are run unchanged. No new audit was run against production; the baseline counts above come only from the user-supplied completed read-only report.
