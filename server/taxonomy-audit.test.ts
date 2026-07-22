@@ -119,7 +119,7 @@ function hardeningFixture(deals: TaxonomyAuditDataset["deals"]): TaxonomyAuditDa
       { id: "bb-balls", name: "Balls", sportId: "baseball", userCreated: false },
       { id: "bb-cleats", name: "Cleats", sportId: "baseball", userCreated: false },
       { id: "bb-protective", name: "Protective Equipment", sportId: "baseball", userCreated: false },
-      { id: "bb-bags", name: "Bags", sportId: "baseball", userCreated: false },
+      { id: "bb-bags", name: "Bat Bags / Equipment Bags", sportId: "baseball", userCreated: false },
       { id: "bb-shoes-apparel", name: "Shoes & Apparel", sportId: "baseball", userCreated: false },
       { id: "bb-batting-gloves", name: "Batting Gloves", sportId: "baseball", userCreated: false },
       { id: "bb-training", name: "Training Equipment", sportId: "baseball", userCreated: false },
@@ -142,6 +142,39 @@ function hardeningFixture(deals: TaxonomyAuditDataset["deals"]): TaxonomyAuditDa
 function correctionFor(report: ReturnType<typeof buildTaxonomyAuditReport>, id: string) {
   return report.correctionGroups.find((group) =>
     group.examples.some((example) => example.id === id));
+}
+
+function phase12Fixture(deals: TaxonomyAuditDataset["deals"]): TaxonomyAuditDataset {
+  const base = hardeningFixture(deals);
+  return {
+    ...base,
+    sports: [
+      ...base.sports,
+      { id: "fastpitch-softball", name: "Fastpitch Softball", userCreated: false },
+      { id: "slowpitch-softball", name: "Slowpitch Softball", userCreated: false },
+      { id: "golf", name: "Golf", userCreated: false },
+      { id: "running", name: "Running", userCreated: false },
+    ],
+    equipmentTypes: [
+      ...base.equipmentTypes,
+      { id: "fp-balls", name: "Balls", sportId: "fastpitch-softball", userCreated: false },
+      { id: "fp-bats", name: "Bats", sportId: "fastpitch-softball", userCreated: false },
+      { id: "fp-gloves", name: "Gloves", sportId: "fastpitch-softball", userCreated: false },
+      { id: "fp-protective", name: "Protective Equipment", sportId: "fastpitch-softball", userCreated: false },
+      { id: "fp-training", name: "Training Equipment", sportId: "fastpitch-softball", userCreated: false },
+      { id: "fp-other", name: "Other", sportId: "fastpitch-softball", userCreated: false },
+      { id: "sp-balls", name: "Balls", sportId: "slowpitch-softball", userCreated: false },
+      { id: "sp-bats", name: "Bats", sportId: "slowpitch-softball", userCreated: false },
+      { id: "sp-gloves", name: "Gloves", sportId: "slowpitch-softball", userCreated: false },
+      { id: "sp-protective", name: "Protective Equipment", sportId: "slowpitch-softball", userCreated: false },
+      { id: "sp-training", name: "Training Equipment", sportId: "slowpitch-softball", userCreated: false },
+      { id: "sp-other", name: "Other", sportId: "slowpitch-softball", userCreated: false },
+      { id: "golf-shoes-apparel", name: "Shoes / Apparel", sportId: "golf", userCreated: false },
+      { id: "run-apparel", name: "Apparel", sportId: "running", userCreated: false },
+      { id: "run-shorts", name: "Shorts", sportId: "running", userCreated: false },
+      { id: "run-socks", name: "Socks", sportId: "running", userCreated: false },
+    ],
+  };
 }
 
 test("sport names never turn specific equipment into baseballs, basketballs, or footballs", () => {
@@ -252,6 +285,123 @@ test("Baseball-specific structured bat and fielding-glove evidence remains eligi
   }
 });
 
+test("softball, mixed-use, training-form, and accessory products do not become Baseball categories", () => {
+  const report = buildTaxonomyAuditReport(phase12Fixture([
+    { id: "jen-schro-gear", sourceId: "ebay", title: "Easton Jen Schro The Very Best Catcher's Box Set | Softball Catcher's Gear", sportId: "fastpitch-softball", equipmentTypeId: "fp-other" },
+    { id: "wilson-fastpitch-kit", sourceId: "ebay", title: "Wilson Fastpitch Softball C200 Youth Catcher's Gear Kit", sportId: "fastpitch-softball", equipmentTypeId: "fp-bats" },
+    { id: "cif-fastpitch-softballs", sourceId: "ebay", title: "CIF-SS Fastpitch Softballs 12 inch", sportId: "fastpitch-softball", equipmentTypeId: "fp-bats", raw: { wcCategories: "Baseball > Balls" } },
+    { id: "dream-seam-softballs", sourceId: "ebay", title: "USA Dream Seam Softballs 12 inch", sportId: "fastpitch-softball", equipmentTypeId: "fp-bats", raw: { wcCategories: "Baseball > Balls" } },
+    { id: "mixed-ball-bucket", sourceId: "ebay", title: "Easton Ball Bucket With Cushioned Seat | Baseball/Softball Ball Bucket", sportId: "fastpitch-softball", equipmentTypeId: "fp-balls", raw: { productType: "Baseball Balls" } },
+    { id: "weighted-softballs", sourceId: "ebay", title: "Used Markwort 4 PACK WEIGHTED SOFTBALLS BB/SB Training Aid", sportId: "baseball", equipmentTypeId: "bb-training", raw: { piasCategory: "Baseball Balls" } },
+    { id: "mixed-training-aid", sourceId: "ebay", title: "Used Rawlings PROTAC TRAINING BALL BB/SB Training Aid", sportId: "baseball", equipmentTypeId: "bb-training", raw: { piasCategory: "Baseball Balls" } },
+    { id: "liberty-fastpitch-mitt", sourceId: "ebay", title: "Rawlings Liberty Advanced 34 Fastpitch Softball Catcher's Mitt", sportId: "baseball", equipmentTypeId: "bb-other" },
+    { id: "mixed-glove-lace", sourceId: "ebay", title: "Softball/Baseball Glove Lace, Mitt Lace Repair Kit Includes 2 Leather Laces", sportId: "baseball", equipmentTypeId: "bb-other", raw: { productType: "Baseball Gloves" } },
+    { id: "baseball-weighted-ball", sourceId: "ebay", title: "Markwort Weighted Baseball Training Ball", sportId: "baseball", equipmentTypeId: "bb-other" },
+    { id: "baseball-machine-balls", sourceId: "ebay", title: "Tater Foam Baseball Pitching Machine Balls", sportId: "baseball", equipmentTypeId: "bb-other" },
+    { id: "baseball-ball-container", sourceId: "ebay", title: "Rawlings Baseball Ball Bucket With Lid", sportId: "baseball", equipmentTypeId: "bb-other" },
+    { id: "baseballs-with-bucket", sourceId: "ebay", title: "Rawlings 24 ROLB1X Baseballs With Bucket", sportId: "baseball", equipmentTypeId: "bb-other" },
+  ]));
+
+  const forbiddenBaseballDestinations = new Set(["bb-balls", "bb-gloves", "bb-protective"]);
+  for (const id of [
+    "jen-schro-gear", "wilson-fastpitch-kit", "cif-fastpitch-softballs",
+    "dream-seam-softballs", "mixed-ball-bucket", "weighted-softballs",
+    "mixed-training-aid", "liberty-fastpitch-mitt", "mixed-glove-lace",
+    "baseball-ball-container", "baseballs-with-bucket",
+  ]) {
+    assert.ok(!forbiddenBaseballDestinations.has(
+      correctionFor(report, id)?.proposedCanonicalEquipmentTypeId ?? ""), id);
+  }
+
+  assert.equal(correctionFor(report, "jen-schro-gear")?.proposedCanonicalEquipmentTypeId, "fp-protective");
+  assert.equal(correctionFor(report, "wilson-fastpitch-kit")?.proposedCanonicalEquipmentTypeId, "fp-protective");
+  assert.equal(correctionFor(report, "cif-fastpitch-softballs")?.proposedCanonicalEquipmentTypeId, "fp-balls");
+  assert.equal(correctionFor(report, "liberty-fastpitch-mitt")?.proposedCanonicalEquipmentTypeId, "fp-gloves");
+  for (const id of ["mixed-ball-bucket", "weighted-softballs", "mixed-training-aid", "mixed-glove-lace"]) {
+    const correction = correctionFor(report, id);
+    assert.equal(correction?.status, "pending", id);
+    assert.equal(correction?.outcome, "ambiguous-evidence", id);
+    assert.equal(correction?.proposedCanonicalEquipmentTypeId, null, id);
+  }
+  assert.equal(correctionFor(report, "baseball-weighted-ball")?.proposedCanonicalEquipmentTypeId, "bb-training");
+  assert.equal(correctionFor(report, "baseball-machine-balls")?.proposedCanonicalEquipmentTypeId, "bb-training");
+  assert.equal(correctionFor(report, "baseball-ball-container")?.status, "pending");
+  assert.equal(correctionFor(report, "baseballs-with-bucket")?.status, "pending");
+});
+
+test("canonical stored sport equipment families are compatible no-action records", () => {
+  const deals: TaxonomyAuditDataset["deals"] = [
+    { id: "golf-shoes", sourceId: "ebay", title: "FootJoy Pro SL Golf Shoes", sportId: "golf", equipmentTypeId: "golf-shoes-apparel" },
+    { id: "golf-apparel", sourceId: "ebay", title: "FootJoy Men's Golf Polo Shirt", sportId: "golf", equipmentTypeId: "golf-shoes-apparel" },
+    { id: "running-socks", sourceId: "ebay", title: "Balega Hidden Comfort Running Socks", sportId: "running", equipmentTypeId: "run-socks" },
+    { id: "running-shorts", sourceId: "ebay", title: "Brooks Running Shorts", sportId: "running", equipmentTypeId: "run-shorts" },
+    { id: "running-apparel", sourceId: "ebay", title: "Saucony Running Shirt", sportId: "running", equipmentTypeId: "run-apparel" },
+    { id: "basketball-shoes-canonical", sourceId: "ebay", title: "Nike Sabrina Basketball Shoes", sportId: "basketball", equipmentTypeId: "bk-shoes-apparel" },
+    { id: "basketball-apparel-canonical", sourceId: "ebay", title: "Nike Basketball Shorts", sportId: "basketball", equipmentTypeId: "bk-shoes-apparel" },
+    { id: "baseball-bag-canonical", sourceId: "ebay", title: "Easton Walk-Off Baseball Bat Bag", sportId: "baseball", equipmentTypeId: "bb-bags" },
+    { id: "baseball-equipment-bag-canonical", sourceId: "ebay", title: "Champro Baseball Equipment Bag", sportId: "baseball", equipmentTypeId: "bb-bags" },
+    { id: "baseball-protective-canonical", sourceId: "ebay", title: "Wilson Baseball C1K Catcher's Gear Kit", sportId: "baseball", equipmentTypeId: "bb-protective" },
+    { id: "baseball-training-canonical", sourceId: "ebay", title: "Markwort Weighted Baseball Training Ball", sportId: "baseball", equipmentTypeId: "bb-training" },
+    { id: "baseball-ball-canonical", sourceId: "ebay", title: "Rawlings Official League Baseballs One Dozen", sportId: "baseball", equipmentTypeId: "bb-balls" },
+    { id: "baseball-bat-canonical", sourceId: "ebay", title: "Marucci CATX USSSA Baseball Bat", sportId: "baseball", equipmentTypeId: "bb-bats" },
+    { id: "baseball-glove-canonical", sourceId: "ebay", title: "Wilson A2000 1786 Baseball Glove", sportId: "baseball", equipmentTypeId: "bb-gloves" },
+    { id: "baseball-cleats-canonical", sourceId: "ebay", title: "Nike Alpha Huarache Baseball Cleats", sportId: "baseball", equipmentTypeId: "bb-cleats" },
+    { id: "fanatics-apparel-canonical", sourceId: "fanatics", title: "Los Angeles Dodgers Baseball T-Shirt", sportId: "baseball", equipmentTypeId: "bb-shoes-apparel" },
+  ];
+  const report = buildTaxonomyAuditReport(phase12Fixture(deals));
+
+  assert.equal(report.correctionGroups.length, 0, JSON.stringify(report.correctionGroups, null, 2));
+  assert.equal(report.summary.compatibleNoActionRecords, deals.length);
+  assert.equal(report.summary.pendingRecords, 0);
+  assert.equal(report.summary.proposedRecords, 0);
+});
+
+test("genuine stored conflicts remain review outcomes", () => {
+  const report = buildTaxonomyAuditReport(phase12Fixture([
+    { id: "fanatics-apparel-in-bats", sourceId: "fanatics", title: "USA Baseball Stadium Jersey", sportId: "baseball", equipmentTypeId: "bb-bats" },
+    { id: "fanatics-apparel-in-balls", sourceId: "fanatics", title: "Detroit Tigers Baseball T-Shirt", sportId: "baseball", equipmentTypeId: "bb-balls" },
+    { id: "golf-glove-in-baseball", sourceId: "ebay", title: "FootJoy StaSof Golf Glove", sportId: "baseball", equipmentTypeId: "bb-gloves" },
+    { id: "work-glove-in-baseball", sourceId: "ebay", title: "Mechanix Heavy Duty Work Gloves", sportId: "baseball", equipmentTypeId: "bb-gloves" },
+    { id: "batting-glove-in-baseball", sourceId: "ebay", title: "Franklin CFX Pro Baseball Batting Gloves", sportId: "baseball", equipmentTypeId: "bb-gloves" },
+    { id: "softball-glove-in-baseball", sourceId: "ebay", title: "Rawlings Liberty Advanced Fastpitch Softball Glove", sportId: "baseball", equipmentTypeId: "bb-gloves" },
+  ]));
+
+  for (const id of [
+    "fanatics-apparel-in-bats", "fanatics-apparel-in-balls", "golf-glove-in-baseball",
+    "work-glove-in-baseball", "batting-glove-in-baseball", "softball-glove-in-baseball",
+  ]) {
+    const correction = correctionFor(report, id);
+    assert.equal(correction?.status, "pending", id);
+    assert.equal(correction?.outcome, "genuine-conflict-review", id);
+  }
+  assert.equal(report.summary.conflictReviewRecords, 6);
+  assert.equal(report.summary.compatibleNoActionRecords, 0);
+});
+
+test("report separates proposed, conflict, unresolved, ambiguous, and no-action outcomes", () => {
+  const report = buildTaxonomyAuditReport(phase12Fixture([
+    { id: "outcome-proposed", sourceId: "ebay", title: "Marucci CATX BBCOR Baseball Bat", sportId: "baseball", equipmentTypeId: "bb-other" },
+    { id: "outcome-conflict", sourceId: "ebay", title: "FootJoy Golf Glove", sportId: "baseball", equipmentTypeId: "bb-gloves" },
+    { id: "outcome-unresolved", sourceId: "ebay", title: "Unidentified Sporting Goods Item", sportId: "baseball", equipmentTypeId: "bb-other" },
+    { id: "outcome-ambiguous", sourceId: "ebay", title: "Baseball/Softball Ball Bucket", sportId: "baseball", equipmentTypeId: "bb-other" },
+    { id: "outcome-no-action", sourceId: "ebay", title: "Rawlings Official Baseballs One Dozen", sportId: "baseball", equipmentTypeId: "bb-balls" },
+  ]));
+
+  assert.equal(correctionFor(report, "outcome-proposed")?.outcome, "proposed-correction");
+  assert.equal(correctionFor(report, "outcome-conflict")?.outcome, "genuine-conflict-review");
+  assert.equal(correctionFor(report, "outcome-unresolved")?.outcome, "unresolved-other");
+  assert.equal(correctionFor(report, "outcome-ambiguous")?.outcome, "ambiguous-evidence");
+  assert.equal(correctionFor(report, "outcome-no-action"), undefined);
+  assert.deepEqual({
+    proposed: report.summary.proposedCorrectionRecords,
+    conflict: report.summary.conflictReviewRecords,
+    unresolved: report.summary.unresolvedOtherRecords,
+    ambiguous: report.summary.ambiguousEvidenceRecords,
+    noAction: report.summary.compatibleNoActionRecords,
+  }, { proposed: 1, conflict: 1, unresolved: 1, ambiguous: 1, noAction: 1 });
+  assert.equal(report.summary.pendingRecords, 3);
+});
+
 test("Fanatics apparel, collectibles, and memorabilia remain pending", () => {
   const report = buildTaxonomyAuditReport(hardeningFixture([
     { id: "fanatics-autograph", sourceId: "fanatics", title: "Riley Greene Detroit Tigers Autographed Baseball", sportId: "baseball", equipmentTypeId: "bb-other" },
@@ -329,8 +479,10 @@ test("emits machine-readable CSV and a concise Markdown summary", () => {
   const markdown = taxonomyAuditMarkdown(report);
   assert.match(csv, /^sportId,equipmentFamily,sourceId,/);
   assert.match(csv, /bb-bats/);
+  assert.match(csv, /humanApprovalRequired,status,outcome,examples/);
   assert.match(markdown, /Read-only report/);
   assert.match(markdown, /all 5 deals across 2 sports/);
+  assert.match(markdown, /Already compatible \/ no action/);
 });
 
 test("CLI has no apply or mutation mode and the database snapshot is transaction-read-only", () => {

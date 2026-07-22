@@ -12,7 +12,7 @@ import {
   canonicalResultEquipmentTypeId,
 } from "../shared/equipment-groups";
 
-export const TAXONOMY_AUDIT_RULE_VERSION = "phase1.1-read-only-v2";
+export const TAXONOMY_AUDIT_RULE_VERSION = "phase1.2-read-only-v3";
 
 export interface AuditSportRow {
   id: string;
@@ -64,6 +64,12 @@ export interface TaxonomyAuditDataset {
 }
 
 export type AuditConfidence = "high" | "medium" | "low";
+export type AuditOutcome =
+  | "proposed-correction"
+  | "genuine-conflict-review"
+  | "unresolved-other"
+  | "ambiguous-evidence"
+  | "already-compatible-no-action";
 
 export interface TaxonomyFinding {
   kind:
@@ -104,6 +110,7 @@ export interface CorrectionGroup {
   confidence: AuditConfidence;
   humanApprovalRequired: boolean;
   status: "proposed" | "pending";
+  outcome: Exclude<AuditOutcome, "already-compatible-no-action">;
   examples: Array<{ id: string; title: string }>;
 }
 
@@ -182,6 +189,11 @@ export interface TaxonomyAuditReport {
     correctionGroups: number;
     proposedRecords: number;
     pendingRecords: number;
+    proposedCorrectionRecords: number;
+    conflictReviewRecords: number;
+    unresolvedOtherRecords: number;
+    ambiguousEvidenceRecords: number;
+    compatibleNoActionRecords: number;
     otherRecords: number;
     unclassifiedRecords: number;
   };
@@ -231,12 +243,26 @@ interface EvidenceRule {
   priority: number;
 }
 
+const MIXED_BASEBALL_SOFTBALL_TITLE_PATTERN = /\bbaseball\s*(?:\/|&|\+|and)\s*softball\b|\bsoftball\s*(?:\/|&|\+|and)\s*baseball\b|\bbb\s*\/\s*sb\b/i;
+const SOFTBALL_TITLE_PATTERN = /\b(?:fast\s*pitch|slow\s*pitch|softballs?)\b/i;
+const TRAINING_BALL_FORM_PATTERN = /\b(?:weighted|limited[ -]?flight|pitching[ -]?machine|dimpled|foam)\b.{0,24}\b(?:baseballs?|softballs?|balls?)\b|\b(?:baseballs?|softballs?|balls?)\b.{0,24}\b(?:weighted|limited[ -]?flight|pitching[ -]?machine|training\s+aid)\b/i;
+const BALL_CONTAINER_PATTERN = /\b(?:ball|baseball|softball)\s+(?:bucket|container|caddy|carrier|tote)\b|\b(?:bucket|container|caddy|carrier|tote)\s+(?:for|with|of)?\s*(?:baseballs?|softballs?|balls?)\b|\b(?:baseballs?|softballs?|balls?)\b.{0,20}\b(?:with|in|and)\s+(?:a\s+)?bucket\b/i;
+const GLOVE_ACCESSORY_PATTERN = /\b(?:glove|mitt)\s+(?:laces?|repair\s+kits?|care|accessor(?:y|ies)|conditioner|mallets?|wraps?)\b|\b(?:laces?|repair\s+kits?|accessor(?:y|ies))\b.{0,20}\b(?:glove|mitt)\b/i;
+const BASEBALL_CATEGORY_NEGATIVE_PATTERN = /\b(?:fast\s*pitch|slow\s*pitch|softballs?)\b/i;
+const BASEBALL_BALL_NEGATIVE_PATTERN = /\b(?:fast\s*pitch|slow\s*pitch|softballs?)\b|\b(?:weighted|limited[ -]?flight|pitching[ -]?machine|dimpled|training\s+aid)\b|\b(?:ball|baseball|softball)\s+(?:bucket|container|caddy|carrier|tote)\b/i;
+
 // Specific equipment rules precede ball rules deliberately. A bare sport name
 // is never a ball signal. These rules only create read-only audit proposals.
 const CROSS_SPORT_EVIDENCE_RULES: readonly EvidenceRule[] = [
   { sportId: "baseball", equipmentTypeId: "bb-cleats", family: "cleats", priority: 100, titlePattern: /\bbaseball\s+(?:cleats?|spikes?)\b/i, structuredPattern: /\b(?:baseball.{0,30}(?:cleats?|spikes?|footwear)|(?:cleats?|spikes?|footwear).{0,30}baseball)\b/i },
-  { sportId: "baseball", equipmentTypeId: "bb-protective", family: "protective-equipment", priority: 100, titlePattern: /\bbaseball\s+(?:helmet|facemask|catcher(?:'s)?\s+gear|chest\s+protector|leg\s+guards?)\b|\bcatcher(?:'s)?\s+(?:helmet|mask|gear)\b/i, structuredPattern: /\bbaseball.{0,30}(?:protective|helmet|facemask|catcher|chest protector|leg guards?)\b/i },
-  { sportId: "baseball", equipmentTypeId: "bb-training", family: "training-equipment", priority: 90, titlePattern: /\b(?:baseball\s+pitching\s+machine|baseball\s+training\s+(?:aid|net)|batting\s+tee)\b/i, structuredPattern: /\bbaseball.{0,30}(?:training|pitching machine|batting tee)\b/i },
+  { sportId: "fastpitch-softball", equipmentTypeId: "fp-protective", family: "protective-equipment", priority: 130, titlePattern: /\bfast\s*pitch\b.{0,40}\b(?:catcher(?:'s)?\s+(?:gear|kit|set|helmet)|protective\s+equipment)\b|\bjen\s+schro\b.{0,60}\bsoftball\s+catcher(?:'s)?\s+gear\b/i, structuredPattern: /\bfast\s*pitch.{0,30}(?:protective|catcher|helmet|gear)\b/i, negative: MIXED_BASEBALL_SOFTBALL_TITLE_PATTERN },
+  { sportId: "fastpitch-softball", equipmentTypeId: "fp-gloves", family: "fielding-glove", priority: 130, titlePattern: /\bfast\s*pitch\b.{0,50}\b(?:fielding\s+)?(?:gloves?|mitts?)\b|\b(?:fielding\s+)?(?:gloves?|mitts?)\b.{0,50}\bfast\s*pitch\b/i, structuredPattern: /\bfast\s*pitch.{0,30}(?:fielding\s+)?(?:gloves?|mitts?)\b/i, negative: /\b(?:batting|laces?|repair\s+kits?|accessor(?:y|ies))\b|\bbaseball\s*(?:\/|&|\+|and)\s*softball\b/i },
+  { sportId: "fastpitch-softball", equipmentTypeId: "fp-balls", family: "ball", priority: 120, titlePattern: /\bfast\s*pitch\b.{0,30}\bsoftballs?\b|\bsoftballs?\b.{0,30}\bfast\s*pitch\b/i, structuredPattern: /\bfast\s*pitch.{0,30}(?:softballs?|balls?)\b/i, negative: /\b(?:weighted|limited[ -]?flight|pitching[ -]?machine|training\s+aid|ball\s+bucket)\b|\bbaseball\s*(?:\/|&|\+|and)\s*softball\b/i },
+  { sportId: "slowpitch-softball", equipmentTypeId: "sp-protective", family: "protective-equipment", priority: 130, titlePattern: /\bslow\s*pitch\b.{0,40}\b(?:catcher(?:'s)?\s+(?:gear|kit|set|helmet)|protective\s+equipment)\b/i, structuredPattern: /\bslow\s*pitch.{0,30}(?:protective|catcher|helmet|gear)\b/i, negative: MIXED_BASEBALL_SOFTBALL_TITLE_PATTERN },
+  { sportId: "slowpitch-softball", equipmentTypeId: "sp-gloves", family: "fielding-glove", priority: 130, titlePattern: /\bslow\s*pitch\b.{0,50}\b(?:fielding\s+)?(?:gloves?|mitts?)\b|\b(?:fielding\s+)?(?:gloves?|mitts?)\b.{0,50}\bslow\s*pitch\b/i, structuredPattern: /\bslow\s*pitch.{0,30}(?:fielding\s+)?(?:gloves?|mitts?)\b/i, negative: /\b(?:batting|laces?|repair\s+kits?|accessor(?:y|ies))\b|\bbaseball\s*(?:\/|&|\+|and)\s*softball\b/i },
+  { sportId: "slowpitch-softball", equipmentTypeId: "sp-balls", family: "ball", priority: 120, titlePattern: /\bslow\s*pitch\b.{0,30}\bsoftballs?\b|\bsoftballs?\b.{0,30}\bslow\s*pitch\b/i, structuredPattern: /\bslow\s*pitch.{0,30}(?:softballs?|balls?)\b/i, negative: /\b(?:weighted|limited[ -]?flight|pitching[ -]?machine|training\s+aid|ball\s+bucket)\b|\bbaseball\s*(?:\/|&|\+|and)\s*softball\b/i },
+  { sportId: "baseball", equipmentTypeId: "bb-protective", family: "protective-equipment", priority: 100, titlePattern: /\bbaseball\b.{0,40}\b(?:helmet|facemask|catcher(?:'s)?\s+(?:gear|kit|set)|chest\s+protector|leg\s+guards?)\b|\b(?:helmet|facemask|catcher(?:'s)?\s+(?:gear|kit|set)|chest\s+protector|leg\s+guards?)\b.{0,40}\bbaseball\b/i, structuredPattern: /\bbaseball.{0,30}(?:protective|helmet|facemask|catcher|chest protector|leg guards?)\b/i, negative: BASEBALL_CATEGORY_NEGATIVE_PATTERN },
+  { sportId: "baseball", equipmentTypeId: "bb-training", family: "training-equipment", priority: 110, titlePattern: /\bbaseball\b.{0,40}\b(?:pitching\s+machine|training\s+(?:aid|net|balls?)|weighted\s+balls?|limited[ -]?flight\s+balls?|dimpled\s+balls?)\b|\b(?:weighted|limited[ -]?flight|pitching[ -]?machine|dimpled)\b.{0,24}\bbaseballs?\b|\bbatting\s+tee\b/i, structuredPattern: /\bbaseball.{0,30}(?:training|pitching machine|batting tee|weighted ball|limited flight)\b/i, negative: BASEBALL_CATEGORY_NEGATIVE_PATTERN },
   { sportId: "fastpitch-softball", equipmentTypeId: "fp-bats", family: "bat", priority: 100, titlePattern: /\bfast\s*pitch\b.*\bbats?\b|\bbats?\b.*\bfast\s*pitch\b/i, structuredPattern: /\bfast\s*pitch.{0,30}\bbats?\b|\bbats?.{0,30}\bfast\s*pitch\b/i },
   { sportId: "slowpitch-softball", equipmentTypeId: "sp-bats", family: "bat", priority: 100, titlePattern: /\bslow\s*pitch\b.*\bbats?\b|\bbats?\b.*\bslow\s*pitch\b/i, structuredPattern: /\bslow\s*pitch.{0,30}\bbats?\b|\bbats?.{0,30}\bslow\s*pitch\b/i },
   { sportId: "golf", equipmentTypeId: "golf-drivers", family: "driver", priority: 90, titlePattern: /\bgolf\s+driver\b|\bdriver\s+(?:9|10\.5|12)\s*(?:°|degree)/i, structuredPattern: /\bgolf.{0,20}drivers?\b|\bdrivers?.{0,20}golf\b/i, negative: /headcover|cover/i },
@@ -255,7 +281,7 @@ const CROSS_SPORT_EVIDENCE_RULES: readonly EvidenceRule[] = [
   { sportId: "cycling", equipmentTypeId: "cyc-bikes", family: "bike", priority: 90, titlePattern: /\b(?:road|mountain|gravel|bmx)\s+(?:bike|bicycle)\b/i, structuredPattern: /\bcycling.{0,20}(?:bikes?|bicycles?)\b/i },
   { sportId: "swimming", equipmentTypeId: "swim-goggles", family: "goggles", priority: 90, titlePattern: /\bswim(?:ming)?\s+goggles?\b/i, structuredPattern: /\bswim(?:ming)?.{0,20}goggles?\b/i },
   { sportId: "running", equipmentTypeId: "run-shoes", family: "shoes", priority: 70, titlePattern: /\brunning\s+shoes?\b/i, structuredPattern: /\brunning.{0,20}(?:shoes?|footwear)\b/i, negative: /basketball|baseball|football|soccer|tennis|volleyball|wrestling/i },
-  { sportId: "baseball", equipmentTypeId: "bb-balls", family: "ball", priority: 20, titlePattern: /\bbaseballs\b|\bbaseball\s+balls?\b|\bbaseball\b.{0,24}\b(?:dozen|bucket|pack\s+of\s+\d+)\b|\b(?:dozen|bucket|pack\s+of\s+\d+)\b.{0,24}\bbaseball\b/i, structuredPattern: /\bbaseball.{0,30}balls?\b|\bballs?.{0,30}baseball\b/i },
+  { sportId: "baseball", equipmentTypeId: "bb-balls", family: "ball", priority: 20, titlePattern: /\bbaseballs\b|\bbaseball\s+balls?\b|\bbaseball\b.{0,24}\b(?:dozen|pack\s+of\s+\d+)\b|\b(?:dozen|pack\s+of\s+\d+)\b.{0,24}\bbaseball\b/i, structuredPattern: /\bbaseball.{0,30}balls?\b|\bballs?.{0,30}baseball\b/i, negative: BASEBALL_BALL_NEGATIVE_PATTERN },
   { sportId: "basketball", equipmentTypeId: "bk-balls", family: "ball", priority: 20, titlePattern: /\bbasketballs\b|\bbasketball\s+balls?\b|\b(?:official|game|indoor|outdoor|composite|leather)\s+(?:game\s+)?basketball\b/i, structuredPattern: /\bbasketball.{0,30}balls?\b|\bballs?.{0,30}basketball\b/i },
   { sportId: "football", equipmentTypeId: "fb-balls", family: "ball", priority: 20, titlePattern: /\bfootballs\b|\bfootball\s+balls?\b|\b(?:official|game|composite|leather)\s+(?:game\s+)?football\b|\bfootball\b.{0,16}\bsize\s*(?:9|youth|junior)\b/i, structuredPattern: /\bfootball.{0,30}balls?\b|\bballs?.{0,30}football\b/i, negative: /soccer|fifa|uefa|world\s+cup|premier\s+league|bundesliga|boots?|facemasks?|helmets?|jerseys?|cleats?|gloves?/i },
   { sportId: "soccer", equipmentTypeId: "soc-balls", family: "ball", priority: 20, titlePattern: /\bsoccer\s+balls?\b/i, structuredPattern: /\bsoccer.{0,20}balls?\b|\bballs?.{0,20}soccer\b/i },
@@ -358,12 +384,16 @@ const BASEBALL_BAT_AUDIT_TITLE_PATTERN = /\b(?:baseball|tee[ -]?ball|t[ -]?ball)
 // name Baseball (or a Baseball-only certification) as well as the equipment.
 const BASEBALL_BAT_AUDIT_STRUCTURED_PATTERN = /\b(?:baseball|bbcor|usa\s+baseball).{0,30}\bbats?\b|\bbats?.{0,30}\b(?:baseball|bbcor|usa\s+baseball)\b/i;
 const BASEBALL_GLOVE_AUDIT_STRUCTURED_PATTERN = /\bbaseball.{0,30}(?:fielding\s+)?(?:gloves?|mitts?)\b|\b(?:fielding\s+)?(?:gloves?|mitts?).{0,30}\bbaseball\b/i;
-const BASEBALL_BAT_AUDIT_NEGATIVE_PATTERN = /\b(?:cricket|fast\s*pitch|slow\s*pitch|softball)\b/i;
+const BASEBALL_BAT_AUDIT_NEGATIVE_PATTERN = /\b(?:cricket|fast\s*pitch|slow\s*pitch|softballs?)\b/i;
+const BASEBALL_GLOVE_AUDIT_NEGATIVE_PATTERN = /\b(?:fast\s*pitch|slow\s*pitch|softballs?|batting|golf|boxing|work|winter)\b|\b(?:glove|mitt)\s+(?:laces?|repair\s+kits?|care|accessor(?:y|ies))\b/i;
 
 const PROTECTED_EQUIPMENT_PATTERNS: ReadonlyArray<{ family: string; pattern: RegExp }> = [
   { family: "apparel", pattern: /\b(?:jerseys?|t[ -]?shirts?|shirts?|hoodies?|sweatshirts?|shorts?|pants?|socks?|hats?|caps?|beanies?|apparel|uniforms?)\b/i },
   { family: "footwear", pattern: /\b(?:shoes?|cleats?|spikes?|boots?|sneakers?|footwear)\b/i },
   { family: "protective-equipment", pattern: /\b(?:helmets?|facemasks?|face\s*masks?|shoulder\s+pads?|chest\s+protectors?|leg\s+guards?|shin\s+guards?|mouthguards?)\b/i },
+  { family: "glove-accessory", pattern: GLOVE_ACCESSORY_PATTERN },
+  { family: "ball-container", pattern: BALL_CONTAINER_PATTERN },
+  { family: "training-aid", pattern: TRAINING_BALL_FORM_PATTERN },
   { family: "bag", pattern: /\b(?:bat\s+bags?|bags?|backpacks?|duffels?|totes?|wheeled\s+bags?)\b/i },
   { family: "glove", pattern: /\b(?:gloves?|mitts?)\b/i },
   { family: "bat", pattern: /\bbats?\b/i },
@@ -375,21 +405,30 @@ const PROTECTED_EQUIPMENT_PATTERNS: ReadonlyArray<{ family: string; pattern: Reg
 const COMPATIBLE_PROTECTED_FAMILIES: Record<string, ReadonlySet<string>> = {
   apparel: new Set(["apparel"]),
   bag: new Set(["bag"]),
+  "bag vests": new Set(["bag", "apparel"]),
   bat: new Set(["bat"]),
   ball: new Set(["ball"]),
   "batting glove": new Set(["glove"]),
   cleats: new Set(["footwear"]),
   glove: new Set(["glove"]),
+  shorts: new Set(["apparel"]),
+  socks: new Set(["apparel"]),
   shoes: new Set(["footwear"]),
   "shoe and apparel": new Set(["footwear", "apparel"]),
+  "shoe apparel": new Set(["footwear", "apparel"]),
+  "swimming apparel": new Set(["apparel"]),
   footwear: new Set(["footwear"]),
   "fielding-glove": new Set(["glove"]),
+  "bat bag equipment bag": new Set(["bag", "bat"]),
+  "equipment care and accessories": new Set(["glove-accessory", "glove"]),
   "protective equipment": new Set(["protective-equipment"]),
   "protective-equipment": new Set(["protective-equipment"]),
   "hoop and net": new Set(["nets-hoops"]),
   "hoops-nets": new Set(["nets-hoops"]),
   nets: new Set(["nets-hoops"]),
-  "training-equipment": new Set(["nets-hoops"]),
+  "training equipment": new Set(["training-aid", "ball-container", "ball", "nets-hoops"]),
+  "training-equipment": new Set(["training-aid", "ball-container", "ball", "nets-hoops"]),
+  "field equipment": new Set(["training-aid", "ball-container", "nets-hoops"]),
   goggles: new Set(["protective-equipment"]),
 };
 
@@ -432,6 +471,31 @@ function candidateHasCompatibleProtection(candidate: CandidateEvidence, protecti
   return Array.from(protections).every((family) => compatible.has(family));
 }
 
+function sportConflictsWithTitle(deal: AuditDealRow, sportId: string): boolean {
+  if (MIXED_BASEBALL_SOFTBALL_TITLE_PATTERN.test(deal.title)) return false;
+  if (sportId === "baseball") return SOFTBALL_TITLE_PATTERN.test(deal.title);
+  if (sportId === "fastpitch-softball") {
+    return /\bslow\s*pitch\b|\bbaseball\b/i.test(deal.title);
+  }
+  if (sportId === "slowpitch-softball") {
+    return /\bfast\s*pitch\b|\bbaseball\b/i.test(deal.title);
+  }
+  return false;
+}
+
+function equipmentFamilyConflictsWithTitle(
+  deal: AuditDealRow,
+  candidate: Pick<CandidateEvidence, "sportId" | "family">,
+): boolean {
+  if (candidate.family !== "fielding-glove") return false;
+  const nonFielding = /\b(?:batting|golf|boxing|work|winter)\b|\b(?:glove|mitt)\s+(?:laces?|repair\s+kits?|care|accessor(?:y|ies))\b/i;
+  if (nonFielding.test(deal.title)) return true;
+  if (candidate.sportId === "baseball") return SOFTBALL_TITLE_PATTERN.test(deal.title);
+  if (candidate.sportId === "fastpitch-softball") return /\bslow\s*pitch\b|\bbaseball\b/i.test(deal.title);
+  if (candidate.sportId === "slowpitch-softball") return /\bfast\s*pitch\b|\bbaseball\b/i.test(deal.title);
+  return false;
+}
+
 function collectDirectEvidence(deal: AuditDealRow, source?: AuditSourceRow): Map<string, CandidateEvidence> {
   const candidates = new Map<string, CandidateEvidence>();
   const titleAndBrand = `${deal.title} ${deal.brand ?? ""}`;
@@ -455,16 +519,21 @@ function collectDirectEvidence(deal: AuditDealRow, source?: AuditSourceRow): Map
       && BASEBALL_BAT_AUDIT_TITLE_PATTERN.test(titleAndBrand)) {
     addTitle(baseballBat, "specific Baseball bat title/model evidence");
   }
-  addStructured(baseballBat, BASEBALL_BAT_AUDIT_STRUCTURED_PATTERN);
+  if (!BASEBALL_BAT_AUDIT_NEGATIVE_PATTERN.test(deal.title)) {
+    addStructured(baseballBat, BASEBALL_BAT_AUDIT_STRUCTURED_PATTERN);
+  }
 
   const baseballGlove = {
     sportId: "baseball", equipmentTypeId: CANONICAL_BASEBALL_GLOVE_ID,
     family: "fielding-glove", priority: 120,
   };
-  if (hasBaseballGloveEvidence({ ...deal, raw: undefined })) {
+  if (!BASEBALL_GLOVE_AUDIT_NEGATIVE_PATTERN.test(deal.title)
+      && hasBaseballGloveEvidence({ ...deal, raw: undefined })) {
     addTitle(baseballGlove, "specific Baseball fielding-glove title/model evidence");
   }
-  addStructured(baseballGlove, BASEBALL_GLOVE_AUDIT_STRUCTURED_PATTERN);
+  if (!BASEBALL_GLOVE_AUDIT_NEGATIVE_PATTERN.test(deal.title)) {
+    addStructured(baseballGlove, BASEBALL_GLOVE_AUDIT_STRUCTURED_PATTERN);
+  }
 
   for (const rule of CROSS_SPORT_EVIDENCE_RULES) {
     const candidate = {
@@ -474,7 +543,9 @@ function collectDirectEvidence(deal: AuditDealRow, source?: AuditSourceRow): Map
     if (rule.titlePattern.test(deal.title) && !rule.negative?.test(deal.title)) {
       addTitle(candidate, `specific title evidence matched ${rule.sportId}/${rule.equipmentTypeId}`);
     }
-    if (rule.structuredPattern) addStructured(candidate, rule.structuredPattern);
+    if (rule.structuredPattern && !rule.negative?.test(deal.title)) {
+      addStructured(candidate, rule.structuredPattern);
+    }
   }
   return candidates;
 }
@@ -570,6 +641,12 @@ function assessDealEvidence(
   equipmentById: Map<string, AuditEquipmentRow>,
   identityConsensus: Map<string, IdentityConsensus>,
 ): EvidenceAssessment {
+  if (MIXED_BASEBALL_SOFTBALL_TITLE_PATTERN.test(deal.title)) {
+    return {
+      match: null,
+      blockedReasons: ["mixed Baseball/Softball product requires an approved shared-category policy"],
+    };
+  }
   const candidates = collectDirectEvidence(deal, source);
   for (const identity of normalizedIdentityKeys(deal)) {
     const consensus = identityConsensus.get(identity.key);
@@ -594,12 +671,31 @@ function assessDealEvidence(
   const protections = protectedFamilies(deal, source);
   const blockedReasons: string[] = [];
   const compatible = Array.from(candidates.values()).filter((candidate) => {
+    if (sportConflictsWithTitle(deal, candidate.sportId)) {
+      blockedReasons.push(`${candidateKey(candidate)} blocked by explicit conflicting sport evidence`);
+      return false;
+    }
+    if (equipmentFamilyConflictsWithTitle(deal, candidate)) {
+      blockedReasons.push(`${candidateKey(candidate)} blocked by explicit non-fielding glove evidence`);
+      return false;
+    }
     if (candidateHasCompatibleProtection(candidate, protections)) return true;
     blockedReasons.push(`${candidateKey(candidate)} blocked by explicit ${Array.from(protections).join(", ")} evidence`);
     return false;
   });
   if (compatible.length === 0) {
-    if (protections.size > 0 && blockedReasons.length === 0
+    const storedIsCompatible = !!ownedStored
+      && !sportConflictsWithTitle(deal, ownedStored.sportId)
+      && !equipmentFamilyConflictsWithTitle(deal, ownedStored)
+      && candidateHasCompatibleProtection({ ...ownedStored, priority: 0, signals: [] }, protections);
+    if (storedIsCompatible) {
+      return { match: null, blockedReasons: [] };
+    }
+    if (ownedStored?.sportId && sportConflictsWithTitle(deal, ownedStored.sportId)) {
+      blockedReasons.push(`stored taxonomy ${candidateKey(ownedStored)} conflicts with explicit sport evidence`);
+    } else if (ownedStored && equipmentFamilyConflictsWithTitle(deal, ownedStored)) {
+      blockedReasons.push(`stored taxonomy ${candidateKey(ownedStored)} conflicts with explicit non-fielding glove evidence`);
+    } else if (protections.size > 0 && blockedReasons.length === 0
         && (!ownedStored || !candidateHasCompatibleProtection(
           { ...ownedStored, priority: 0, signals: [] }, protections,
         ))) {
@@ -945,6 +1041,7 @@ interface DealCorrection {
   confidence: AuditConfidence;
   humanApprovalRequired: boolean;
   status: "proposed" | "pending";
+  outcome: Exclude<AuditOutcome, "already-compatible-no-action">;
 }
 
 function correctionForDeal(
@@ -963,6 +1060,7 @@ function correctionForDeal(
       evidence: ["stored taxonomy reference is orphaned"],
       reason: "A safe destination cannot be inferred until the orphaned reference is reviewed.",
       confidence: "low", humanApprovalRequired: true, status: "pending",
+      outcome: "genuine-conflict-review",
     };
   }
 
@@ -970,6 +1068,7 @@ function correctionForDeal(
   const assessment = assessDealEvidence(deal, source, equipmentById, identityConsensus);
   const evidence = assessment.match;
   if (evidence && (deal.sportId !== evidence.sportId || deal.equipmentTypeId !== evidence.equipmentTypeId)) {
+    const unresolvedCurrent = isOther(deal.equipmentTypeId, currentEquipment?.name);
     return {
       deal, family: evidence.family,
       proposedSportId: evidence.sportId, proposedEquipmentTypeId: evidence.equipmentTypeId,
@@ -977,21 +1076,30 @@ function correctionForDeal(
         ...evidence.signals.map((signal) => signal.evidence),
         ...(ownerConflict ? [`equipment owner is ${currentEquipment?.sportId}`] : []),
       ],
-      reason: isOther(deal.equipmentTypeId, currentEquipment?.name)
+      reason: unresolvedCurrent
         ? "Compatible product evidence identifies a canonical category while the stored classification is unresolved/Other."
         : "Compatible product evidence conflicts with the stored sport or equipment category.",
       confidence: evidence.confidence,
-      humanApprovalRequired: evidence.confidence !== "high",
-      status: "proposed",
+      humanApprovalRequired: !unresolvedCurrent || evidence.confidence !== "high",
+      status: unresolvedCurrent ? "proposed" : "pending",
+      outcome: unresolvedCurrent ? "proposed-correction" : "genuine-conflict-review",
     };
   }
 
   if (!evidence && assessment.blockedReasons.length > 0) {
+    const mixedOrAmbiguous = assessment.blockedReasons.some((reason) =>
+      /mixed Baseball\/Softball|ambiguous|conflicting structured or identifier/i.test(reason));
+    const unresolvedCurrent = isOther(deal.equipmentTypeId, currentEquipment?.name);
     return {
       deal, family: "unresolved", proposedSportId: null, proposedEquipmentTypeId: null,
       evidence: assessment.blockedReasons,
-      reason: "Explicit equipment or merchandise evidence conflicts with a safe automatic destination.",
+      reason: mixedOrAmbiguous
+        ? "Multiple or shared-category signals do not identify one approved destination."
+        : "Explicit equipment or merchandise evidence conflicts with a safe automatic destination.",
       confidence: "low", humanApprovalRequired: true, status: "pending",
+      outcome: mixedOrAmbiguous || unresolvedCurrent
+        ? "ambiguous-evidence"
+        : "genuine-conflict-review",
     };
   }
 
@@ -1003,6 +1111,7 @@ function correctionForDeal(
       evidence: [`stored ID ${deal.equipmentTypeId} is a reviewed read-path alias of ${known.id}`],
       reason: "Stored legacy ID fragments a canonical shopper equipment group.",
       confidence: "medium", humanApprovalRequired: true, status: "proposed",
+      outcome: "proposed-correction",
     };
   }
 
@@ -1013,7 +1122,8 @@ function correctionForDeal(
       proposedEquipmentTypeId: deal.equipmentTypeId ?? null,
       evidence: [`equipment ${deal.equipmentTypeId} belongs to ${currentEquipment?.sportId}`],
       reason: "Stored sport conflicts with the owning sport of the stored equipment row.",
-      confidence: "medium", humanApprovalRequired: true, status: "proposed",
+      confidence: "medium", humanApprovalRequired: true, status: "pending",
+      outcome: "genuine-conflict-review",
     };
   }
 
@@ -1028,30 +1138,48 @@ function correctionForDeal(
       ],
       reason: "Ambiguous record must remain pending; Phase 1 does not guess a destination.",
       confidence: "low", humanApprovalRequired: true, status: "pending",
+      outcome: "unresolved-other",
     };
   }
   return null;
 }
 
-function correctionGroups(dataset: TaxonomyAuditDataset): CorrectionGroup[] {
+interface CorrectionAnalysis {
+  groups: CorrectionGroup[];
+  outcomeCounts: Record<AuditOutcome, number>;
+}
+
+function correctionGroups(dataset: TaxonomyAuditDataset): CorrectionAnalysis {
   const equipmentById = new Map(dataset.equipmentTypes.map((row) => [row.id, row]));
   const sportsById = new Map(dataset.sports.map((row) => [row.id, row]));
   const sourcesById = new Map(dataset.sources.map((row) => [row.id, row]));
   const identityConsensus = buildIdentityConsensus(dataset, equipmentById, sourcesById);
   const grouped = new Map<string, CorrectionGroup>();
+  const outcomeCounts: Record<AuditOutcome, number> = {
+    "proposed-correction": 0,
+    "genuine-conflict-review": 0,
+    "unresolved-other": 0,
+    "ambiguous-evidence": 0,
+    "already-compatible-no-action": 0,
+  };
 
   for (const deal of dataset.deals) {
     const source = sourcesById.get(deal.sourceId);
     const correction = correctionForDeal(
       deal, equipmentById, sportsById, source, identityConsensus,
     );
-    if (!correction) continue;
+    if (!correction) {
+      outcomeCounts["already-compatible-no-action"] += 1;
+      continue;
+    }
+    outcomeCounts[correction.outcome] += 1;
     const seller = sellerFor(deal);
     const key = JSON.stringify([
       correction.proposedSportId, correction.family, deal.sourceId, seller,
       deal.sportId ?? null, deal.equipmentTypeId ?? null,
       correction.proposedEquipmentTypeId, correction.reason,
       correction.confidence, correction.humanApprovalRequired, correction.status,
+      correction.outcome,
     ]);
     let group = grouped.get(key);
     if (!group) {
@@ -1071,6 +1199,7 @@ function correctionGroups(dataset: TaxonomyAuditDataset): CorrectionGroup[] {
         confidence: correction.confidence,
         humanApprovalRequired: correction.humanApprovalRequired,
         status: correction.status,
+        outcome: correction.outcome,
         examples: [],
       };
       grouped.set(key, group);
@@ -1079,12 +1208,13 @@ function correctionGroups(dataset: TaxonomyAuditDataset): CorrectionGroup[] {
     addExample(group.examples, deal);
   }
 
-  return Array.from(grouped.values()).sort((a, b) =>
+  const groups = Array.from(grouped.values()).sort((a, b) =>
     (a.sportId ?? "").localeCompare(b.sportId ?? "")
     || (a.equipmentFamily ?? "").localeCompare(b.equipmentFamily ?? "")
     || a.sourceId.localeCompare(b.sourceId)
     || (a.seller ?? "").localeCompare(b.seller ?? "")
     || (a.currentEquipmentTypeId ?? "").localeCompare(b.currentEquipmentTypeId ?? ""));
+  return { groups, outcomeCounts };
 }
 
 function buildFieldInventories(dataset: TaxonomyAuditDataset): {
@@ -1226,7 +1356,9 @@ export function buildTaxonomyAuditReport(
     ...taxonomyStructureFindings(dataset),
     ...fieldInventories.identityFindings,
   ].sort((a, b) => a.kind.localeCompare(b.kind) || a.label.localeCompare(b.label));
-  const corrections = correctionGroups(dataset);
+  const correctionAnalysis = correctionGroups(dataset);
+  const corrections = correctionAnalysis.groups;
+  const outcomes = correctionAnalysis.outcomeCounts;
   const equipmentById = new Map(dataset.equipmentTypes.map((row) => [row.id, row]));
   const otherRecords = dataset.deals.filter((deal) =>
     isOther(deal.equipmentTypeId, deal.equipmentTypeId ? equipmentById.get(deal.equipmentTypeId)?.name : null)).length;
@@ -1247,10 +1379,14 @@ export function buildTaxonomyAuditReport(
       deals: dataset.deals.length,
       taxonomyFindings: taxonomyFindings.length,
       correctionGroups: corrections.length,
-      proposedRecords: corrections.filter((group) => group.status === "proposed")
-        .reduce((sum, group) => sum + group.recordCount, 0),
-      pendingRecords: corrections.filter((group) => group.status === "pending")
-        .reduce((sum, group) => sum + group.recordCount, 0),
+      proposedRecords: outcomes["proposed-correction"],
+      pendingRecords: outcomes["genuine-conflict-review"]
+        + outcomes["unresolved-other"] + outcomes["ambiguous-evidence"],
+      proposedCorrectionRecords: outcomes["proposed-correction"],
+      conflictReviewRecords: outcomes["genuine-conflict-review"],
+      unresolvedOtherRecords: outcomes["unresolved-other"],
+      ambiguousEvidenceRecords: outcomes["ambiguous-evidence"],
+      compatibleNoActionRecords: outcomes["already-compatible-no-action"],
       otherRecords,
       unclassifiedRecords,
     },
@@ -1275,7 +1411,7 @@ export function taxonomyAuditCorrectionsCsv(report: TaxonomyAuditReport): string
     "sportId", "equipmentFamily", "sourceId", "sourceName", "seller",
     "currentSportId", "currentEquipmentTypeId", "proposedSportId",
     "proposedCanonicalEquipmentTypeId", "recordCount", "evidence", "reason",
-    "confidence", "humanApprovalRequired", "status", "examples",
+    "confidence", "humanApprovalRequired", "status", "outcome", "examples",
   ];
   const lines = [columns.join(",")];
   for (const row of report.correctionGroups) {
@@ -1312,23 +1448,27 @@ export function taxonomyAuditMarkdown(report: TaxonomyAuditReport): string {
     `- Duplicate/synonymous taxonomy findings: ${duplicateCount}.`,
     `- Fragmented UI display groups: ${displayFragments.length}.`,
     `- Records in Other/unresolved: ${report.summary.otherRecords}.`,
-    `- Proposed high/medium-evidence records: ${report.summary.proposedRecords}.`,
-    `- Pending ambiguous/orphaned records: ${report.summary.pendingRecords}.`,
+    `- Proposed corrections: ${report.summary.proposedCorrectionRecords}.`,
+    `- Genuine conflicts requiring review: ${report.summary.conflictReviewRecords}.`,
+    `- Unresolved/Other records: ${report.summary.unresolvedOtherRecords}.`,
+    `- Ambiguous-evidence records: ${report.summary.ambiguousEvidenceRecords}.`,
+    `- Already compatible / no action: ${report.summary.compatibleNoActionRecords}.`,
+    `- Total pending review: ${report.summary.pendingRecords}.`,
     "",
     "## Largest correction cohorts",
     "",
-    "| Sport | Family | Source / seller | Current | Proposed | Count | Confidence | Approval |",
-    "|---|---|---|---|---|---:|---|---|",
+    "| Outcome | Sport | Family | Source / seller | Current | Proposed | Count | Confidence | Approval |",
+    "|---|---|---|---|---|---|---:|---|---|",
   ];
-  if (topCorrections.length === 0) lines.push("| — | — | — | — | — | 0 | — | — |");
+  if (topCorrections.length === 0) lines.push("| — | — | — | — | — | — | 0 | — | — |");
   for (const group of topCorrections) {
-    lines.push(`| ${group.sportId ?? "Unresolved"} | ${group.equipmentFamily ?? "Unresolved"} | ${group.sourceName}${group.seller ? ` / ${group.seller}` : ""} | ${group.currentSportId ?? "null"}/${group.currentEquipmentTypeId ?? "null"} | ${group.proposedSportId ?? "pending"}/${group.proposedCanonicalEquipmentTypeId ?? "pending"} | ${group.recordCount} | ${group.confidence} | ${group.humanApprovalRequired ? "Required" : "Not required by confidence policy"} |`);
+    lines.push(`| ${group.outcome} | ${group.sportId ?? "Unresolved"} | ${group.equipmentFamily ?? "Unresolved"} | ${group.sourceName}${group.seller ? ` / ${group.seller}` : ""} | ${group.currentSportId ?? "null"}/${group.currentEquipmentTypeId ?? "null"} | ${group.proposedSportId ?? "pending"}/${group.proposedCanonicalEquipmentTypeId ?? "pending"} | ${group.recordCount} | ${group.confidence} | ${group.humanApprovalRequired ? "Required" : "Not required by confidence policy"} |`);
   }
   lines.push(
     "",
-    "## Phase 1.1 evidence policy",
+    "## Phase 1.2 evidence policy",
     "",
-    "A sport name alone is never ball evidence. Specific equipment and negative evidence are evaluated before ball rules. High confidence requires at least two independent compatible signal types from title/model evidence, structured retailer fields, validated identifier consensus, or compatible stored taxonomy. Medium-confidence destinations always require human approval; ambiguous, conflicting, Fanatics merchandise, and protected-family records remain pending.",
+    "A sport name alone is never ball evidence. Explicit softball/fastpitch/slowpitch, mixed Baseball/Softball, training-ball, ball-container, and glove-accessory evidence is evaluated before Baseball destinations. Canonical stored sport/equipment families use an explicit compatibility layer so compatible products are counted as no action rather than pending. High confidence still requires two independent compatible signal types; proposed corrections, genuine conflicts, unresolved Other records, ambiguous evidence, and compatible no-action records are reported separately.",
     "",
     "## Assignment-path assessment",
     "",
