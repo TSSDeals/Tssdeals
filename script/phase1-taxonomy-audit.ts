@@ -12,7 +12,11 @@ import { resolve } from "node:path";
 import { pool } from "../server/db";
 import { parseTaxonomyAuditInvocation } from "../server/taxonomy-audit-cli";
 import { runDatabaseWideReadOnlyTaxonomyAudit } from "../server/taxonomy-audit-db";
-import { taxonomyAuditCorrectionsCsv, taxonomyAuditMarkdown } from "../server/taxonomy-audit";
+import {
+  taxonomyAuditCorrectionsCsv,
+  taxonomyAuditIdentifierFindingsCsv,
+  taxonomyAuditMarkdown,
+} from "../server/taxonomy-audit";
 
 const invocation = parseTaxonomyAuditInvocation(process.argv.slice(2));
 
@@ -37,6 +41,13 @@ try {
     } as const;
     for (const format of formats) {
       await writeFile(resolve(directory, filenames[format]), outputs[format], "utf8");
+    }
+    if (invocation.format === "bundle") {
+      await writeFile(
+        resolve(directory, "taxonomy-identifiers.csv"),
+        taxonomyAuditIdentifierFindingsCsv(report),
+        "utf8",
+      );
     }
     console.log(JSON.stringify({
       mode: "read-only",

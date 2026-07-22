@@ -12,7 +12,7 @@ import {
   canonicalResultEquipmentTypeId,
 } from "../shared/equipment-groups";
 
-export const TAXONOMY_AUDIT_RULE_VERSION = "phase1.3-read-only-v4";
+export const TAXONOMY_AUDIT_RULE_VERSION = "phase1.4-read-only-v5";
 
 export interface AuditSportRow {
   id: string;
@@ -78,8 +78,7 @@ export interface TaxonomyFinding {
     | "legacy-id"
     | "orphaned-id"
     | "noncanonical-id"
-    | "display-group-fragmentation"
-    | "identifier-conflict";
+    | "display-group-fragmentation";
   entity: "sport" | "equipment-type" | "sub-filter" | "display-group" | "deal";
   sportId: string | null;
   equipmentFamily: string | null;
@@ -92,6 +91,32 @@ export interface TaxonomyFinding {
   confidence: AuditConfidence;
   humanApprovalRequired: boolean;
   examples: Array<{ id: string; title: string }>;
+}
+
+export type IdentifierFindingKind =
+  | "likely-same-product-conflict"
+  | "unsafe-identifier-reuse"
+  | "invalid-identifier"
+  | "unresolved-collision";
+
+export interface IdentifierFinding {
+  kind: IdentifierFindingKind;
+  identifierType: "upc" | "sku" | "itemNumber";
+  identifierValue: string;
+  scope: string;
+  currentIds: string[];
+  recordCount: number;
+  evidence: string[];
+  reason: string;
+  confidence: AuditConfidence;
+  humanApprovalRequired: true;
+  examples: Array<{
+    id: string;
+    title: string;
+    sourceId: string;
+    sourceName: string;
+    seller: string | null;
+  }>;
 }
 
 export interface CorrectionGroup {
@@ -186,6 +211,8 @@ export interface TaxonomyAuditReport {
     sources: number;
     deals: number;
     taxonomyFindings: number;
+    identifierFindings: number;
+    identifierFindingCounts: Record<IdentifierFindingKind, number>;
     correctionGroups: number;
     proposedRecords: number;
     pendingRecords: number;
@@ -198,6 +225,7 @@ export interface TaxonomyAuditReport {
     unclassifiedRecords: number;
   };
   taxonomyFindings: TaxonomyFinding[];
+  identifierFindings: IdentifierFinding[];
   correctionGroups: CorrectionGroup[];
   fieldCoverage: FieldCoverage[];
   brandInventory: BrandInventoryRow[];
@@ -252,6 +280,11 @@ const BAT_ACCESSORY_PATTERN = /\b(?:baseball\s+|softball\s+)?bats?\b.{0,24}\b(?:
 const BIKE_ACCESSORY_PATTERN = /\b(?:mountain\s+|road\s+|gravel\s+|bmx\s+)?(?:bikes?|bicycles?)\b.{0,24}\b(?:pedals?|grips?|pegs?|pumps?|tires?|tyres?|tubes?|wheels?|racks?|helmets?|replacement\s+parts?|parts?)\b|\b(?:pedals?|grips?|pegs?|pumps?|tires?|tyres?|tubes?|wheels?|racks?|helmets?|replacement\s+parts?|parts?)\b.{0,24}\b(?:mountain\s+|road\s+|gravel\s+|bmx\s+)?(?:bikes?|bicycles?)\b/i;
 const GOAL_HOOP_ACCESSORY_PATTERN = /\b(?:soccer\s+|hockey\s+)?goal\s+(?:shooting\s+)?targets?\b|\b(?:shooting\s+)?targets?\b.{0,24}\b(?:soccer\s+|hockey\s+)?goals?\b|\bbasketball\s+hoop\s+(?:weights?|sandbags?)\b|\b(?:hoop|goal)\s+(?:replacement\s+)?weights?\b|\bsandbag\s+covers?\b/i;
 const BALL_NOVELTY_REFERENCE_PATTERN = /\b(?:stadium\s+)?horns?\b|\bnoisemakers?\b|\bsoccer\s+ball\s+party\b/i;
+const BALL_MEMORABILIA_TERM_PATTERN = /\b(?:decorative|themed?(?:\s+gift)?|gift|souvenir|commemorative|autographed|signed|signature)\b/i;
+const BALL_PRODUCT_FORM_PATTERN = /\b(?:baseballs?|baseball\s+balls?|soccer\s+balls?|balls?)\b/i;
+const EXPLICIT_GAME_PRACTICE_BALL_PATTERN = /\b(?:game|practice|match)\s+(?:baseballs?|soccer\s+balls?|balls?)\b|\b(?:baseballs?|soccer\s+balls?|balls?)\b.{0,16}\b(?:game|practice|match)\s+(?:use|play|ball)?\b/i;
+const NON_BALL_EQUIPMENT_FORM_PATTERN = /\b(?:bats?|gloves?|mitts?|cleats?|shoes?|helmets?|masks?|jerseys?|apparel|bags?)\b/i;
+const BATTING_TEE_REPLACEMENT_PATTERN = /\b(?:replacement|replace)\b.{0,50}\b(?:batting\s+tee|tee)\b.{0,40}\b(?:toppers?|tubes?|cups?|ball\s+rests?|rubber\s+tops?|components?|parts?)\b|\b(?:batting\s+tee|tee)\b.{0,50}\b(?:replacement|replace)\b.{0,40}\b(?:toppers?|tubes?|cups?|ball\s+rests?|rubber\s+tops?|components?|parts?)\b|\b(?:toppers?|tubes?|cups?|ball\s+rests?|rubber\s+tops?)\b.{0,40}\b(?:batting\s+tee|tee)\b.{0,30}\b(?:replacement|replace)\b/i;
 const BASEBALL_CATEGORY_NEGATIVE_PATTERN = /\b(?:fast\s*pitch|slow\s*pitch|softballs?)\b/i;
 const BASEBALL_BALL_NEGATIVE_PATTERN = /\b(?:fast\s*pitch|slow\s*pitch|softballs?)\b|\b(?:weighted|limited[ -]?flight|pitching[ -]?machine|dimpled|training\s+aid)\b|\b(?:ball|baseball|softball)\s+(?:bucket|container|caddy|carrier|tote)\b/i;
 const SOFTBALL_BALL_FORM_NEGATIVE_PATTERN = /\b(?:fielders?|catchers?)['’]?\s*(?:masks?|mitts?|gear)|\b(?:masks?|helmets?|gloves?|mitts?|bats?|grips?|holders?|racks?|stands?|accessor(?:y|ies)|training\s+aids?|training\s+balls?)\b/i;
@@ -378,6 +411,7 @@ interface IdentityConsensus {
   supportingRecords: number;
   identityType: "upc" | "sku" | "itemNumber";
   identityValue: string;
+  scope: string;
 }
 
 interface EvidenceAssessment {
@@ -405,11 +439,12 @@ const PROTECTED_EQUIPMENT_PATTERNS: ReadonlyArray<{ family: string; pattern: Reg
   { family: "bike-accessory", pattern: BIKE_ACCESSORY_PATTERN },
   { family: "goal-hoop-accessory", pattern: GOAL_HOOP_ACCESSORY_PATTERN },
   { family: "novelty-accessory", pattern: BALL_NOVELTY_REFERENCE_PATTERN },
+  { family: "training-accessory", pattern: BATTING_TEE_REPLACEMENT_PATTERN },
   { family: "bag", pattern: /\b(?:bat\s+bags?|bags?|backpacks?|duffels?|totes?|wheeled\s+bags?)\b/i },
   { family: "glove", pattern: /\b(?:gloves?|mitts?)\b/i },
   { family: "bat", pattern: /\bbats?\b/i },
   { family: "nets-hoops", pattern: /\b(?:hoops?|nets?|goals?|rims?|backboards?)\b/i },
-  { family: "memorabilia", pattern: /\b(?:autographed|signed|memorabilia|collectibles?|trading\s+cards?|baseball\s+cards?|photos?|posters?|display\s+(?:case|stand|mount)|wall\s+mount)\b/i },
+  { family: "memorabilia", pattern: /\b(?:hand[ -]?signed|signed\s+by|autographed\s+by|memorabilia|collectibles?|trading\s+cards?|baseball\s+cards?|photos?|posters?|display\s+(?:case|stand|mount)|wall\s+mount)\b/i },
   { family: "ball", pattern: /\b(?:baseballs|basketballs|footballs|softballs|volleyballs|soccer\s+balls?|game\s+balls?|training\s+balls?|practice\s+balls?|balls?\s+(?:set|bucket|pack|dozen))\b/i },
 ] as const;
 
@@ -468,12 +503,21 @@ function structuredEvidence(deal: AuditDealRow, source?: AuditSourceRow): Array<
   ];
 }
 
+function isBallMemorabiliaTitle(title: string): boolean {
+  if (!BALL_MEMORABILIA_TERM_PATTERN.test(title)
+      || !BALL_PRODUCT_FORM_PATTERN.test(title)
+      || NON_BALL_EQUIPMENT_FORM_PATTERN.test(title)) return false;
+  return !EXPLICIT_GAME_PRACTICE_BALL_PATTERN.test(title);
+}
+
 function protectedFamilies(deal: AuditDealRow, source?: AuditSourceRow): Set<string> {
   const structured = structuredEvidence(deal, source).map((item) => item.value).join(" ");
   const context = `${deal.title} ${structured}`;
-  return new Set(PROTECTED_EQUIPMENT_PATTERNS
+  const protections = new Set(PROTECTED_EQUIPMENT_PATTERNS
     .filter((protection) => protection.pattern.test(context))
     .map((protection) => protection.family));
+  if (isBallMemorabiliaTitle(deal.title)) protections.add("ball-memorabilia");
+  return protections;
 }
 
 function candidateHasCompatibleProtection(candidate: CandidateEvidence, protections: Set<string>): boolean {
@@ -610,19 +654,79 @@ function storedCandidate(
   return owned && owned.sportId === deal.sportId ? owned : null;
 }
 
-function normalizedIdentityKeys(deal: AuditDealRow): Array<{
-  key: string; type: "upc" | "sku" | "itemNumber"; value: string;
-}> {
-  const keys: Array<{ key: string; type: "upc" | "sku" | "itemNumber"; value: string }> = [];
+type IdentifierType = "upc" | "sku" | "itemNumber";
+
+interface IdentifierObservation {
+  key: string;
+  type: IdentifierType;
+  value: string;
+  normalized: string;
+  scope: string;
+  validForConsensus: boolean;
+  invalidReason: string | null;
+}
+
+export function isValidGtin(value: string): boolean {
+  if (/[^\d\s-]/.test(value)) return false;
+  const digits = value.replace(/[^\d]/g, "");
+  if (![8, 12, 13, 14].includes(digits.length)) return false;
+  let sum = 0;
+  let weight = 3;
+  for (let index = digits.length - 2; index >= 0; index -= 1) {
+    sum += Number(digits[index]) * weight;
+    weight = weight === 3 ? 1 : 3;
+  }
+  return (10 - (sum % 10)) % 10 === Number(digits.at(-1));
+}
+
+function identifierScope(deal: AuditDealRow, type: IdentifierType): string {
+  if (type === "upc") return "global:validated-gtin";
+  const seller = normalizeText(sellerFor(deal) ?? "") || "unknown-seller";
+  return type === "sku"
+    ? `source:${deal.sourceId}|seller:${seller}`
+    : `source:${deal.sourceId}`;
+}
+
+function isUsableSku(normalized: string): boolean {
+  return normalized.length >= 5
+    && normalized.length <= 64
+    && /[a-z]/.test(normalized)
+    && /\d/.test(normalized)
+    && !/^(?:sku|unknown|default|none|na|null|product)\d*$/.test(normalized)
+    && !/^(.)\1+$/.test(normalized);
+}
+
+function identifierObservations(deal: AuditDealRow): IdentifierObservation[] {
+  const observations: IdentifierObservation[] = [];
   for (const type of ["upc", "sku", "itemNumber"] as const) {
     for (const item of rawValues(deal.raw, type)) {
       const normalized = item.value.toLowerCase().replace(/[^a-z0-9]/g, "");
-      if ((type === "upc" && !/^\d{8,14}$/.test(normalized))
-          || (type !== "upc" && normalized.length < 5)) continue;
-      keys.push({ key: `${type}|${normalized}`, type, value: item.value });
+      if (!normalized) continue;
+      const scope = identifierScope(deal, type);
+      let invalidReason: string | null = null;
+      if (type === "upc" && !isValidGtin(item.value)) {
+        invalidReason = "UPC/GTIN has an invalid length, character set, or check digit";
+      } else if (type === "sku" && !isUsableSku(normalized)) {
+        invalidReason = "SKU is numeric, generic, malformed, or too weak for product identity";
+      } else if (type === "itemNumber" && (normalized.length < 5 || normalized.length > 80)) {
+        invalidReason = "item number is too short or malformed for product identity";
+      }
+      observations.push({
+        key: `${type}|${scope}|${normalized}`,
+        type,
+        value: item.value,
+        normalized,
+        scope,
+        validForConsensus: invalidReason === null,
+        invalidReason,
+      });
     }
   }
-  return Array.from(new Map(keys.map((item) => [item.key, item])).values());
+  return Array.from(new Map(observations.map((item) => [item.key, item])).values());
+}
+
+function normalizedIdentityKeys(deal: AuditDealRow): IdentifierObservation[] {
+  return identifierObservations(deal).filter((identity) => identity.validForConsensus);
 }
 
 function buildIdentityConsensus(
@@ -659,7 +763,7 @@ function buildIdentityConsensus(
   }
 
   const consensus = new Map<string, IdentityConsensus>();
-  for (const [identityKey, classifications] of support) {
+  for (const [identityKey, classifications] of Array.from(support.entries())) {
     if (classifications.size !== 1) continue;
     const entry = Array.from(classifications.values())[0];
     if (entry.dealIds.size < 2) continue;
@@ -668,6 +772,7 @@ function buildIdentityConsensus(
       supportingRecords: entry.dealIds.size,
       identityType: entry.identityType,
       identityValue: entry.identityValue,
+      scope: identityKey.split("|").slice(1, -1).join("|"),
     });
   }
   return consensus;
@@ -689,9 +794,10 @@ function assessDealEvidence(
   for (const identity of normalizedIdentityKeys(deal)) {
     const consensus = identityConsensus.get(identity.key);
     if (!consensus) continue;
+    if (!candidates.has(candidateKey(consensus.candidate))) continue;
     addCandidateSignal(candidates, { ...consensus.candidate, priority: 110 }, {
       kind: "identity-consensus",
-      evidence: `${consensus.identityType} ${consensus.identityValue} agrees across ${consensus.supportingRecords} correctly classified records`,
+      evidence: `${consensus.identityType} ${consensus.identityValue} (${consensus.scope}) agrees across ${consensus.supportingRecords} correctly classified records and matches direct product-family evidence`,
     });
   }
 
@@ -1255,19 +1361,60 @@ function correctionGroups(dataset: TaxonomyAuditDataset): CorrectionAnalysis {
   return { groups, outcomeCounts };
 }
 
+const IDENTITY_TITLE_STOP_WORDS = new Set([
+  "and", "the", "for", "with", "from", "new", "size", "set", "jeu", "juego", "cordage",
+  "corda", "tennis", "string", "strings", "baseball", "softball", "ball", "balls", "product",
+  "women", "womens", "men", "mens", "youth", "adult", "official",
+]);
+
+function identityTitleTokens(title: string): Set<string> {
+  const normalized = title.normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
+  return new Set(normalizeText(normalized).split(" ")
+    .filter((token) => (token.length >= 3 || /^\d+$/.test(token))
+      && !IDENTITY_TITLE_STOP_WORDS.has(token)));
+}
+
+function sharedIdentityTitleTokens(records: AuditDealRow[]): Set<string> {
+  if (records.length === 0) return new Set();
+  const [first, ...rest] = records.map((deal) => identityTitleTokens(deal.title));
+  return new Set(Array.from(first).filter((token) => rest.every((tokens) => tokens.has(token))));
+}
+
+function titlesLikelyDescribeSameProduct(records: AuditDealRow[]): boolean {
+  const shared = sharedIdentityTitleTokens(records);
+  return shared.size >= 3
+    || (shared.size >= 2 && Array.from(shared).some((token) => /\d/.test(token)));
+}
+
+function titlesClearlyUnrelated(records: AuditDealRow[]): boolean {
+  if (records.length < 2) return false;
+  const tokenSets = records.map((deal) => identityTitleTokens(deal.title));
+  for (let left = 0; left < tokenSets.length; left += 1) {
+    for (let right = left + 1; right < tokenSets.length; right += 1) {
+      const overlap = Array.from(tokenSets[left]).filter((token) => tokenSets[right].has(token));
+      if (overlap.length > 0) return false;
+    }
+  }
+  return true;
+}
+
 function buildFieldInventories(dataset: TaxonomyAuditDataset): {
   fieldCoverage: FieldCoverage[];
   brandInventory: BrandInventoryRow[];
   sourceCategoryInventory: SourceCategoryInventoryRow[];
   rawFieldInventory: RawFieldInventoryRow[];
-  identityFindings: TaxonomyFinding[];
+  identifierFindings: IdentifierFinding[];
 } {
   const total = dataset.deals.length;
   const coverage = new Map<string, { present: number; malformed: number; values: Set<string> }>();
   const brandCounts = new Map<string, number>();
   const categoryCounts = new Map<string, { sourceId: string; field: string; value: string; count: number }>();
   const rawFields = new Map<string, { count: number; values: Set<string> }>();
-  const identifiers = new Map<string, { type: string; value: string; classifications: Map<string, AuditDealRow[]> }>();
+  const identifiers = new Map<string, {
+    observation: IdentifierObservation;
+    records: AuditDealRow[];
+    classifications: Map<string, AuditDealRow[]>;
+  }>();
   const sourceNames = new Map(dataset.sources.map((source) => [source.id, source.name]));
 
   const touchCoverage = (field: string, values: string[], malformed = false) => {
@@ -1312,21 +1459,26 @@ function buildFieldInventories(dataset: TaxonomyAuditDataset): {
     touchCoverage("certification", certifications);
     for (const kind of ["upc", "sku", "itemNumber"] as const) {
       const values = rawValues(deal.raw, kind).map((item) => item.value);
-      const malformed = kind === "upc" && values.some((value) => !/^(?:\d[ -]?){8,14}$/.test(value));
+      const malformed = kind === "upc"
+        ? values.some((value) => !isValidGtin(value))
+        : kind === "sku"
+          ? values.some((value) => !isUsableSku(value.toLowerCase().replace(/[^a-z0-9]/g, "")))
+          : values.some((value) => {
+            const normalized = value.toLowerCase().replace(/[^a-z0-9]/g, "");
+            return normalized.length < 5 || normalized.length > 80;
+          });
       touchCoverage(kind, values, malformed);
-      for (const value of values) {
-        const normalized = value.toLowerCase().replace(/[^a-z0-9]/g, "");
-        if (!normalized) continue;
-        const identityKey = `${kind}|${normalized}`;
-        const classificationKey = `${deal.sportId ?? "null"}/${deal.equipmentTypeId ?? "null"}`;
-        const identity = identifiers.get(identityKey) ?? {
-          type: kind, value, classifications: new Map<string, AuditDealRow[]>(),
-        };
-        identity.classifications.set(classificationKey, [
-          ...(identity.classifications.get(classificationKey) ?? []), deal,
-        ]);
-        identifiers.set(identityKey, identity);
-      }
+    }
+    for (const observation of identifierObservations(deal)) {
+      const classificationKey = `${deal.sportId ?? "null"}/${deal.equipmentTypeId ?? "null"}`;
+      const identity = identifiers.get(observation.key) ?? {
+        observation, records: [], classifications: new Map<string, AuditDealRow[]>(),
+      };
+      if (!identity.records.some((row) => row.id === deal.id)) identity.records.push(deal);
+      const classified = identity.classifications.get(classificationKey) ?? [];
+      if (!classified.some((row) => row.id === deal.id)) classified.push(deal);
+      identity.classifications.set(classificationKey, classified);
+      identifiers.set(observation.key, identity);
     }
 
     for (const category of rawValues(deal.raw, "sourceCategory")) {
@@ -1367,22 +1519,70 @@ function buildFieldInventories(dataset: TaxonomyAuditDataset): {
     field, recordCount: entry.count, representativeValues: Array.from(entry.values),
   })).sort((a, b) => b.recordCount - a.recordCount || a.field.localeCompare(b.field));
 
-  const identityFindings: TaxonomyFinding[] = [];
+  const identifierFindings: IdentifierFinding[] = [];
   for (const identity of Array.from(identifiers.values())) {
-    if (identity.classifications.size < 2) continue;
-    const examples = Array.from(identity.classifications.values()).flat().slice(0, 5)
-      .map(({ id, title }) => ({ id, title }));
-    identityFindings.push({
-      kind: "identifier-conflict", entity: "deal", sportId: null, equipmentFamily: null,
-      label: `${identity.type}:${identity.value}`,
-      currentIds: Array.from(identity.classifications.keys()).sort(), proposedCanonicalId: null,
-      recordCount: Array.from(identity.classifications.values()).reduce((sum, rows) => sum + rows.length, 0),
-      evidence: [`identical normalized ${identity.type} occurs under inconsistent sport/equipment assignments`],
-      reason: "Product identity collision requires a canonical-product review before reclassification.",
-      confidence: "high", humanApprovalRequired: true, examples,
+    const { observation, records } = identity;
+    const classificationConflict = identity.classifications.size >= 2;
+    const collision = records.length >= 2;
+    const clearlyUnrelated = titlesClearlyUnrelated(records);
+    if (!classificationConflict && !collision
+        && !(observation.type === "upc" && observation.invalidReason)) continue;
+    if (!classificationConflict && collision && !observation.invalidReason && !clearlyUnrelated) continue;
+    const likelySameProduct = observation.validForConsensus
+      && classificationConflict
+      && titlesLikelyDescribeSameProduct(records);
+    let kind: IdentifierFindingKind;
+    if (clearlyUnrelated && records.length >= 2) kind = "unsafe-identifier-reuse";
+    else if (observation.invalidReason) kind = "invalid-identifier";
+    else if (likelySameProduct) kind = "likely-same-product-conflict";
+    else kind = "unresolved-collision";
+
+    const sharedTokens = Array.from(sharedIdentityTitleTokens(records)).sort();
+    const sourceEvidence = Array.from(new Set(records.map((deal) => {
+      const sourceName = sourceNames.get(deal.sourceId) ?? deal.sourceId;
+      return `${deal.sourceId}/${sourceName}/${sellerFor(deal) ?? "no seller"}`;
+    }))).sort();
+    const evidence = [
+      `${observation.type} is scoped as ${observation.scope}`,
+      `source/seller records: ${sourceEvidence.join("; ")}`,
+      ...(observation.invalidReason ? [observation.invalidReason] : []),
+      ...(classificationConflict
+        ? [`identifier occurs under ${identity.classifications.size} inconsistent sport/equipment assignments`]
+        : []),
+      ...(sharedTokens.length > 0
+        ? [`representative titles share identity tokens: ${sharedTokens.slice(0, 8).join(", ")}`]
+        : ["representative titles share no meaningful product tokens"]),
+    ];
+    const reasonByKind: Record<IdentifierFindingKind, string> = {
+      "likely-same-product-conflict": "Validated, scoped identity and compatible titles indicate likely translations or variants of the same product with inconsistent taxonomy.",
+      "unsafe-identifier-reuse": "The identifier is reused by unrelated products and must not provide identity consensus.",
+      "invalid-identifier": "The identifier is structurally invalid or too weak to provide identity consensus.",
+      "unresolved-collision": "The scoped identifier collision lacks enough compatible product evidence to decide whether the records are the same product.",
+    };
+    identifierFindings.push({
+      kind,
+      identifierType: observation.type,
+      identifierValue: observation.value,
+      scope: observation.scope,
+      currentIds: Array.from(identity.classifications.keys()).sort(),
+      recordCount: records.length,
+      evidence,
+      reason: reasonByKind[kind],
+      confidence: kind === "likely-same-product-conflict" ? "high" : "low",
+      humanApprovalRequired: true,
+      examples: records.slice(0, 5).map(({ id, title, sourceId, raw }) => ({
+        id,
+        title,
+        sourceId,
+        sourceName: sourceNames.get(sourceId) ?? sourceId,
+        seller: sellerFor({ id, title, sourceId, raw }),
+      })),
     });
   }
-  return { fieldCoverage, brandInventory, sourceCategoryInventory, rawFieldInventory, identityFindings };
+  identifierFindings.sort((a, b) => a.kind.localeCompare(b.kind)
+    || a.identifierType.localeCompare(b.identifierType)
+    || a.identifierValue.localeCompare(b.identifierValue));
+  return { fieldCoverage, brandInventory, sourceCategoryInventory, rawFieldInventory, identifierFindings };
 }
 
 export function buildTaxonomyAuditReport(
@@ -1390,13 +1590,22 @@ export function buildTaxonomyAuditReport(
   options: { generatedAt?: string } = {},
 ): TaxonomyAuditReport {
   const fieldInventories = buildFieldInventories(dataset);
-  const taxonomyFindings = [
-    ...taxonomyStructureFindings(dataset),
-    ...fieldInventories.identityFindings,
-  ].sort((a, b) => a.kind.localeCompare(b.kind) || a.label.localeCompare(b.label));
+  const taxonomyFindings = taxonomyStructureFindings(dataset)
+    .sort((a, b) => a.kind.localeCompare(b.kind) || a.label.localeCompare(b.label));
+  const identifierFindingCounts: Record<IdentifierFindingKind, number> = {
+    "likely-same-product-conflict": 0,
+    "unsafe-identifier-reuse": 0,
+    "invalid-identifier": 0,
+    "unresolved-collision": 0,
+  };
+  for (const finding of fieldInventories.identifierFindings) identifierFindingCounts[finding.kind] += 1;
   const correctionAnalysis = correctionGroups(dataset);
   const corrections = correctionAnalysis.groups;
   const outcomes = correctionAnalysis.outcomeCounts;
+  const reconciledDeals = Object.values(outcomes).reduce((sum, count) => sum + count, 0);
+  if (reconciledDeals !== dataset.deals.length) {
+    throw new Error(`taxonomy audit outcome reconciliation failed: ${reconciledDeals} != ${dataset.deals.length}`);
+  }
   const equipmentById = new Map(dataset.equipmentTypes.map((row) => [row.id, row]));
   const otherRecords = dataset.deals.filter((deal) =>
     isOther(deal.equipmentTypeId, deal.equipmentTypeId ? equipmentById.get(deal.equipmentTypeId)?.name : null)).length;
@@ -1416,6 +1625,8 @@ export function buildTaxonomyAuditReport(
       sources: dataset.sources.length,
       deals: dataset.deals.length,
       taxonomyFindings: taxonomyFindings.length,
+      identifierFindings: fieldInventories.identifierFindings.length,
+      identifierFindingCounts,
       correctionGroups: corrections.length,
       proposedRecords: outcomes["proposed-correction"],
       pendingRecords: outcomes["genuine-conflict-review"]
@@ -1429,6 +1640,7 @@ export function buildTaxonomyAuditReport(
       unclassifiedRecords,
     },
     taxonomyFindings,
+    identifierFindings: fieldInventories.identifierFindings,
     correctionGroups: corrections,
     fieldCoverage: fieldInventories.fieldCoverage,
     brandInventory: fieldInventories.brandInventory,
@@ -1463,12 +1675,34 @@ export function taxonomyAuditCorrectionsCsv(report: TaxonomyAuditReport): string
   return `${lines.join("\n")}\n`;
 }
 
+export function taxonomyAuditIdentifierFindingsCsv(report: TaxonomyAuditReport): string {
+  const columns: Array<keyof IdentifierFinding> = [
+    "kind", "identifierType", "identifierValue", "scope", "currentIds",
+    "recordCount", "evidence", "reason", "confidence", "humanApprovalRequired", "examples",
+  ];
+  const lines = [columns.join(",")];
+  for (const row of report.identifierFindings) {
+    lines.push(columns.map((column) => {
+      const value = column === "examples"
+        ? row.examples.map((example) =>
+          `${example.id}: ${example.title} [${example.sourceId}/${example.sourceName}/${example.seller ?? "no seller"}]`)
+        : row[column];
+      return csvCell(value);
+    }).join(","));
+  }
+  return `${lines.join("\n")}\n`;
+}
+
 export function taxonomyAuditMarkdown(report: TaxonomyAuditReport): string {
   const duplicateCount = report.taxonomyFindings.filter((finding) =>
     finding.kind === "duplicate-display-label" || finding.kind === "synonymous-ids").length;
   const displayFragments = report.taxonomyFindings.filter((finding) =>
     finding.kind === "display-group-fragmentation");
   const topCorrections = report.correctionGroups
+    .slice()
+    .sort((a, b) => b.recordCount - a.recordCount)
+    .slice(0, 20);
+  const topIdentifierFindings = report.identifierFindings
     .slice()
     .sort((a, b) => b.recordCount - a.recordCount)
     .slice(0, 20);
@@ -1492,6 +1726,11 @@ export function taxonomyAuditMarkdown(report: TaxonomyAuditReport): string {
     `- Ambiguous-evidence records: ${report.summary.ambiguousEvidenceRecords}.`,
     `- Already compatible / no action: ${report.summary.compatibleNoActionRecords}.`,
     `- Total pending review: ${report.summary.pendingRecords}.`,
+    `- Identifier findings: ${report.summary.identifierFindings}.`,
+    `  - Likely same-product conflicts: ${report.summary.identifierFindingCounts["likely-same-product-conflict"]}.`,
+    `  - Unsafe identifier reuse: ${report.summary.identifierFindingCounts["unsafe-identifier-reuse"]}.`,
+    `  - Invalid identifiers: ${report.summary.identifierFindingCounts["invalid-identifier"]}.`,
+    `  - Unresolved collisions: ${report.summary.identifierFindingCounts["unresolved-collision"]}.`,
     "",
     "## Largest correction cohorts",
     "",
@@ -1504,9 +1743,26 @@ export function taxonomyAuditMarkdown(report: TaxonomyAuditReport): string {
   }
   lines.push(
     "",
-    "## Phase 1.2 evidence policy",
+    "## Identifier findings",
     "",
-    "A sport name alone is never ball evidence. Explicit softball/fastpitch/slowpitch, mixed Baseball/Softball, training-ball, ball-container, and glove-accessory evidence is evaluated before Baseball destinations. Canonical stored sport/equipment families use an explicit compatibility layer so compatible products are counted as no action rather than pending. High confidence still requires two independent compatible signal types; proposed corrections, genuine conflicts, unresolved Other records, ambiguous evidence, and compatible no-action records are reported separately.",
+    "| Kind | Identifier | Scope | Current classifications | Records | Representative sources / sellers |",
+    "|---|---|---|---|---:|---|",
+  );
+  if (topIdentifierFindings.length === 0) lines.push("| — | — | — | — | 0 | — |");
+  for (const finding of topIdentifierFindings) {
+    const sourceSummary = finding.examples
+      .map((example) => `${example.sourceId}/${example.sourceName}/${example.seller ?? "no seller"}`)
+      .filter((value, index, values) => values.indexOf(value) === index)
+      .join("; ");
+    lines.push(`| ${finding.kind} | ${finding.identifierType}:${finding.identifierValue} | ${finding.scope.replace(/\|/g, " / ")} | ${finding.currentIds.join(", ")} | ${finding.recordCount} | ${sourceSummary} |`);
+  }
+  lines.push(
+    "",
+    "## Phase 1.4 evidence policy",
+    "",
+    "A sport name alone is never ball evidence. Explicit softball/fastpitch/slowpitch, mixed Baseball/Softball, training-ball, ball-container, glove-accessory, ball-memorabilia, and batting-tee replacement-component evidence is evaluated before ordinary equipment destinations. Canonical stored sport/equipment families use an explicit compatibility layer so compatible products are counted as no action rather than pending. High confidence still requires two independent compatible signal types; proposed corrections, genuine conflicts, unresolved Other records, ambiguous evidence, and compatible no-action records are reported separately.",
+    "",
+    "Validated UPC/GTIN values must pass a structural check digit. SKU identity is source- and seller-scoped, numeric or generic SKUs cannot provide consensus, and source item numbers are source-scoped. Identifier consensus can only reinforce matching direct product-family evidence; it cannot create a destination by itself.",
     "",
     "## Assignment-path assessment",
     "",

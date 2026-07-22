@@ -20,7 +20,7 @@ Default JSON to stdout:
 npm run audit:taxonomy
 ```
 
-JSON, correction CSV, and concise Markdown summary in an explicit directory:
+JSON, correction CSV, identifier CSV, and concise Markdown summary in an explicit directory:
 
 ```powershell
 npm run audit:taxonomy -- --format bundle --output-dir .\taxonomy-audit-output
@@ -53,10 +53,10 @@ The JSON report contains:
 - raw source-category values by source and raw-key coverage;
 - brand stored values and the current brand normalizer's proposed alias value;
 - model, size, drop, certification, UPC, SKU, and item-number coverage, missing counts, malformed counts, and representative values;
-- identical normalized UPC/SKU/item-number values that occur under conflicting classifications;
+- validated/scoped UPC, SKU, and item-number findings separated into likely same-product conflicts, unsafe reuse, invalid identifiers, and unresolved collisions, with source/seller/title evidence;
 - the complete code-owned inventory of assignment and display-projection paths.
 
-The CSV is the flattened correction/pending cohort table. The Markdown file summarizes the total scope, duplicate/group fragmentation counts, Other/pending counts, and the twenty largest cohorts.
+The bundle contains separate machine-readable CSV files for flattened correction/pending cohorts (`taxonomy-corrections.csv`) and identifier findings (`taxonomy-identifiers.csv`). JSON retains the full structured report. Markdown summarizes total scope, duplicate/group fragmentation counts, mutually exclusive correction outcomes, identifier-finding counts, and the twenty largest correction and identifier cohorts.
 
 ## Evidence and confidence policy
 
@@ -64,7 +64,7 @@ Phase 1.1 replaces the original one-match policy. A sport name alone (`baseball`
 
 The audit collects independent signals from specific title/model evidence, structured retailer category/product-type/tag fields, validated UPC/SKU/item-number consensus, and compatible stored taxonomy. High confidence requires at least two independent compatible signal types and no stored or protected-family conflict. A single compatible signal is medium confidence and always requires human approval. Legacy Bat/Glove aliases without a second compatible signal are also medium confidence.
 
-Identifier consensus is emitted only when at least two distinct records have a valid, non-Other stored classification, their conservative direct evidence supports that classification, and every qualifying record for the normalized identifier agrees. Conflicted identifiers and identifiers backed only by incorrectly classified records produce no consensus signal.
+Identifier consensus is emitted only when at least two distinct records have a valid, non-Other stored classification, their conservative direct evidence supports that classification, and every qualifying record for the normalized identifier agrees. Phase 1.4 additionally requires a structurally valid UPC/GTIN check digit, scopes ordinary SKUs by source and seller, scopes item numbers by source, rejects numeric/generic SKUs as consensus, and requires matching direct product-family evidence on the target record. Identity can improve confidence but cannot create a taxonomy candidate by itself.
 
 Fanatics apparel, collectibles, autographs, memorabilia, and other ambiguous merchandise remain pending. Generic `ball`, `bag`, `glove`, `driver`, sport, merchandise, or theme wording is not sufficient by itself.
 
@@ -75,6 +75,8 @@ Phase 1.2 adds product-form and sport-conflict precedence. Explicit fastpitch, s
 Phase 1.3 tightens product form again. Bat holders, racks, organizers, display/storage products, and grip tape/wrap are protected accessories rather than Bats; incidental phrases such as `new grip`, `bad grip`, or a grip brand do not block an otherwise explicit bat. Fastpitch/slowpitch Balls now require a discrete ball term instead of the sport phrase alone. A bounded adult/youth bat-dimension rule requires a 26–35 inch length, a 15–31 ounce weight, and drop, barrel, alloy, or composite evidence before a fastpitch/slowpitch title that omits `bat` can become a Bat. That range deliberately excludes 11-inch, 12-inch, and 16-inch softball sizes.
 
 Ball buckets and containers are detected in either word order with intervening product wording; holders, stands, racks, novelty/noisemaker references, and explicit training-ball forms cannot become ordinary Balls. Cycling accessories such as pedals, grips, pegs, pumps, tires, tubes, wheels, racks, helmets, and replacement parts cannot become Bicycles. Goal/hoop shooting targets, weights, sandbag covers, and replacement weights cannot become Nets or Hoops/Nets. Genuine bicycles, goals, hoops, rims, backboards, and nets remain eligible.
+
+Phase 1.4 protects decorative, themed-gift, souvenir, commemorative, signed, signature, and autograph-oriented ball products from ordinary Baseball/Soccer Ball proposals unless explicit game/practice/match-ball wording independently establishes playable product form. The protection is ball-specific: `autograph model` and `signature series` bats or gloves retain their equipment evidence. Batting-tee replacement toppers, tubes, cups, ball rests, and similar components are training accessories rather than complete Training Equipment.
 
 Stored taxonomy compatibility is now explicit rather than inferred from exact family-string equality. Canonical Shoes/Apparel, socks, shorts, bags, protective equipment, training equipment, Balls, Bats, Gloves, Cleats, and corresponding sport-owned categories are no-action when their stored sport/equipment owner and product evidence agree. Explicit sport or product-family conflicts still override compatibility.
 
@@ -113,6 +115,18 @@ Phase 1.1 adds report-derived regressions for Baseball apparel, cleats, helmets,
 Phase 1.2 adds production-report regressions for Easton Jen Schro and Wilson C200 fastpitch catcher gear, CIF-SS and Dream Seam softballs, a mixed Easton ball bucket, Play It Again weighted softball and `BB/SB` training aids, a Liberty Advanced fastpitch catcher's mitt, and a mixed glove-lace repair kit. It also covers canonical Golf, Running, Basketball, and Baseball no-action families plus Fanatics apparel, non-fielding gloves, and dedicated softball equipment that must remain genuine review conflicts.
 
 Phase 1.3 adds production-report regressions for six bat-holder/rack/grip products; real bats with incidental grip wording; straight and curly possessive HIVIZ fielder-mask titles; 33-inch/23-ounce/-10 fastpitch and 34-inch/27-ounce slowpitch bats that omit `bat`; 11-inch, 12-inch, and 16-inch softball sizes; bucket combinations, ball holders, party horns, and training balls; Bell bike pedals/grips/pegs and a genuine Huffy bicycle; and goal-target and hoop-weight accessories alongside genuine goals, hoops, rims, backboards, and nets.
+
+Phase 1.4 adds exact report-derived regressions for the Ice Cream Drip themed-gift baseball, unidentified-signature baseball, England FA Signature soccer ball, MacGregor replacement tee tube, Sumind replacement topper/cup, and replacement top tube. Positive controls cover ordinary baseballs and soccer balls, complete batting tees, pitching machines, training balls, bats, gloves, cleats, running shoes, swim goggles, bicycles, goals, hoops, autograph-model gloves, and signature-series bats/gloves. Identifier tests cover numeric SKU reuse, seller/source SKU scoping, valid and invalid GTIN check digits, translated Wilson/Luxilon records sharing item numbers and UPCs, all four identifier-finding kinds, CSV output, and exact outcome reconciliation.
+
+## Phase 1.4 supplied Phase 1.3 evidence and representative replay
+
+The supplied Phase 1.3 read-only report (`phase1.3-read-only-v4`, generated 2026-07-22T20:51:02.233Z) covered 181,188 deals. It reported 1,295 medium-confidence proposals across 401 groups, 76,194 pending/review records, 103,699 compatible/no-action records, 40,353 records in Other, and 2,267 generic identifier-conflict findings. The archive was verified and reviewed offline only; Phase 1.4 did not connect to production or run another production audit.
+
+The report retained 15,558 unique representative correction examples. The Phase 1.3 sample contained 548 proposed and 15,010 pending examples. Replaying only those titles, stored IDs, source IDs, and retained seller values through Phase 1.4 produced 538 proposed, 14,849 pending, and 171 compatible/no-action examples. This is directional representative evidence, not a production-wide after-count: correction groups retain at most five examples and omit structured categories, tags, UPCs, SKUs, and item numbers.
+
+The replay moved the Ice Cream Drip gift baseball, unidentified-signature baseball, England FA Signature soccer ball, MacGregor replacement tee tube, and a proposed replacement topper/cup from proposed destinations to ambiguous pending with no destination. Existing pending topper/tube examples remained pending. Two Catfish Hunter `Autograph Model` baseball gloves remained eligible for `bb-gloves`.
+
+The legacy identifier findings do not retain source/seller scope or the mapping from each example to its stored classification, so a complete identifier before/after replay is impossible from the bundle. A bounded replay of the exact retained examples classified numeric SKU `23576` (Miken slowpitch shorts versus a Franklin glove aerator) as `unsafe-identifier-reuse`, while Wilson item number `WR8302001115` across English/French Luxilon ALU Power 115 titles became `likely-same-product-conflict`. No production-wide Phase 1.4 identifier count is claimed.
 
 ## Phase 1.3 supplied Phase 1.2 evidence and representative replay
 

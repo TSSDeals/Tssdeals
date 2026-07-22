@@ -6,7 +6,9 @@ import { parseTaxonomyAuditInvocation } from "./taxonomy-audit-cli";
 import { TAXONOMY_ASSIGNMENT_PATHS } from "./taxonomy-assignment-paths";
 import {
   buildTaxonomyAuditReport,
+  isValidGtin,
   taxonomyAuditCorrectionsCsv,
+  taxonomyAuditIdentifierFindingsCsv,
   taxonomyAuditMarkdown,
   type TaxonomyAuditDataset,
 } from "./taxonomy-audit";
@@ -197,6 +199,31 @@ function phase13Fixture(deals: TaxonomyAuditDataset["deals"]): TaxonomyAuditData
   };
 }
 
+function phase14Fixture(deals: TaxonomyAuditDataset["deals"]): TaxonomyAuditDataset {
+  const base = phase13Fixture(deals);
+  return {
+    ...base,
+    sports: [
+      ...base.sports,
+      { id: "swimming", name: "Swimming", userCreated: false },
+      { id: "tennis", name: "Tennis", userCreated: false },
+    ],
+    equipmentTypes: [
+      ...base.equipmentTypes,
+      { id: "run-shoes", name: "Shoes", sportId: "running", userCreated: false },
+      { id: "swim-goggles", name: "Goggles", sportId: "swimming", userCreated: false },
+      { id: "swim-other", name: "Other", sportId: "swimming", userCreated: false },
+      { id: "ten-accessories", name: "Accessories", sportId: "tennis", userCreated: false },
+      { id: "ten-other", name: "Other", sportId: "tennis", userCreated: false },
+    ],
+    sources: [
+      ...base.sources,
+      { id: "direct-sports", name: "Direct Sports", category: "multi-sport" },
+      { id: "impact-wilson", name: "Wilson Sporting Goods Co", category: "multi-sport" },
+    ],
+  };
+}
+
 test("bat holders, racks, organizers, and grip products do not become Bats", () => {
   const report = buildTaxonomyAuditReport(phase13Fixture([
     { id: "bat-holder", sourceId: "ebay", title: "Heavy Duty Baseball Bat Holder - Wall Mounted Dugout Rack for 14 Bats", sportId: "baseball", equipmentTypeId: "bb-other" },
@@ -316,6 +343,77 @@ test("goal and hoop accessories stay pending while genuine goals, hoops, rims, b
     "basketball-hoop-genuine", "basketball-rim", "basketball-backboard", "basketball-net",
   ]) {
     assert.equal(correctionFor(report, id)?.proposedCanonicalEquipmentTypeId, "bk-hoops-nets", id);
+  }
+});
+
+test("gift, souvenir, signature, and autograph-oriented balls stay pending", () => {
+  const report = buildTaxonomyAuditReport(phase14Fixture([
+    { id: "ice-cream-ball", sourceId: "ebay", title: "6 Pack Ice Cream Drip Theme Baseball Ball 9 Inch Themed Gift Lifestyle Standard", sportId: "baseball", equipmentTypeId: "bb-other", raw: { ebaySeller: "all_about_you" } },
+    { id: "signature-baseball", sourceId: "ebay", title: "Franklin Official Leauge Baseball Ball MLB Sports Unidentified Signature", sportId: "baseball", equipmentTypeId: "bb-other", raw: { ebaySeller: "retrodelphia" } },
+    { id: "signature-soccer", sourceId: "ebay", title: "England FA Soccer Ball Signature (TA5139)", sportId: "football", equipmentTypeId: "fb-other", raw: { ebaySeller: "pertemba" } },
+    { id: "signed-baseball", sourceId: "ebay", title: "Commemorative Signed Baseball", sportId: "baseball", equipmentTypeId: "bb-other" },
+    { id: "souvenir-soccer", sourceId: "ebay", title: "World Cup Souvenir Soccer Ball", sportId: "soccer", equipmentTypeId: "soc-other" },
+  ]));
+
+  for (const id of [
+    "ice-cream-ball", "signature-baseball", "signature-soccer",
+    "signed-baseball", "souvenir-soccer",
+  ]) {
+    const correction = correctionFor(report, id);
+    assert.equal(correction?.status, "pending", id);
+    assert.equal(correction?.outcome, "ambiguous-evidence", id);
+    assert.equal(correction?.proposedCanonicalEquipmentTypeId, null, id);
+  }
+});
+
+test("batting-tee replacement toppers, tubes, cups, and components stay pending", () => {
+  const report = buildTaxonomyAuditReport(phase14Fixture([
+    { id: "replacement-tube", sourceId: "ebay", title: "MacGregor® Batting Tee - Replacement Tube", sportId: "baseball", equipmentTypeId: "bb-other", raw: { ebaySeller: "betzmil-0" } },
+    { id: "replacement-topper", sourceId: "ebay", title: "Sumind Batting Tee Topper Replacement Batting Tee Basic Ball Rest Rubber Cup", sportId: "baseball", equipmentTypeId: "bb-bats", raw: { ebaySeller: "dhcinvestments" } },
+    { id: "replacement-top-tube", sourceId: "ebay", title: "Baseball Ball Stand Replacement Rubber Topper Top Tube Batting Tee Topper", sportId: "baseball", equipmentTypeId: "bb-bats", raw: { ebaySeller: "leosportry" } },
+  ]));
+
+  for (const id of ["replacement-tube", "replacement-topper", "replacement-top-tube"]) {
+    const correction = correctionFor(report, id);
+    assert.equal(correction?.status, "pending", id);
+    assert.notEqual(correction?.proposedCanonicalEquipmentTypeId, "bb-training", id);
+  }
+});
+
+test("ordinary equipment and narrow autograph-model controls remain eligible", () => {
+  const report = buildTaxonomyAuditReport(phase14Fixture([
+    { id: "ordinary-baseballs", sourceId: "ebay", title: "Rawlings Official Game Baseballs One Dozen", sportId: "baseball", equipmentTypeId: "bb-other" },
+    { id: "ordinary-soccer-ball", sourceId: "ebay", title: "Adidas FIFA Practice Soccer Ball", sportId: "soccer", equipmentTypeId: "soc-other" },
+    { id: "commemorative-practice-ball", sourceId: "ebay", title: "Commemorative Practice Soccer Ball", sportId: "soccer", equipmentTypeId: "soc-other" },
+    { id: "complete-tee", sourceId: "ebay", title: "Tanner Complete Baseball Batting Tee", sportId: "baseball", equipmentTypeId: "bb-other" },
+    { id: "pitching-machine", sourceId: "ebay", title: "JUGS M1 Baseball Pitching Machine", sportId: "baseball", equipmentTypeId: "bb-other" },
+    { id: "training-balls-positive", sourceId: "ebay", title: "Rawlings Weighted Baseball Training Balls", sportId: "baseball", equipmentTypeId: "bb-other" },
+    { id: "bat-positive", sourceId: "ebay", title: "Marucci CATX BBCOR Baseball Bat", sportId: "baseball", equipmentTypeId: "bb-other" },
+    { id: "glove-positive", sourceId: "ebay", title: "Wilson A2000 1786 11.5 Baseball Glove", sportId: "baseball", equipmentTypeId: "bb-other" },
+    { id: "cleats-positive", sourceId: "ebay", title: "Nike Alpha Huarache Baseball Cleats", sportId: "baseball", equipmentTypeId: "bb-other" },
+    { id: "running-shoes-positive", sourceId: "ebay", title: "Brooks Ghost Running Shoes", sportId: "running", equipmentTypeId: "run-apparel" },
+    { id: "swim-goggles-positive", sourceId: "ebay", title: "Speedo Adult Swimming Goggles", sportId: "swimming", equipmentTypeId: "swim-other" },
+    { id: "bicycle-positive", sourceId: "ebay", title: "Huffy Granite Mountain Bicycle", sportId: "cycling", equipmentTypeId: "cyc-other" },
+    { id: "goal-positive", sourceId: "ebay", title: "Portable Soccer Goal Net", sportId: "soccer", equipmentTypeId: "soc-other" },
+    { id: "hoop-positive", sourceId: "ebay", title: "Spalding Portable Basketball Hoop", sportId: "basketball", equipmentTypeId: "bk-other" },
+    { id: "autograph-model-glove", sourceId: "ebay", title: "Wilson Catfish Hunter A2161 Baseball Glove Nylon Stitched Autograph Model", sportId: "baseball", equipmentTypeId: "bb-other" },
+    { id: "signature-series-glove", sourceId: "ebay", title: "Rawlings Signature Series Baseball Glove 11.5 inch", sportId: "baseball", equipmentTypeId: "bb-other" },
+    { id: "signature-series-bat", sourceId: "ebay", title: "Ken Griffey Jr Signature Series Baseball Bat", sportId: "baseball", equipmentTypeId: "bb-other" },
+  ]));
+
+  const expected = new Map([
+    ["ordinary-baseballs", "bb-balls"], ["ordinary-soccer-ball", "soc-balls"],
+    ["commemorative-practice-ball", "soc-balls"], ["complete-tee", "bb-training"],
+    ["pitching-machine", "bb-training"], ["training-balls-positive", "bb-training"],
+    ["bat-positive", "bb-bats"], ["glove-positive", "bb-gloves"],
+    ["cleats-positive", "bb-cleats"], ["running-shoes-positive", "run-shoes"],
+    ["swim-goggles-positive", "swim-goggles"], ["bicycle-positive", "cyc-bikes"],
+    ["goal-positive", "soc-nets"], ["hoop-positive", "bk-hoops-nets"],
+    ["autograph-model-glove", "bb-gloves"], ["signature-series-glove", "bb-gloves"],
+    ["signature-series-bat", "bb-bats"],
+  ]);
+  for (const [id, destination] of expected) {
+    assert.equal(correctionFor(report, id)?.proposedCanonicalEquipmentTypeId, destination, id);
   }
 });
 
@@ -542,6 +640,14 @@ test("report separates proposed, conflict, unresolved, ambiguous, and no-action 
     noAction: report.summary.compatibleNoActionRecords,
   }, { proposed: 1, conflict: 1, unresolved: 1, ambiguous: 1, noAction: 1 });
   assert.equal(report.summary.pendingRecords, 3);
+  assert.equal(
+    report.summary.proposedCorrectionRecords
+      + report.summary.conflictReviewRecords
+      + report.summary.unresolvedOtherRecords
+      + report.summary.ambiguousEvidenceRecords
+      + report.summary.compatibleNoActionRecords,
+    report.summary.deals,
+  );
 });
 
 test("Fanatics apparel, collectibles, and memorabilia remain pending", () => {
@@ -559,10 +665,11 @@ test("Fanatics apparel, collectibles, and memorabilia remain pending", () => {
 
 test("identifier consensus requires two supported records that agree", () => {
   const report = buildTaxonomyAuditReport(hardeningFixture([
-    { id: "bat-reference-1", sourceId: "justbats", title: "Marucci CATX USSSA Baseball Bat", sportId: "baseball", equipmentTypeId: "bb-bats", raw: { sku: "CATX-CONSENSUS" } },
-    { id: "bat-reference-2", sourceId: "justbats", title: "Marucci CATX BBCOR Baseball Bat", sportId: "baseball", equipmentTypeId: "bb-bats", raw: { sku: "CATX-CONSENSUS" } },
-    { id: "identity-only", sourceId: "ebay", title: "Marucci CATX Senior League Item", sportId: "baseball", equipmentTypeId: "bb-other", raw: { sku: "CATX-CONSENSUS" } },
-    { id: "identity-plus-title", sourceId: "ebay", title: "Marucci CATX USSSA Baseball Bat", sportId: "baseball", equipmentTypeId: "bb-other", raw: { sku: "CATX-CONSENSUS" } },
+    { id: "bat-reference-1", sourceId: "justbats", title: "Marucci CATX USSSA Baseball Bat", sportId: "baseball", equipmentTypeId: "bb-bats", raw: { seller: "catalog", sku: "CATX-CONSENSUS-42" } },
+    { id: "bat-reference-2", sourceId: "justbats", title: "Marucci CATX BBCOR Baseball Bat", sportId: "baseball", equipmentTypeId: "bb-bats", raw: { seller: "catalog", sku: "CATX-CONSENSUS-42" } },
+    { id: "identity-only", sourceId: "justbats", title: "Marucci CATX Senior League Item", sportId: "baseball", equipmentTypeId: "bb-other", raw: { seller: "catalog", sku: "CATX-CONSENSUS-42" } },
+    { id: "identity-plus-title", sourceId: "justbats", title: "Marucci CATX USSSA Baseball Bat", sportId: "baseball", equipmentTypeId: "bb-other", raw: { seller: "catalog", sku: "CATX-CONSENSUS-42" } },
+    { id: "different-seller", sourceId: "justbats", title: "Marucci CATX Senior League Item", sportId: "baseball", equipmentTypeId: "bb-other", raw: { seller: "marketplace", sku: "CATX-CONSENSUS-42" } },
     { id: "conflict-bat-1", sourceId: "justbats", title: "Louisville Slugger BBCOR Baseball Bat", sportId: "baseball", equipmentTypeId: "bb-bats", raw: { itemNumber: "CONFLICT-100" } },
     { id: "conflict-bat-2", sourceId: "justbats", title: "Easton USSSA Baseball Bat", sportId: "baseball", equipmentTypeId: "bb-bats", raw: { itemNumber: "CONFLICT-100" } },
     { id: "conflict-ball-1", sourceId: "ebay", title: "Rawlings Baseballs Dozen", sportId: "baseball", equipmentTypeId: "bb-balls", raw: { itemNumber: "CONFLICT-100" } },
@@ -573,12 +680,13 @@ test("identifier consensus requires two supported records that agree", () => {
     { id: "wrong-consensus-target", sourceId: "ebay", title: "Nike Sporting Goods Item", sportId: "baseball", equipmentTypeId: "bb-other", raw: { upc: "123456789099" } },
   ]));
   const identityOnly = correctionFor(report, "identity-only");
-  assert.equal(identityOnly?.proposedCanonicalEquipmentTypeId, "bb-bats");
-  assert.equal(identityOnly?.confidence, "medium");
+  assert.equal(identityOnly?.proposedCanonicalEquipmentTypeId, null);
+  assert.equal(identityOnly?.confidence, "low");
   assert.equal(identityOnly?.humanApprovalRequired, true);
   const identityPlusTitle = correctionFor(report, "identity-plus-title");
   assert.equal(identityPlusTitle?.confidence, "high");
   assert.equal(identityPlusTitle?.humanApprovalRequired, false);
+  assert.equal(correctionFor(report, "different-seller")?.proposedCanonicalEquipmentTypeId, null);
   assert.equal(correctionFor(report, "conflicted-target")?.status, "pending");
   assert.equal(correctionFor(report, "conflicted-target")?.proposedCanonicalEquipmentTypeId, null);
   assert.equal(correctionFor(report, "wrong-consensus-target")?.status, "pending");
@@ -602,6 +710,57 @@ test("keeps ambiguous Other products pending and audits other sports", () => {
   assert.equal(basketball.humanApprovalRequired, true);
 });
 
+test("identifier analysis scopes SKUs, validates GTINs, and separates collision kinds", () => {
+  assert.equal(isValidGtin("036000291452"), true);
+  assert.equal(isValidGtin("036000291453"), false);
+  assert.equal(isValidGtin("12345"), false);
+
+  const report = buildTaxonomyAuditReport(phase14Fixture([
+    { id: "numeric-sku-shorts", sourceId: "direct-sports", title: "Miken Men's Slowpitch Shorts: MSPSM20", sportId: "baseball", equipmentTypeId: "bb-bats", raw: { sku: "23576" } },
+    { id: "numeric-sku-aerator", sourceId: "direct-sports", title: "Franklin MLB Glove Aerator: 2357", sportId: "baseball", equipmentTypeId: "bb-training", raw: { sku: "23576" } },
+    { id: "numeric-sku-bat", sourceId: "direct-sports", title: "Marucci CATX BBCOR Baseball Bat", sportId: "baseball", equipmentTypeId: "bb-other", raw: { sku: "23576" } },
+    { id: "luxilon-en", sourceId: "impact-wilson", title: "LUXILON ALU Power 115 Set", sportId: "baseball", equipmentTypeId: "bb-other", raw: { itemNumber: "WR8302001115" } },
+    { id: "luxilon-fr", sourceId: "impact-wilson", title: "Jeu de cordage ALU Power 115", sportId: "tennis", equipmentTypeId: "ten-accessories", raw: { itemNumber: "WR8302001115" } },
+    { id: "wilson-upc-en", sourceId: "impact-wilson", title: "Wilson A2000 1786 11.5 Baseball Glove", sportId: "baseball", equipmentTypeId: "bb-gloves", raw: { upc: "036000291452" } },
+    { id: "wilson-upc-es", sourceId: "impact-wilson", title: "Wilson Guante Baseball A2000 1786 11.5", sportId: "baseball", equipmentTypeId: "bb-other", raw: { upc: "036000291452" } },
+    { id: "invalid-upc", sourceId: "impact-wilson", title: "Wilson Product", sportId: "baseball", equipmentTypeId: "bb-other", raw: { upc: "036000291453" } },
+    { id: "unresolved-one", sourceId: "impact-wilson", title: "Wilson Sporting Goods Item", sportId: "baseball", equipmentTypeId: "bb-other", raw: { itemNumber: "AMBIG-100" } },
+    { id: "unresolved-two", sourceId: "impact-wilson", title: "Wilson Equipment Product", sportId: "tennis", equipmentTypeId: "ten-accessories", raw: { itemNumber: "AMBIG-100" } },
+  ]));
+
+  const numericReuse = report.identifierFindings.find((finding) =>
+    finding.kind === "unsafe-identifier-reuse"
+    && finding.identifierType === "sku"
+    && finding.identifierValue === "23576");
+  assert.ok(numericReuse);
+  assert.match(numericReuse.scope, /source:direct-sports\|seller:unknown-seller/);
+  assert.ok(numericReuse.examples.every((example) =>
+    example.sourceId === "direct-sports" && example.sourceName === "Direct Sports"));
+  assert.equal(correctionFor(report, "numeric-sku-bat")?.confidence, "medium");
+
+  const translated = report.identifierFindings.find((finding) =>
+    finding.kind === "likely-same-product-conflict"
+    && finding.identifierValue === "WR8302001115");
+  assert.ok(translated);
+  assert.equal(translated.identifierType, "itemNumber");
+  assert.equal(translated.scope, "source:impact-wilson");
+  assert.deepEqual(translated.currentIds, ["baseball/bb-other", "tennis/ten-accessories"]);
+  assert.ok(translated.examples.some((example) => example.title === "LUXILON ALU Power 115 Set"));
+  assert.ok(translated.examples.some((example) => example.title === "Jeu de cordage ALU Power 115"));
+
+  assert.ok(report.identifierFindings.some((finding) =>
+    finding.kind === "likely-same-product-conflict"
+    && finding.identifierType === "upc"
+    && finding.identifierValue === "036000291452"));
+  assert.ok(report.identifierFindings.some((finding) =>
+    finding.kind === "invalid-identifier"
+    && finding.identifierType === "upc"
+    && finding.identifierValue === "036000291453"));
+  assert.ok(report.identifierFindings.some((finding) =>
+    finding.kind === "unresolved-collision"
+    && finding.identifierValue === "AMBIG-100"));
+});
+
 test("reports brand aliases, source categories, field coverage, and identifier conflicts", () => {
   const report = buildTaxonomyAuditReport(fixture());
   assert.ok(report.brandInventory.some((brand) =>
@@ -611,20 +770,26 @@ test("reports brand aliases, source categories, field coverage, and identifier c
   assert.ok(report.sourceCategoryInventory.some((category) =>
     category.sourceId === "ebay" && category.storedValue === "Baseball & Softball"));
   assert.ok(report.fieldCoverage.some((field) => field.field === "upc" && field.present === 2));
-  assert.ok(report.taxonomyFindings.some((finding) =>
-    finding.kind === "identifier-conflict" && finding.label === "upc:123456789012"));
+  assert.ok(report.identifierFindings.some((finding) =>
+    finding.kind === "unsafe-identifier-reuse"
+    && finding.identifierType === "upc"
+    && finding.identifierValue === "123456789012"));
 });
 
 test("emits machine-readable CSV and a concise Markdown summary", () => {
   const report = buildTaxonomyAuditReport(fixture(), { generatedAt: "2026-07-21T00:00:00.000Z" });
   const csv = taxonomyAuditCorrectionsCsv(report);
+  const identifierCsv = taxonomyAuditIdentifierFindingsCsv(report);
   const markdown = taxonomyAuditMarkdown(report);
   assert.match(csv, /^sportId,equipmentFamily,sourceId,/);
   assert.match(csv, /bb-bats/);
   assert.match(csv, /humanApprovalRequired,status,outcome,examples/);
+  assert.match(identifierCsv, /^kind,identifierType,identifierValue,scope,/);
+  assert.match(identifierCsv, /unsafe-identifier-reuse/);
   assert.match(markdown, /Read-only report/);
   assert.match(markdown, /all 5 deals across 2 sports/);
   assert.match(markdown, /Already compatible \/ no action/);
+  assert.match(markdown, /Identifier findings/);
 });
 
 test("CLI has no apply or mutation mode and the database snapshot is transaction-read-only", () => {
@@ -638,6 +803,9 @@ test("CLI has no apply or mutation mode and the database snapshot is transaction
   const databaseSource = readFileSync(join(process.cwd(), "server", "taxonomy-audit-db.ts"), "utf8");
   assert.match(databaseSource, /SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY/);
   assert.doesNotMatch(databaseSource, /\.insert\(|\.update\(|\.delete\(|\bALTER\b|\bTRUNCATE\b/i);
+  const auditScript = readFileSync(join(process.cwd(), "script", "phase1-taxonomy-audit.ts"), "utf8");
+  assert.match(auditScript, /taxonomy-identifiers\.csv/);
+  assert.doesNotMatch(auditScript, /\.insert\(|\.update\(|\.delete\(|\bALTER\b|\bTRUNCATE\b/i);
 });
 
 test("assignment-path inventory covers every current taxonomy writer/projector and points to real files", () => {
