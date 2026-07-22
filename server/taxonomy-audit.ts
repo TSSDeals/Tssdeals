@@ -12,7 +12,7 @@ import {
   canonicalResultEquipmentTypeId,
 } from "../shared/equipment-groups";
 
-export const TAXONOMY_AUDIT_RULE_VERSION = "phase1.2-read-only-v3";
+export const TAXONOMY_AUDIT_RULE_VERSION = "phase1.3-read-only-v4";
 
 export interface AuditSportRow {
   id: string;
@@ -245,22 +245,29 @@ interface EvidenceRule {
 
 const MIXED_BASEBALL_SOFTBALL_TITLE_PATTERN = /\bbaseball\s*(?:\/|&|\+|and)\s*softball\b|\bsoftball\s*(?:\/|&|\+|and)\s*baseball\b|\bbb\s*\/\s*sb\b/i;
 const SOFTBALL_TITLE_PATTERN = /\b(?:fast\s*pitch|slow\s*pitch|softballs?)\b/i;
-const TRAINING_BALL_FORM_PATTERN = /\b(?:weighted|limited[ -]?flight|pitching[ -]?machine|dimpled|foam)\b.{0,24}\b(?:baseballs?|softballs?|balls?)\b|\b(?:baseballs?|softballs?|balls?)\b.{0,24}\b(?:weighted|limited[ -]?flight|pitching[ -]?machine|training\s+aid)\b/i;
-const BALL_CONTAINER_PATTERN = /\b(?:ball|baseball|softball)\s+(?:bucket|container|caddy|carrier|tote)\b|\b(?:bucket|container|caddy|carrier|tote)\s+(?:for|with|of)?\s*(?:baseballs?|softballs?|balls?)\b|\b(?:baseballs?|softballs?|balls?)\b.{0,20}\b(?:with|in|and)\s+(?:a\s+)?bucket\b/i;
+const TRAINING_BALL_FORM_PATTERN = /\b(?:weighted|limited[ -]?flight|pitching[ -]?machine|dimpled|foam)\b.{0,24}\b(?:baseballs?|softballs?|balls?)\b|\b(?:baseballs?|softballs?|balls?)\b.{0,24}\b(?:weighted|limited[ -]?flight|pitching[ -]?machine|training\s+aid)\b|\btraining\s+(?:baseballs?|softballs?|balls?)\b/i;
+const BALL_CONTAINER_PATTERN = /\b(?:baseballs?|softballs?|balls?)\b.{0,60}\b(?:buckets?|containers?|cadd(?:y|ies)|carriers?|totes?)\b|\b(?:buckets?|containers?|cadd(?:y|ies)|carriers?|totes?)\b.{0,60}\b(?:baseballs?|softballs?|balls?)\b|\b(?:baseballs?|softballs?|balls?)\s+(?:holders?|racks?|stands?|displays?|storage)\b|\b(?:holders?|racks?|stands?|displays?|storage)\b.{0,40}\b(?:baseballs?|softballs?|balls?)\b/i;
 const GLOVE_ACCESSORY_PATTERN = /\b(?:glove|mitt)\s+(?:laces?|repair\s+kits?|care|accessor(?:y|ies)|conditioner|mallets?|wraps?)\b|\b(?:laces?|repair\s+kits?|accessor(?:y|ies))\b.{0,20}\b(?:glove|mitt)\b/i;
+const BAT_ACCESSORY_PATTERN = /\b(?:baseball\s+|softball\s+)?bats?\b.{0,24}\b(?:holders?|racks?|organizers?|stands?|hangers?|displays?|storage|grip\s+(?:tapes?|wraps?))\b|\b(?:holders?|racks?|organizers?|stands?|hangers?|displays?)\b.{0,24}\b(?:baseball\s+|softball\s+)?bats?\b|\bgrip\s+(?:tapes?|wraps?)\b.{0,24}\b(?:baseball\s+|softball\s+)?bats?\b/i;
+const BIKE_ACCESSORY_PATTERN = /\b(?:mountain\s+|road\s+|gravel\s+|bmx\s+)?(?:bikes?|bicycles?)\b.{0,24}\b(?:pedals?|grips?|pegs?|pumps?|tires?|tyres?|tubes?|wheels?|racks?|helmets?|replacement\s+parts?|parts?)\b|\b(?:pedals?|grips?|pegs?|pumps?|tires?|tyres?|tubes?|wheels?|racks?|helmets?|replacement\s+parts?|parts?)\b.{0,24}\b(?:mountain\s+|road\s+|gravel\s+|bmx\s+)?(?:bikes?|bicycles?)\b/i;
+const GOAL_HOOP_ACCESSORY_PATTERN = /\b(?:soccer\s+|hockey\s+)?goal\s+(?:shooting\s+)?targets?\b|\b(?:shooting\s+)?targets?\b.{0,24}\b(?:soccer\s+|hockey\s+)?goals?\b|\bbasketball\s+hoop\s+(?:weights?|sandbags?)\b|\b(?:hoop|goal)\s+(?:replacement\s+)?weights?\b|\bsandbag\s+covers?\b/i;
+const BALL_NOVELTY_REFERENCE_PATTERN = /\b(?:stadium\s+)?horns?\b|\bnoisemakers?\b|\bsoccer\s+ball\s+party\b/i;
 const BASEBALL_CATEGORY_NEGATIVE_PATTERN = /\b(?:fast\s*pitch|slow\s*pitch|softballs?)\b/i;
 const BASEBALL_BALL_NEGATIVE_PATTERN = /\b(?:fast\s*pitch|slow\s*pitch|softballs?)\b|\b(?:weighted|limited[ -]?flight|pitching[ -]?machine|dimpled|training\s+aid)\b|\b(?:ball|baseball|softball)\s+(?:bucket|container|caddy|carrier|tote)\b/i;
+const SOFTBALL_BALL_FORM_NEGATIVE_PATTERN = /\b(?:fielders?|catchers?)['’]?\s*(?:masks?|mitts?|gear)|\b(?:masks?|helmets?|gloves?|mitts?|bats?|grips?|holders?|racks?|stands?|accessor(?:y|ies)|training\s+aids?|training\s+balls?)\b/i;
 
 // Specific equipment rules precede ball rules deliberately. A bare sport name
 // is never a ball signal. These rules only create read-only audit proposals.
 const CROSS_SPORT_EVIDENCE_RULES: readonly EvidenceRule[] = [
   { sportId: "baseball", equipmentTypeId: "bb-cleats", family: "cleats", priority: 100, titlePattern: /\bbaseball\s+(?:cleats?|spikes?)\b/i, structuredPattern: /\b(?:baseball.{0,30}(?:cleats?|spikes?|footwear)|(?:cleats?|spikes?|footwear).{0,30}baseball)\b/i },
-  { sportId: "fastpitch-softball", equipmentTypeId: "fp-protective", family: "protective-equipment", priority: 130, titlePattern: /\bfast\s*pitch\b.{0,40}\b(?:catcher(?:'s)?\s+(?:gear|kit|set|helmet)|protective\s+equipment)\b|\bjen\s+schro\b.{0,60}\bsoftball\s+catcher(?:'s)?\s+gear\b/i, structuredPattern: /\bfast\s*pitch.{0,30}(?:protective|catcher|helmet|gear)\b/i, negative: MIXED_BASEBALL_SOFTBALL_TITLE_PATTERN },
+  { sportId: "fastpitch-softball", equipmentTypeId: "fp-protective", family: "protective-equipment", priority: 130, titlePattern: /\bfast\s*pitch\b.{0,50}\b(?:catchers?(?:['’]s?)?\s+(?:gear|kit|set|helmet)|fielders?(?:['’]s?)?\s+mask|protective\s+equipment)\b|\bjen\s+schro\b.{0,60}\bsoftball\s+catchers?(?:['’]s?)?\s+gear\b/i, structuredPattern: /\bfast\s*pitch.{0,30}(?:protective|catcher|fielder|helmet|mask|gear)\b/i, negative: MIXED_BASEBALL_SOFTBALL_TITLE_PATTERN },
   { sportId: "fastpitch-softball", equipmentTypeId: "fp-gloves", family: "fielding-glove", priority: 130, titlePattern: /\bfast\s*pitch\b.{0,50}\b(?:fielding\s+)?(?:gloves?|mitts?)\b|\b(?:fielding\s+)?(?:gloves?|mitts?)\b.{0,50}\bfast\s*pitch\b/i, structuredPattern: /\bfast\s*pitch.{0,30}(?:fielding\s+)?(?:gloves?|mitts?)\b/i, negative: /\b(?:batting|laces?|repair\s+kits?|accessor(?:y|ies))\b|\bbaseball\s*(?:\/|&|\+|and)\s*softball\b/i },
-  { sportId: "fastpitch-softball", equipmentTypeId: "fp-balls", family: "ball", priority: 120, titlePattern: /\bfast\s*pitch\b.{0,30}\bsoftballs?\b|\bsoftballs?\b.{0,30}\bfast\s*pitch\b/i, structuredPattern: /\bfast\s*pitch.{0,30}(?:softballs?|balls?)\b/i, negative: /\b(?:weighted|limited[ -]?flight|pitching[ -]?machine|training\s+aid|ball\s+bucket)\b|\bbaseball\s*(?:\/|&|\+|and)\s*softball\b/i },
-  { sportId: "slowpitch-softball", equipmentTypeId: "sp-protective", family: "protective-equipment", priority: 130, titlePattern: /\bslow\s*pitch\b.{0,40}\b(?:catcher(?:'s)?\s+(?:gear|kit|set|helmet)|protective\s+equipment)\b/i, structuredPattern: /\bslow\s*pitch.{0,30}(?:protective|catcher|helmet|gear)\b/i, negative: MIXED_BASEBALL_SOFTBALL_TITLE_PATTERN },
+  { sportId: "fastpitch-softball", equipmentTypeId: "fp-training", family: "training-equipment", priority: 125, titlePattern: /\bfast\s*pitch\b.{0,40}\btraining\s+(?:softballs?|balls?)\b|\btraining\s+(?:softballs?|balls?)\b.{0,40}\bfast\s*pitch\b/i, structuredPattern: /\bfast\s*pitch.{0,30}training\s+(?:softballs?|balls?)\b/i, negative: MIXED_BASEBALL_SOFTBALL_TITLE_PATTERN },
+  { sportId: "fastpitch-softball", equipmentTypeId: "fp-balls", family: "ball", priority: 120, titlePattern: /\bfast\s*pitch\b.{0,40}\b(?:softballs|balls?)\b|\b(?:softballs|balls?)\b.{0,40}\bfast\s*pitch\b/i, structuredPattern: /\bfast\s*pitch.{0,30}\b(?:softballs|balls?)\b/i, negative: SOFTBALL_BALL_FORM_NEGATIVE_PATTERN },
+  { sportId: "slowpitch-softball", equipmentTypeId: "sp-protective", family: "protective-equipment", priority: 130, titlePattern: /\bslow\s*pitch\b.{0,50}\b(?:catchers?(?:['’]s?)?\s+(?:gear|kit|set|helmet)|fielders?(?:['’]s?)?\s+mask|protective\s+equipment)\b/i, structuredPattern: /\bslow\s*pitch.{0,30}(?:protective|catcher|fielder|helmet|mask|gear)\b/i, negative: MIXED_BASEBALL_SOFTBALL_TITLE_PATTERN },
   { sportId: "slowpitch-softball", equipmentTypeId: "sp-gloves", family: "fielding-glove", priority: 130, titlePattern: /\bslow\s*pitch\b.{0,50}\b(?:fielding\s+)?(?:gloves?|mitts?)\b|\b(?:fielding\s+)?(?:gloves?|mitts?)\b.{0,50}\bslow\s*pitch\b/i, structuredPattern: /\bslow\s*pitch.{0,30}(?:fielding\s+)?(?:gloves?|mitts?)\b/i, negative: /\b(?:batting|laces?|repair\s+kits?|accessor(?:y|ies))\b|\bbaseball\s*(?:\/|&|\+|and)\s*softball\b/i },
-  { sportId: "slowpitch-softball", equipmentTypeId: "sp-balls", family: "ball", priority: 120, titlePattern: /\bslow\s*pitch\b.{0,30}\bsoftballs?\b|\bsoftballs?\b.{0,30}\bslow\s*pitch\b/i, structuredPattern: /\bslow\s*pitch.{0,30}(?:softballs?|balls?)\b/i, negative: /\b(?:weighted|limited[ -]?flight|pitching[ -]?machine|training\s+aid|ball\s+bucket)\b|\bbaseball\s*(?:\/|&|\+|and)\s*softball\b/i },
+  { sportId: "slowpitch-softball", equipmentTypeId: "sp-training", family: "training-equipment", priority: 125, titlePattern: /\bslow\s*pitch\b.{0,40}\btraining\s+(?:softballs?|balls?)\b|\btraining\s+(?:softballs?|balls?)\b.{0,40}\bslow\s*pitch\b/i, structuredPattern: /\bslow\s*pitch.{0,30}training\s+(?:softballs?|balls?)\b/i, negative: MIXED_BASEBALL_SOFTBALL_TITLE_PATTERN },
+  { sportId: "slowpitch-softball", equipmentTypeId: "sp-balls", family: "ball", priority: 120, titlePattern: /\bslow\s*pitch\b.{0,40}\b(?:softballs|balls?)\b|\b(?:softballs|balls?)\b.{0,40}\bslow\s*pitch\b/i, structuredPattern: /\bslow\s*pitch.{0,30}\b(?:softballs|balls?)\b/i, negative: SOFTBALL_BALL_FORM_NEGATIVE_PATTERN },
   { sportId: "baseball", equipmentTypeId: "bb-protective", family: "protective-equipment", priority: 100, titlePattern: /\bbaseball\b.{0,40}\b(?:helmet|facemask|catcher(?:'s)?\s+(?:gear|kit|set)|chest\s+protector|leg\s+guards?)\b|\b(?:helmet|facemask|catcher(?:'s)?\s+(?:gear|kit|set)|chest\s+protector|leg\s+guards?)\b.{0,40}\bbaseball\b/i, structuredPattern: /\bbaseball.{0,30}(?:protective|helmet|facemask|catcher|chest protector|leg guards?)\b/i, negative: BASEBALL_CATEGORY_NEGATIVE_PATTERN },
   { sportId: "baseball", equipmentTypeId: "bb-training", family: "training-equipment", priority: 110, titlePattern: /\bbaseball\b.{0,40}\b(?:pitching\s+machine|training\s+(?:aid|net|balls?)|weighted\s+balls?|limited[ -]?flight\s+balls?|dimpled\s+balls?)\b|\b(?:weighted|limited[ -]?flight|pitching[ -]?machine|dimpled)\b.{0,24}\bbaseballs?\b|\bbatting\s+tee\b/i, structuredPattern: /\bbaseball.{0,30}(?:training|pitching machine|batting tee|weighted ball|limited flight)\b/i, negative: BASEBALL_CATEGORY_NEGATIVE_PATTERN },
   { sportId: "fastpitch-softball", equipmentTypeId: "fp-bats", family: "bat", priority: 100, titlePattern: /\bfast\s*pitch\b.*\bbats?\b|\bbats?\b.*\bfast\s*pitch\b/i, structuredPattern: /\bfast\s*pitch.{0,30}\bbats?\b|\bbats?.{0,30}\bfast\s*pitch\b/i },
@@ -270,21 +277,21 @@ const CROSS_SPORT_EVIDENCE_RULES: readonly EvidenceRule[] = [
   { sportId: "golf", equipmentTypeId: "golf-wedges", family: "wedge", priority: 90, titlePattern: /\bgolf\s+wedge\b|\bwedge\s+(?:48|50|52|54|56|58|60)\b/i, structuredPattern: /\bgolf.{0,20}wedges?\b|\bwedges?.{0,20}golf\b/i },
   { sportId: "golf", equipmentTypeId: "golf-putters", family: "putter", priority: 90, titlePattern: /\bgolf\s+putter\b|\bputter\s+\d{2}(?:\.|\s|\")/i, structuredPattern: /\bgolf.{0,20}putters?\b|\bputters?.{0,20}golf\b/i, negative: /cover|headcover/i },
   { sportId: "basketball", equipmentTypeId: "bk-shoes-apparel", family: "footwear", priority: 100, titlePattern: /\bbasketball\s+(?:shoes?|sneakers?)\b|\b(?:shoes?|sneakers?)\b.{0,20}\bbasketball\b/i, structuredPattern: /\bbasketball.{0,30}(?:shoes?|footwear)\b|\b(?:shoes?|footwear).{0,30}basketball\b/i },
-  { sportId: "basketball", equipmentTypeId: "bk-hoops-nets", family: "hoops-nets", priority: 100, titlePattern: /\bbasketball\s+(?:hoop|goal|net|rim|backboard)\b/i, structuredPattern: /\bbasketball.{0,30}(?:hoops?|goals?|nets?|rims?|backboards?)\b/i },
+  { sportId: "basketball", equipmentTypeId: "bk-hoops-nets", family: "hoops-nets", priority: 100, titlePattern: /\bbasketball\s+(?:hoop|goal|net|rim|backboard)\b/i, structuredPattern: /\bbasketball.{0,30}(?:hoops?|goals?|nets?|rims?|backboards?)\b/i, negative: GOAL_HOOP_ACCESSORY_PATTERN },
   { sportId: "football", equipmentTypeId: "fb-protective", family: "protective-equipment", priority: 100, titlePattern: /\bfootball\s+(?:helmet|facemask|face\s*mask|shoulder\s+pads?|mouthguard)\b/i, structuredPattern: /\bfootball.{0,30}(?:protective|helmets?|facemasks?|face masks?|shoulder pads?|mouthguards?)\b/i },
-  { sportId: "soccer", equipmentTypeId: "soc-nets", family: "nets", priority: 100, titlePattern: /\bsoccer\s+(?:goal|net)\b/i, structuredPattern: /\bsoccer.{0,20}(?:goals?|nets?)\b/i },
+  { sportId: "soccer", equipmentTypeId: "soc-nets", family: "nets", priority: 100, titlePattern: /\bsoccer\s+(?:goal|net)\b/i, structuredPattern: /\bsoccer.{0,20}(?:goals?|nets?)\b/i, negative: GOAL_HOOP_ACCESSORY_PATTERN },
   { sportId: "lacrosse", equipmentTypeId: "lax-sticks", family: "stick", priority: 90, titlePattern: /\blacrosse\s+(?:stick|head|shaft)\b/i, structuredPattern: /\blacrosse.{0,20}(?:sticks?|heads?|shafts?)\b/i },
   { sportId: "hockey", equipmentTypeId: "hk-sticks", family: "stick", priority: 90, titlePattern: /\bhockey\s+stick\b/i, structuredPattern: /\bhockey.{0,20}sticks?\b/i },
   { sportId: "hockey", equipmentTypeId: "hk-skates", family: "skates", priority: 90, titlePattern: /\bhockey\s+skates?\b/i, structuredPattern: /\bhockey.{0,20}skates?\b/i },
   { sportId: "fishing", equipmentTypeId: "fish-rods", family: "rod", priority: 90, titlePattern: /\bfishing\s+rod\b/i, structuredPattern: /\bfishing.{0,20}rods?\b/i },
   { sportId: "fishing", equipmentTypeId: "fish-reels", family: "reel", priority: 90, titlePattern: /\b(?:fishing|spinning|baitcasting)\s+reel\b/i, structuredPattern: /\bfishing.{0,20}reels?\b|\breels?.{0,20}fishing\b/i },
-  { sportId: "cycling", equipmentTypeId: "cyc-bikes", family: "bike", priority: 90, titlePattern: /\b(?:road|mountain|gravel|bmx)\s+(?:bike|bicycle)\b/i, structuredPattern: /\bcycling.{0,20}(?:bikes?|bicycles?)\b/i },
+  { sportId: "cycling", equipmentTypeId: "cyc-bikes", family: "bike", priority: 90, titlePattern: /\b(?:road|mountain|gravel|bmx)\s+(?:bike|bicycle)\b/i, structuredPattern: /\bcycling.{0,20}(?:bikes?|bicycles?)\b/i, negative: BIKE_ACCESSORY_PATTERN },
   { sportId: "swimming", equipmentTypeId: "swim-goggles", family: "goggles", priority: 90, titlePattern: /\bswim(?:ming)?\s+goggles?\b/i, structuredPattern: /\bswim(?:ming)?.{0,20}goggles?\b/i },
   { sportId: "running", equipmentTypeId: "run-shoes", family: "shoes", priority: 70, titlePattern: /\brunning\s+shoes?\b/i, structuredPattern: /\brunning.{0,20}(?:shoes?|footwear)\b/i, negative: /basketball|baseball|football|soccer|tennis|volleyball|wrestling/i },
   { sportId: "baseball", equipmentTypeId: "bb-balls", family: "ball", priority: 20, titlePattern: /\bbaseballs\b|\bbaseball\s+balls?\b|\bbaseball\b.{0,24}\b(?:dozen|pack\s+of\s+\d+)\b|\b(?:dozen|pack\s+of\s+\d+)\b.{0,24}\bbaseball\b/i, structuredPattern: /\bbaseball.{0,30}balls?\b|\bballs?.{0,30}baseball\b/i, negative: BASEBALL_BALL_NEGATIVE_PATTERN },
   { sportId: "basketball", equipmentTypeId: "bk-balls", family: "ball", priority: 20, titlePattern: /\bbasketballs\b|\bbasketball\s+balls?\b|\b(?:official|game|indoor|outdoor|composite|leather)\s+(?:game\s+)?basketball\b/i, structuredPattern: /\bbasketball.{0,30}balls?\b|\bballs?.{0,30}basketball\b/i },
   { sportId: "football", equipmentTypeId: "fb-balls", family: "ball", priority: 20, titlePattern: /\bfootballs\b|\bfootball\s+balls?\b|\b(?:official|game|composite|leather)\s+(?:game\s+)?football\b|\bfootball\b.{0,16}\bsize\s*(?:9|youth|junior)\b/i, structuredPattern: /\bfootball.{0,30}balls?\b|\bballs?.{0,30}football\b/i, negative: /soccer|fifa|uefa|world\s+cup|premier\s+league|bundesliga|boots?|facemasks?|helmets?|jerseys?|cleats?|gloves?/i },
-  { sportId: "soccer", equipmentTypeId: "soc-balls", family: "ball", priority: 20, titlePattern: /\bsoccer\s+balls?\b/i, structuredPattern: /\bsoccer.{0,20}balls?\b|\bballs?.{0,20}soccer\b/i },
+  { sportId: "soccer", equipmentTypeId: "soc-balls", family: "ball", priority: 20, titlePattern: /\bsoccer\s+balls?\b/i, structuredPattern: /\bsoccer.{0,20}balls?\b|\bballs?.{0,20}soccer\b/i, negative: BALL_NOVELTY_REFERENCE_PATTERN },
   { sportId: "volleyball", equipmentTypeId: "vb-balls", family: "ball", priority: 20, titlePattern: /\bvolleyballs\b|\bvolleyball\s+balls?\b|\b(?:official|game|indoor|outdoor)\s+volleyball\b/i, structuredPattern: /\bvolleyball.{0,20}balls?\b|\bballs?.{0,20}volleyball\b/i, negative: /shoe|jersey|net|knee/i },
   { sportId: "rugby", equipmentTypeId: "rug-balls", family: "ball", priority: 20, titlePattern: /\brugby\s+balls?\b/i, structuredPattern: /\brugby.{0,20}balls?\b|\bballs?.{0,20}rugby\b/i },
 ] as const;
@@ -390,10 +397,14 @@ const BASEBALL_GLOVE_AUDIT_NEGATIVE_PATTERN = /\b(?:fast\s*pitch|slow\s*pitch|so
 const PROTECTED_EQUIPMENT_PATTERNS: ReadonlyArray<{ family: string; pattern: RegExp }> = [
   { family: "apparel", pattern: /\b(?:jerseys?|t[ -]?shirts?|shirts?|hoodies?|sweatshirts?|shorts?|pants?|socks?|hats?|caps?|beanies?|apparel|uniforms?)\b/i },
   { family: "footwear", pattern: /\b(?:shoes?|cleats?|spikes?|boots?|sneakers?|footwear)\b/i },
-  { family: "protective-equipment", pattern: /\b(?:helmets?|facemasks?|face\s*masks?|shoulder\s+pads?|chest\s+protectors?|leg\s+guards?|shin\s+guards?|mouthguards?)\b/i },
+  { family: "protective-equipment", pattern: /\b(?:helmets?|facemasks?|face\s*masks?|fielders?(?:['’]s?)?\s+masks?|shoulder\s+pads?|chest\s+protectors?|leg\s+guards?|shin\s+guards?|mouthguards?)\b/i },
   { family: "glove-accessory", pattern: GLOVE_ACCESSORY_PATTERN },
+  { family: "bat-accessory", pattern: BAT_ACCESSORY_PATTERN },
   { family: "ball-container", pattern: BALL_CONTAINER_PATTERN },
   { family: "training-aid", pattern: TRAINING_BALL_FORM_PATTERN },
+  { family: "bike-accessory", pattern: BIKE_ACCESSORY_PATTERN },
+  { family: "goal-hoop-accessory", pattern: GOAL_HOOP_ACCESSORY_PATTERN },
+  { family: "novelty-accessory", pattern: BALL_NOVELTY_REFERENCE_PATTERN },
   { family: "bag", pattern: /\b(?:bat\s+bags?|bags?|backpacks?|duffels?|totes?|wheeled\s+bags?)\b/i },
   { family: "glove", pattern: /\b(?:gloves?|mitts?)\b/i },
   { family: "bat", pattern: /\bbats?\b/i },
@@ -420,7 +431,7 @@ const COMPATIBLE_PROTECTED_FAMILIES: Record<string, ReadonlySet<string>> = {
   footwear: new Set(["footwear"]),
   "fielding-glove": new Set(["glove"]),
   "bat bag equipment bag": new Set(["bag", "bat"]),
-  "equipment care and accessories": new Set(["glove-accessory", "glove"]),
+  "equipment care and accessories": new Set(["glove-accessory", "bat-accessory", "glove", "bat"]),
   "protective equipment": new Set(["protective-equipment"]),
   "protective-equipment": new Set(["protective-equipment"]),
   "hoop and net": new Set(["nets-hoops"]),
@@ -496,6 +507,18 @@ function equipmentFamilyConflictsWithTitle(
   return false;
 }
 
+function hasCredibleSoftballBatDimensions(title: string, pitch: "fast" | "slow"): boolean {
+  const pitchPattern = pitch === "fast" ? /\bfast\s*pitch\b/i : /\bslow\s*pitch\b/i;
+  if (!pitchPattern.test(title)) return false;
+
+  // Regulation youth/adult bat lengths are deliberately bounded away from
+  // common 11-inch, 12-inch, and 16-inch softball diameters.
+  const hasBatLength = /\b(?:2[6-9]|3[0-5])(?:\.\d+)?\s*(?:"|in(?:ch(?:es)?)?)(?!\w)/i.test(title);
+  const hasBatWeight = /\b(?:1[5-9]|2\d|3[01])(?:\.\d+)?\s*(?:oz|ounces?)\b/i.test(title);
+  const hasBatConstruction = /\b(?:drop\s*-?\s*\d+|alloy|composite|barrel)\b|(?:^|\s)-\s*\d{1,2}\b/i.test(title);
+  return hasBatLength && hasBatWeight && hasBatConstruction;
+}
+
 function collectDirectEvidence(deal: AuditDealRow, source?: AuditSourceRow): Map<string, CandidateEvidence> {
   const candidates = new Map<string, CandidateEvidence>();
   const titleAndBrand = `${deal.title} ${deal.brand ?? ""}`;
@@ -516,11 +539,26 @@ function collectDirectEvidence(deal: AuditDealRow, source?: AuditSourceRow): Map
     sportId: "baseball", equipmentTypeId: CANONICAL_BASEBALL_BAT_ID, family: "bat", priority: 120,
   };
   if (!BASEBALL_BAT_AUDIT_NEGATIVE_PATTERN.test(deal.title)
+      && !BAT_ACCESSORY_PATTERN.test(deal.title)
       && BASEBALL_BAT_AUDIT_TITLE_PATTERN.test(titleAndBrand)) {
     addTitle(baseballBat, "specific Baseball bat title/model evidence");
   }
-  if (!BASEBALL_BAT_AUDIT_NEGATIVE_PATTERN.test(deal.title)) {
+  if (!BASEBALL_BAT_AUDIT_NEGATIVE_PATTERN.test(deal.title)
+      && !BAT_ACCESSORY_PATTERN.test(deal.title)) {
     addStructured(baseballBat, BASEBALL_BAT_AUDIT_STRUCTURED_PATTERN);
+  }
+
+  if (hasCredibleSoftballBatDimensions(deal.title, "fast")) {
+    addTitle({
+      sportId: "fastpitch-softball", equipmentTypeId: "fp-bats",
+      family: "bat", priority: 135,
+    }, "fastpitch designation plus credible bat length, weight, and construction evidence");
+  }
+  if (hasCredibleSoftballBatDimensions(deal.title, "slow")) {
+    addTitle({
+      sportId: "slowpitch-softball", equipmentTypeId: "sp-bats",
+      family: "bat", priority: 135,
+    }, "slowpitch designation plus credible bat length, weight, and construction evidence");
   }
 
   const baseballGlove = {

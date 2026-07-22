@@ -177,6 +177,148 @@ function phase12Fixture(deals: TaxonomyAuditDataset["deals"]): TaxonomyAuditData
   };
 }
 
+function phase13Fixture(deals: TaxonomyAuditDataset["deals"]): TaxonomyAuditDataset {
+  const base = phase12Fixture(deals);
+  return {
+    ...base,
+    sports: [
+      ...base.sports,
+      { id: "cycling", name: "Cycling", userCreated: false },
+      { id: "soccer", name: "Soccer", userCreated: false },
+    ],
+    equipmentTypes: [
+      ...base.equipmentTypes,
+      { id: "cyc-bikes", name: "Bicycles", sportId: "cycling", userCreated: false },
+      { id: "cyc-other", name: "Other", sportId: "cycling", userCreated: false },
+      { id: "soc-balls", name: "Balls", sportId: "soccer", userCreated: false },
+      { id: "soc-nets", name: "Nets", sportId: "soccer", userCreated: false },
+      { id: "soc-other", name: "Other", sportId: "soccer", userCreated: false },
+    ],
+  };
+}
+
+test("bat holders, racks, organizers, and grip products do not become Bats", () => {
+  const report = buildTaxonomyAuditReport(phase13Fixture([
+    { id: "bat-holder", sourceId: "ebay", title: "Heavy Duty Baseball Bat Holder - Wall Mounted Dugout Rack for 14 Bats", sportId: "baseball", equipmentTypeId: "bb-other" },
+    { id: "bat-rack-organizer", sourceId: "ebay", title: "Baseball Bat Rack Organizer for Dugout", sportId: "baseball", equipmentTypeId: "bb-other" },
+    { id: "bulk-grip-wrap", sourceId: "ebay", title: "40 Bat Grip Tape 1.75mm Soft Non Slip Baseball Bat Grip Wrap", sportId: "baseball", equipmentTypeId: "bb-other" },
+    { id: "pushglossy-grips", sourceId: "ebay", title: "Pushglossy Baseball Bat Grip Tapes", sportId: "baseball", equipmentTypeId: "bb-other" },
+    { id: "horizontal-rack", sourceId: "ebay", title: "Baseball Bat Horizontal Rack", sportId: "baseball", equipmentTypeId: "bb-other" },
+    { id: "bat-grip-tape", sourceId: "ebay", title: "Baseball Bat Grip Tape", sportId: "baseball", equipmentTypeId: "bb-other" },
+    { id: "new-grip-bat", sourceId: "ebay", title: "Easton Hype Fire 27/17 USSSA Baseball Bat New Grip", sportId: "baseball", equipmentTypeId: "bb-other" },
+    { id: "bad-grip-bat", sourceId: "ebay", title: "Louisville Slugger Supra 27/17 Baseball Bat Bad Grip", sportId: "baseball", equipmentTypeId: "bb-other" },
+    { id: "grip-brand-bat", sourceId: "ebay", title: "Marucci CATX BBCOR Baseball Bat with Lizard Skins Grip", sportId: "baseball", equipmentTypeId: "bb-other" },
+  ]));
+
+  for (const id of [
+    "bat-holder", "bat-rack-organizer", "bulk-grip-wrap",
+    "pushglossy-grips", "horizontal-rack",
+  ]) {
+    const correction = correctionFor(report, id);
+    assert.equal(correction?.status, "pending", id);
+    assert.equal(correction?.outcome, "ambiguous-evidence", id);
+    assert.equal(correction?.proposedCanonicalEquipmentTypeId, null, id);
+  }
+  const gripTapeOnly = buildTaxonomyAuditReport(phase13Fixture([
+    { id: "bat-grip-tape", sourceId: "ebay", title: "Baseball Bat Grip Tape", sportId: "baseball", equipmentTypeId: "bb-other" },
+  ]));
+  assert.equal(correctionFor(gripTapeOnly, "bat-grip-tape")?.status, "pending");
+  assert.equal(correctionFor(gripTapeOnly, "bat-grip-tape")?.outcome, "ambiguous-evidence");
+  assert.equal(correctionFor(gripTapeOnly, "bat-grip-tape")?.proposedCanonicalEquipmentTypeId, null);
+  for (const id of ["new-grip-bat", "bad-grip-bat", "grip-brand-bat"]) {
+    assert.equal(correctionFor(report, id)?.proposedCanonicalEquipmentTypeId, "bb-bats", id);
+  }
+});
+
+test("softball product form distinguishes protective gear, bats, balls, and training equipment", () => {
+  const report = buildTaxonomyAuditReport(phase13Fixture([
+    { id: "rawlings-mask", sourceId: "ebay", title: "Rawlings HIVIZ Fast Pitch Softball Fielders' Mask", sportId: "fastpitch-softball", equipmentTypeId: "fp-balls" },
+    { id: "rawlings-mask-curly", sourceId: "ebay", title: "Rawlings HIVIZ Fast Pitch Softball Fielders’ Mask", sportId: "fastpitch-softball", equipmentTypeId: "fp-balls" },
+    { id: "easton-dimensioned-bat", sourceId: "ebay", title: "Easton Stealth Clarity SSR1B VCT Composite Fastpitch Softball 33\" 23oz -10", sportId: "fastpitch-softball", equipmentTypeId: "fp-balls" },
+    { id: "miken-dimensioned-bat", sourceId: "ebay", title: "Miken Maniac Slowpitch Softball 34in 27oz Alloy", sportId: "slowpitch-softball", equipmentTypeId: "sp-balls" },
+    { id: "eleven-inch-softball", sourceId: "ebay", title: "Rawlings Fastpitch Softball 11 inch", sportId: "fastpitch-softball", equipmentTypeId: "fp-other" },
+    { id: "twelve-inch-softball", sourceId: "ebay", title: "Wilson Fastpitch Softball 12 inch", sportId: "fastpitch-softball", equipmentTypeId: "fp-other" },
+    { id: "sixteen-inch-softball", sourceId: "ebay", title: "DeMarini Slowpitch Softball 16 inch", sportId: "slowpitch-softball", equipmentTypeId: "sp-other" },
+    { id: "generic-fastpitch-structured", sourceId: "ebay", title: "Easton Fastpitch Softball Equipment", sportId: "fastpitch-softball", equipmentTypeId: "fp-other", raw: { productType: "Fastpitch Softball" } },
+    { id: "training-softballs", sourceId: "ebay", title: "Fastpitch Softball Training Balls", sportId: "fastpitch-softball", equipmentTypeId: "fp-balls" },
+  ]));
+
+  for (const id of ["rawlings-mask", "rawlings-mask-curly"]) {
+    const correction = correctionFor(report, id);
+    assert.notEqual(correction?.proposedCanonicalEquipmentTypeId, "fp-balls", id);
+    assert.equal(correction?.proposedCanonicalEquipmentTypeId, "fp-protective", id);
+  }
+  assert.equal(correctionFor(report, "easton-dimensioned-bat")?.proposedCanonicalEquipmentTypeId, "fp-bats");
+  assert.equal(correctionFor(report, "miken-dimensioned-bat")?.proposedCanonicalEquipmentTypeId, "sp-bats");
+  for (const id of ["eleven-inch-softball", "twelve-inch-softball", "sixteen-inch-softball"]) {
+    assert.ok(!["fp-bats", "sp-bats"].includes(
+      correctionFor(report, id)?.proposedCanonicalEquipmentTypeId ?? ""), id);
+  }
+  assert.notEqual(correctionFor(report, "generic-fastpitch-structured")?.proposedCanonicalEquipmentTypeId, "fp-balls");
+  assert.equal(correctionFor(report, "training-softballs")?.proposedCanonicalEquipmentTypeId, "fp-training");
+});
+
+test("ball containers, holders, novelty references, and training products do not become ordinary Balls", () => {
+  const report = buildTaxonomyAuditReport(phase13Fixture([
+    { id: "a1030-bucket", sourceId: "ebay", title: "Wilson Bucket Combo With 3 Dozen A1030B Baseballs", sportId: "baseball", equipmentTypeId: "bb-other" },
+    { id: "a1010-bucket", sourceId: "ebay", title: "Wilson Bucket Combo With 3 Dozen A1010S Blem Baseballs", sportId: "baseball", equipmentTypeId: "bb-other" },
+    { id: "practice-balls-bucket", sourceId: "ebay", title: "Official League Youth Baseballs Practice Balls Bucket", sportId: "baseball", equipmentTypeId: "bb-other" },
+    { id: "baseballs-bucket", sourceId: "ebay", title: "Official Baseballs Bucket", sportId: "baseball", equipmentTypeId: "bb-other" },
+    { id: "baseballs-with-bucket-phase13", sourceId: "ebay", title: "Official Baseballs With Bucket", sportId: "baseball", equipmentTypeId: "bb-other" },
+    { id: "ball-holder", sourceId: "ebay", title: "Small Hand-Sculptured Ball Holder & Stand", sportId: "baseball", equipmentTypeId: "bb-other", raw: { productType: "Baseball Balls" } },
+    { id: "stadium-horns", sourceId: "ebay", title: "Stadium Horns Noisemakers for Games Soccer Ball Party", sportId: "soccer", equipmentTypeId: "soc-other" },
+    { id: "fastpitch-training", sourceId: "ebay", title: "Fastpitch Softball Training Balls", sportId: "fastpitch-softball", equipmentTypeId: "fp-other" },
+  ]));
+
+  for (const id of [
+    "a1030-bucket", "a1010-bucket", "practice-balls-bucket", "baseballs-bucket",
+    "baseballs-with-bucket-phase13", "ball-holder", "stadium-horns",
+  ]) {
+    assert.ok(!["bb-balls", "fp-balls", "sp-balls", "soc-balls"].includes(
+      correctionFor(report, id)?.proposedCanonicalEquipmentTypeId ?? ""), id);
+  }
+  assert.equal(correctionFor(report, "fastpitch-training")?.proposedCanonicalEquipmentTypeId, "fp-training");
+});
+
+test("bicycle accessories stay pending while an actual bicycle remains eligible", () => {
+  const report = buildTaxonomyAuditReport(phase13Fixture([
+    { id: "bike-pedals", sourceId: "ebay", title: "Bell Kicks Mountain Bike Pedals", sportId: "cycling", equipmentTypeId: "cyc-other" },
+    { id: "bike-grips", sourceId: "ebay", title: "Bell Pump BMX Bicycle Grips", sportId: "cycling", equipmentTypeId: "cyc-other" },
+    { id: "bike-pegs", sourceId: "ebay", title: "Bell BMX Bike Pegs", sportId: "cycling", equipmentTypeId: "cyc-other" },
+    { id: "huffy-bicycle", sourceId: "ebay", title: "Huffy Granite Mountain Bicycle", sportId: "cycling", equipmentTypeId: "cyc-other" },
+  ]));
+
+  for (const id of ["bike-pedals", "bike-grips", "bike-pegs"]) {
+    const correction = correctionFor(report, id);
+    assert.equal(correction?.status, "pending", id);
+    assert.notEqual(correction?.proposedCanonicalEquipmentTypeId, "cyc-bikes", id);
+  }
+  assert.equal(correctionFor(report, "huffy-bicycle")?.proposedCanonicalEquipmentTypeId, "cyc-bikes");
+});
+
+test("goal and hoop accessories stay pending while genuine goals, hoops, rims, backboards, and nets remain eligible", () => {
+  const report = buildTaxonomyAuditReport(phase13Fixture([
+    { id: "goal-target", sourceId: "ebay", title: "Soccer Goal Target Silicone Hockey Shooting Targets", sportId: "soccer", equipmentTypeId: "soc-other" },
+    { id: "hoop-weight", sourceId: "ebay", title: "GoSports Basketball Hoop Weight All-Weather Sandbag Cover", sportId: "basketball", equipmentTypeId: "bk-other" },
+    { id: "soccer-goal", sourceId: "ebay", title: "Portable Soccer Goal Net", sportId: "soccer", equipmentTypeId: "soc-other" },
+    { id: "basketball-hoop-genuine", sourceId: "ebay", title: "Spalding Portable Basketball Hoop", sportId: "basketball", equipmentTypeId: "bk-other" },
+    { id: "basketball-rim", sourceId: "ebay", title: "Lifetime Basketball Rim", sportId: "basketball", equipmentTypeId: "bk-other" },
+    { id: "basketball-backboard", sourceId: "ebay", title: "Goalsetter Basketball Backboard", sportId: "basketball", equipmentTypeId: "bk-other" },
+    { id: "basketball-net", sourceId: "ebay", title: "Champion Sports Basketball Net", sportId: "basketball", equipmentTypeId: "bk-other" },
+  ]));
+
+  assert.notEqual(correctionFor(report, "goal-target")?.proposedCanonicalEquipmentTypeId, "soc-nets");
+  assert.notEqual(correctionFor(report, "hoop-weight")?.proposedCanonicalEquipmentTypeId, "bk-hoops-nets");
+  assert.equal(correctionFor(report, "goal-target")?.status, "pending");
+  assert.equal(correctionFor(report, "hoop-weight")?.status, "pending");
+  assert.equal(correctionFor(report, "soccer-goal")?.proposedCanonicalEquipmentTypeId, "soc-nets");
+  for (const id of [
+    "basketball-hoop-genuine", "basketball-rim", "basketball-backboard", "basketball-net",
+  ]) {
+    assert.equal(correctionFor(report, id)?.proposedCanonicalEquipmentTypeId, "bk-hoops-nets", id);
+  }
+});
+
 test("sport names never turn specific equipment into baseballs, basketballs, or footballs", () => {
   const report = buildTaxonomyAuditReport(hardeningFixture([
     { id: "baseball-apparel", sourceId: "ebay", title: "Marucci Script Adult Baseball Leadoff Hoodie", sportId: "baseball", equipmentTypeId: "bb-balls" },
