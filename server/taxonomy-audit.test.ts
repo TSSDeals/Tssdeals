@@ -202,6 +202,56 @@ test("high-confidence proposals require two independent compatible signals", () 
   assert.equal(correctionFor(report, "bat-bag")?.proposedCanonicalEquipmentTypeId, null);
 });
 
+test("generic structured glove values do not imply Baseball fielding gloves", () => {
+  const report = buildTaxonomyAuditReport(hardeningFixture([
+    { id: "golf-gloves", sourceId: "ebay", title: "Titleist Players Golf Gloves", sportId: "baseball", equipmentTypeId: "bb-other", raw: { productType: "Gloves" } },
+    { id: "boxing-gloves", sourceId: "ebay", title: "Everlast Elite Boxing Training Gloves", sportId: "baseball", equipmentTypeId: "bb-other", raw: { productType: "Gloves" } },
+    { id: "work-gloves", sourceId: "ebay", title: "Mechanix Wear Heavy Duty Work Gloves", sportId: "baseball", equipmentTypeId: "bb-other", raw: { productType: "Gloves" } },
+    { id: "winter-gloves", sourceId: "ebay", title: "Insulated Waterproof Winter Gloves", sportId: "baseball", equipmentTypeId: "bb-other", raw: { productType: "Gloves" } },
+    { id: "batting-gloves", sourceId: "ebay", title: "Franklin CFX Pro Baseball Batting Gloves", sportId: "baseball", equipmentTypeId: "bb-other", raw: { productType: "Gloves" } },
+  ]));
+
+  for (const id of ["golf-gloves", "boxing-gloves", "work-gloves", "winter-gloves", "batting-gloves"]) {
+    const correction = correctionFor(report, id);
+    assert.equal(correction?.status, "pending", id);
+    assert.equal(correction?.proposedCanonicalEquipmentTypeId, null, id);
+  }
+});
+
+test("generic structured bat values do not imply Baseball bats", () => {
+  const report = buildTaxonomyAuditReport(hardeningFixture([
+    { id: "cricket-bat", sourceId: "ebay", title: "Gray-Nicolls English Willow Cricket Bat", sportId: "baseball", equipmentTypeId: "bb-other", raw: { productType: "Bats" } },
+    { id: "fastpitch-bat", sourceId: "ebay", title: "Easton Ghost USSSA Fastpitch Bat", sportId: "baseball", equipmentTypeId: "bb-other", raw: { productType: "Bats" } },
+    { id: "slowpitch-bat", sourceId: "ebay", title: "Miken DC 41 USSSA Slowpitch Bat", sportId: "baseball", equipmentTypeId: "bb-other", raw: { productType: "Bats" } },
+  ]));
+
+  for (const id of ["cricket-bat", "fastpitch-bat", "slowpitch-bat"]) {
+    assert.notEqual(correctionFor(report, id)?.proposedCanonicalEquipmentTypeId, "bb-bats", id);
+  }
+  assert.equal(correctionFor(report, "cricket-bat")?.status, "pending");
+  assert.equal(correctionFor(report, "cricket-bat")?.proposedCanonicalEquipmentTypeId, null);
+  assert.equal(correctionFor(report, "fastpitch-bat")?.proposedCanonicalEquipmentTypeId, "fp-bats");
+  assert.equal(correctionFor(report, "slowpitch-bat")?.proposedCanonicalEquipmentTypeId, "sp-bats");
+});
+
+test("Baseball-specific structured bat and fielding-glove evidence remains eligible", () => {
+  const report = buildTaxonomyAuditReport(hardeningFixture([
+    { id: "valid-baseball-bat", sourceId: "ebay", title: "2026 Louisville Slugger Atlas BBCOR Baseball Bat", sportId: "baseball", equipmentTypeId: "bb-other", raw: { productType: "Baseball Bats" } },
+    { id: "valid-baseball-glove", sourceId: "ebay", title: "Wilson A2000 1786 11.5 Baseball Glove", sportId: "baseball", equipmentTypeId: "bb-other", raw: { productType: "Baseball Fielding Gloves" } },
+  ]));
+
+  for (const [id, destination] of [
+    ["valid-baseball-bat", "bb-bats"],
+    ["valid-baseball-glove", "bb-gloves"],
+  ] as const) {
+    const correction = correctionFor(report, id);
+    assert.equal(correction?.proposedCanonicalEquipmentTypeId, destination, id);
+    assert.equal(correction?.confidence, "high", id);
+    assert.equal(correction?.humanApprovalRequired, false, id);
+    assert.ok(correction?.evidence.some((item) => item.includes("structured productType")), id);
+  }
+});
+
 test("Fanatics apparel, collectibles, and memorabilia remain pending", () => {
   const report = buildTaxonomyAuditReport(hardeningFixture([
     { id: "fanatics-autograph", sourceId: "fanatics", title: "Riley Greene Detroit Tigers Autographed Baseball", sportId: "baseball", equipmentTypeId: "bb-other" },

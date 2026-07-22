@@ -353,8 +353,11 @@ interface EvidenceAssessment {
 }
 
 const BASEBALL_BAT_AUDIT_TITLE_PATTERN = /\b(?:baseball|tee[ -]?ball|t[ -]?ball)\s+bats?\b|\bbats?\b.{0,50}\b(?:bbcor|usssa|usa\s+baseball)\b|\b(?:bbcor|usssa|usa\s+baseball)\b.{0,50}\bbats?\b|\b(?:cat\s*x|hype[ -]?fire|(?:louisville(?:\s+slugger)?|ls)\s+supra|supra\s+(?:louisville(?:\s+slugger)?|ls))\b(?=.{0,80}(?:\b\d{2}\s*(?:\/|x)\s*\d{2}\b|\b(?:bbcor|usssa)\b|\bdrop\s*-?\s*\d+\b|-\d+\b))/i;
-const BASEBALL_BAT_AUDIT_STRUCTURED_PATTERN = /\b(?:baseball|bbcor|usssa|usa\s+baseball|youth).{0,30}\bbats?\b|\bbats?.{0,30}\b(?:baseball|bbcor|usssa|usa\s+baseball|youth)\b|^bats?$/i;
-const BASEBALL_GLOVE_AUDIT_STRUCTURED_PATTERN = /\bbaseball.{0,30}(?:fielding\s+)?(?:gloves?|mitts?)\b|\b(?:fielding|infield|outfield|pitcher|catcher).{0,20}(?:gloves?|mitts?)\b|^(?:gloves?|mitts?)$/i;
+// Generic retailer families such as "Bats", "Gloves", "Mitts", "Youth Bats",
+// or "Fielding Gloves" are sport-agnostic. Structured Baseball evidence must
+// name Baseball (or a Baseball-only certification) as well as the equipment.
+const BASEBALL_BAT_AUDIT_STRUCTURED_PATTERN = /\b(?:baseball|bbcor|usa\s+baseball).{0,30}\bbats?\b|\bbats?.{0,30}\b(?:baseball|bbcor|usa\s+baseball)\b/i;
+const BASEBALL_GLOVE_AUDIT_STRUCTURED_PATTERN = /\bbaseball.{0,30}(?:fielding\s+)?(?:gloves?|mitts?)\b|\b(?:fielding\s+)?(?:gloves?|mitts?).{0,30}\bbaseball\b/i;
 const BASEBALL_BAT_AUDIT_NEGATIVE_PATTERN = /\b(?:cricket|fast\s*pitch|slow\s*pitch|softball)\b/i;
 
 const PROTECTED_EQUIPMENT_PATTERNS: ReadonlyArray<{ family: string; pattern: RegExp }> = [
