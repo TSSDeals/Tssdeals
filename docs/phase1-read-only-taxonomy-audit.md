@@ -46,7 +46,9 @@ The JSON report contains:
 - orphaned sports, equipment parents, sub-filter parents, and deal assignments;
 - result grouping keys that render with the same UI label, including separate `Bats` keys;
 - deal correction cohorts grouped by proposed sport, equipment family, source, seller, current sport/equipment IDs, and proposed canonical ID;
+- a mutually exclusive outcome for each audited deal: proposed correction, genuine conflict requiring review, unresolved/Other, ambiguous evidence, or already compatible/no action;
 - evidence, reason, confidence, human-approval requirement, record count, and representative deal IDs/titles for every cohort;
+- compatible no-action records counted in the summary but deliberately excluded from correction groups and pending totals;
 - every unresolved/Other deal that lacks unique strong evidence as a low-confidence pending cohort rather than a guessed correction;
 - raw source-category values by source and raw-key coverage;
 - brand stored values and the current brand normalizer's proposed alias value;
@@ -67,6 +69,10 @@ Identifier consensus is emitted only when at least two distinct records have a v
 Fanatics apparel, collectibles, autographs, memorabilia, and other ambiguous merchandise remain pending. Generic `ball`, `bag`, `glove`, `driver`, sport, merchandise, or theme wording is not sufficient by itself.
 
 Null, orphaned, generic Other, numbered Other, and conflicting records without one unique strong destination remain low-confidence pending records. Phase 1 never converts a pending record into a proposed destination.
+
+Phase 1.2 adds product-form and sport-conflict precedence. Explicit fastpitch, slowpitch, or softball evidence blocks Baseball destinations. Mixed `Baseball/Softball` and `BB/SB` titles remain ambiguous pending records until a shared-category policy is approved. Ball buckets/containers, weighted or limited-flight balls, pitching-machine balls, training aids, glove laces, repair kits, and glove accessories cannot become ordinary Balls or fielding Gloves. Sport-specific training-ball evidence may produce a reviewable Training Equipment candidate; ambiguous and mixed forms remain pending.
+
+Stored taxonomy compatibility is now explicit rather than inferred from exact family-string equality. Canonical Shoes/Apparel, socks, shorts, bags, protective equipment, training equipment, Balls, Bats, Gloves, Cleats, and corresponding sport-owned categories are no-action when their stored sport/equipment owner and product evidence agree. Explicit sport or product-family conflicts still override compatibility.
 
 ## Ingestion and classification findings
 
@@ -99,6 +105,16 @@ Tests cover:
 - every inventoried assignment path pointing to a real source file.
 
 Phase 1.1 adds report-derived regressions for Baseball apparel, cleats, helmets, gloves, bags and bats; Basketball shoes and hoops; Football facemasks; FIFA/soccer-style football wording; Fanatics autographs, apparel and memorabilia; two-signal high-confidence gating; and agreeing, conflicting, or incorrectly classified identifier cohorts.
+
+Phase 1.2 adds production-report regressions for Easton Jen Schro and Wilson C200 fastpitch catcher gear, CIF-SS and Dream Seam softballs, a mixed Easton ball bucket, Play It Again weighted softball and `BB/SB` training aids, a Liberty Advanced fastpitch catcher's mitt, and a mixed glove-lace repair kit. It also covers canonical Golf, Running, Basketball, and Baseball no-action families plus Fanatics apparel, non-fielding gloves, and dedicated softball equipment that must remain genuine review conflicts.
+
+## Phase 1.2 production evidence and expected pending effect
+
+The supplied Phase 1.1 read-only report (`phase1.1-read-only-v2`, generated 2026-07-22T17:08:06.805Z) covered 179,972 deals. It reported 6,003 proposed records, 75,401 pending records, 40,090 records in Other, and zero high-confidence proposals. It was reviewed offline; this implementation did not connect to or rerun the production audit.
+
+The inflated pending population includes correctly stored cohorts whose labels did not match the audit's protected-family vocabulary, including Golf Shoes/Apparel, Running Socks and Shorts, Basketball Shoes/Apparel, and Baseball Bags, Protective Equipment, and Training Equipment. Phase 1.2 counts compatible stored records as `already-compatible-no-action` and omits them from correction groups and pending totals. The expected effect is a material pending-count reduction without converting those records into proposals. Exact production-wide after-counts are intentionally not claimed because the supplied report retains grouped representative examples rather than every deal's complete raw evidence, and production execution is outside this PR.
+
+An offline replay reconstructed the 16,271 unique representative examples retained in the supplied correction groups. The prior report labeled 1,405 of those examples proposed and 14,866 pending. Phase 1.2 classified 4,410 as compatible no-action, leaving 11,299 pending across conflict, unresolved, and ambiguous outcomes; 562 remained proposed corrections. This is directional evidence only: the reconstruction lacks the omitted production rows and raw retailer fields, so these sample counts must not be extrapolated into a production after-count.
 
 ## Phase 1.1 baseline and representative replay
 
