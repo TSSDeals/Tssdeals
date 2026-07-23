@@ -353,7 +353,7 @@ const RAW_FIELD_ALIASES = {
   ],
   seller: ["ebaySeller", "seller", "sellerName", "merchantName", "storeName", "advertiserName"],
   availability: [
-    "availability", "stockAvailability", "stockStatus", "inventoryStatus", "inventoryPolicy",
+    "availability", "stockAvailability", "stockStatus", "inventoryStatus", "inventoryPolicy", "wcInStock",
   ],
 } as const;
 
@@ -496,6 +496,18 @@ function availabilityFor(deal: AuditDealRow): {
   const observation = rawValues(deal.raw, "availability")[0];
   if (!observation) return { availability: "unknown", evidence: null };
   const normalized = normalizeText(observation.value);
+  if (/^(?:false|0|no)$/.test(normalized)) {
+    return {
+      availability: "unavailable",
+      evidence: `raw ${observation.field}: ${observation.value}`,
+    };
+  }
+  if (/^(?:true|1|yes)$/.test(normalized)) {
+    return {
+      availability: "available",
+      evidence: `raw ${observation.field}: ${observation.value}`,
+    };
+  }
   if (/\b(?:out of stock|unavailable|sold out|discontinued|inactive)\b/.test(normalized)) {
     return {
       availability: "unavailable",
@@ -1895,8 +1907,7 @@ function shopperVisibleFragmentationForCorrection(
   correction: DealCorrection,
   equipmentById: Map<string, AuditEquipmentRow>,
 ): boolean {
-  if (!correction.proposedEquipmentTypeId
-      || correction.deal.equipmentTypeId === correction.proposedEquipmentTypeId) return false;
+  if (!correction.proposedEquipmentTypeId) return false;
   const currentEquipment = correction.deal.equipmentTypeId
     ? equipmentById.get(correction.deal.equipmentTypeId) : undefined;
   if (isOther(correction.deal.equipmentTypeId, currentEquipment?.name)) return true;
@@ -1904,7 +1915,11 @@ function shopperVisibleFragmentationForCorrection(
     correction.deal.sportId,
     correction.deal.equipmentTypeId,
   );
-  return currentDisplayId === correction.proposedEquipmentTypeId;
+  const proposedDisplayId = canonicalResultEquipmentTypeId(
+    correction.proposedSportId,
+    correction.proposedEquipmentTypeId,
+  );
+  return currentDisplayId !== proposedDisplayId;
 }
 
 function buildTaxonomyReviewPacket(

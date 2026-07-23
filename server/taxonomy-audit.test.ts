@@ -948,6 +948,96 @@ test("review packet expands correction cohorts into prioritized per-deal exports
   assert.match(markdown, /1,283 proposed-correction records/);
 });
 
+test("review priority compares canonical shopper groups and reads wcInStock only", () => {
+  const base = phase14Fixture([
+    {
+      id: "legacy-glove-alias", sourceId: "ebay",
+      title: "Wilson A2000 1786 11.5 Baseball Glove",
+      sportId: "baseball", equipmentTypeId: "glove",
+      raw: { ebaySeller: "glove-seller", wcInStock: true },
+    },
+    {
+      id: "different-current-group", sourceId: "ebay",
+      title: "Wilson A2000 1786 11.5 Baseball Glove",
+      sportId: "baseball", equipmentTypeId: "bb-balls",
+      raw: { ebaySeller: "glove-seller", productType: "Baseball Gloves", wcInStock: false },
+    },
+    {
+      id: "other-to-canonical", sourceId: "ebay",
+      title: "Easton Hype Fire 27/17 USSSA Baseball Bat",
+      sportId: "baseball", equipmentTypeId: "bb-other",
+      raw: { ebaySeller: "bat-seller", productType: "Baseball Bats" },
+    },
+    {
+      id: "unrelated-boolean", sourceId: "ebay",
+      title: "Easton Premium Sporting Goods Item",
+      sportId: "baseball", equipmentTypeId: "bb-other",
+      raw: { ebaySeller: "mixed-seller", wcOnSale: true },
+    },
+  ]);
+  const report = buildTaxonomyAuditReport({
+    ...base,
+    equipmentTypes: [
+      ...base.equipmentTypes,
+      { id: "glove", name: "Glove", sportId: "baseball", userCreated: true },
+    ],
+  });
+
+  const byId = new Map([
+    ...report.reviewPacket.proposedCorrections,
+    ...report.reviewPacket.unresolvedManualReview,
+  ].map((record) => [record.dealId, record]));
+
+  const legacyAlias = byId.get("legacy-glove-alias");
+  assert.ok(legacyAlias);
+  assert.equal(legacyAlias.proposedCanonicalEquipmentTypeId, "bb-gloves");
+  assert.equal(legacyAlias.priority.shopperVisibleFragmentation, false);
+  assert.equal(legacyAlias.availability, "available");
+  assert.match(legacyAlias.availabilityEvidence ?? "", /wcInStock: true/);
+
+  const differentGroup = byId.get("different-current-group");
+  assert.ok(differentGroup);
+  assert.equal(differentGroup.proposedCanonicalEquipmentTypeId, "bb-gloves");
+  assert.equal(differentGroup.priority.shopperVisibleFragmentation, true);
+  assert.equal(differentGroup.availability, "unavailable");
+  assert.match(differentGroup.availabilityEvidence ?? "", /wcInStock: false/);
+
+  const fromOther = byId.get("other-to-canonical");
+  assert.ok(fromOther);
+  assert.equal(fromOther.proposedCanonicalEquipmentTypeId, "bb-bats");
+  assert.equal(fromOther.priority.shopperVisibleFragmentation, true);
+
+  const unrelatedBoolean = byId.get("unrelated-boolean");
+  assert.ok(unrelatedBoolean);
+  assert.equal(unrelatedBoolean.availability, "unknown");
+  assert.equal(unrelatedBoolean.availabilityEvidence, null);
+});
+
+test("wcInStock accepts supported boolean-like supplier values", () => {
+  const cases = [
+    { value: "true", expected: "available" },
+    { value: "1", expected: "available" },
+    { value: "yes", expected: "available" },
+    { value: "false", expected: "unavailable" },
+    { value: "0", expected: "unavailable" },
+    { value: "no", expected: "unavailable" },
+  ] as const;
+  const report = buildTaxonomyAuditReport(phase14Fixture(cases.map(({ value }, index) => ({
+    id: `wc-in-stock-${index}`, sourceId: "ebay",
+    title: `Easton Hype Fire 27/17 USSSA Baseball Bat ${index}`,
+    sportId: "baseball", equipmentTypeId: "bb-other",
+    raw: { ebaySeller: "bat-seller", productType: "Baseball Bats", wcInStock: value },
+  }))));
+  const byId = new Map(report.reviewPacket.proposedCorrections.map((record) => [record.dealId, record]));
+
+  for (const [index, { value, expected }] of cases.entries()) {
+    const record = byId.get(`wc-in-stock-${index}`);
+    assert.ok(record, value);
+    assert.equal(record.availability, expected, value);
+    assert.match(record.availabilityEvidence ?? "", new RegExp(`wcInStock: ${value}$`));
+  }
+});
+
 test("reports brand aliases, source categories, field coverage, and identifier conflicts", () => {
   const report = buildTaxonomyAuditReport(fixture());
   assert.ok(report.brandInventory.some((brand) =>
