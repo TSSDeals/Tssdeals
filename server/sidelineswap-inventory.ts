@@ -1,5 +1,6 @@
 import type { IStorage } from "./storage";
-import { getValidEbayUserToken } from "./ebay-reports";
+import { getEbayInventoryScopes, getValidEbayUserToken } from "./ebay-reports";
+import { ebayErrorFromResponse, logEbayError } from "./ebay-errors";
 
 const SS_BASE = "https://developer.sidelineswap.com/api/v1";
 const EBAY_INVENTORY_URL = "https://api.ebay.com/sell/inventory/v1";
@@ -200,7 +201,9 @@ export async function fetchEbayInventory(
   storage: IStorage,
   limit = 100
 ): Promise<EbayInventoryItem[]> {
-  const accessToken = await getValidEbayUserToken(userId, storage);
+  const accessToken = await getValidEbayUserToken(userId, storage, {
+    requiredScopesAnyOf: getEbayInventoryScopes(),
+  });
 
   const items: EbayInventoryItem[] = [];
   let offset = 0;
@@ -211,13 +214,14 @@ export async function fetchEbayInventory(
     const res = await fetch(`${EBAY_INVENTORY_URL}/inventory_item?${params}`, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
+        Accept: "application/json",
       },
     });
 
     if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`eBay inventory fetch error: ${res.status} ${text.slice(0, 300)}`);
+      const error = await ebayErrorFromResponse(res, "inventory retrieval");
+      logEbayError(error);
+      throw error;
     }
 
     const data = await res.json();

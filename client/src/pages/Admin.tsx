@@ -371,7 +371,15 @@ export default function AdminPage() {
   const [reportEndDate, setReportEndDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [disconnecting, setDisconnecting] = useState(false);
 
-  const ebayOauthStatus = useQuery({
+  const ebayOauthStatus = useQuery<{
+    connected: boolean;
+    state: "connected" | "not_connected" | "reauthorization_required" | "error";
+    message: string | null;
+    reconnectRequired: boolean;
+    ebayUsername: string | null;
+    expiresAt: string | null;
+    updatedAt: string | null;
+  }>({
     queryKey: ["/api/ebay/oauth/status"],
     enabled: isAuthenticated,
   });
@@ -3382,16 +3390,16 @@ export default function AdminPage() {
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Checking connection...
                 </div>
-              ) : (ebayOauthStatus.data as any)?.connected ? (
+              ) : ebayOauthStatus.data?.connected ? (
                 <>
                   <div className="flex items-center gap-3 flex-wrap">
                     <div className="flex items-center gap-2 rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/30 px-3 py-2">
                       <Link2 className="h-4 w-4 text-green-600 dark:text-green-400" />
                       <span className="text-sm font-medium text-green-700 dark:text-green-300">
                         eBay account connected
-                        {(ebayOauthStatus.data as any)?.ebayUsername && (
+                        {ebayOauthStatus.data?.ebayUsername && (
                           <span className="ml-1 text-green-600 dark:text-green-400">
-                            ({(ebayOauthStatus.data as any).ebayUsername})
+                            ({ebayOauthStatus.data.ebayUsername})
                           </span>
                         )}
                       </span>
@@ -3457,6 +3465,11 @@ export default function AdminPage() {
                 </>
               ) : (
                 <div className="space-y-3">
+                  {ebayOauthStatus.data?.message && (
+                    <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/30 dark:text-red-200" data-testid="ebay-oauth-error">
+                      {ebayOauthStatus.data.message}
+                    </div>
+                  )}
                   <div className="text-sm text-muted-foreground">
                     Connect your eBay seller account to pull sales and purchase reports. You'll be redirected to eBay to authorize access.
                   </div>

@@ -2413,13 +2413,8 @@ export async function registerRoutes(
 
   app.get("/api/ebay/oauth/status", isAdmin, async (req: any, res) => {
     try {
-      const token = await storage.getEbayOauthToken(getAuthedUserId(req));
-      res.json({
-        connected: !!token,
-        ebayUsername: token?.ebayUsername ?? null,
-        expiresAt: token?.expiresAt ?? null,
-        updatedAt: token?.updatedAt ?? null,
-      });
+      const { getEbayOAuthConnectionStatus } = await import("./ebay-reports");
+      res.json(await getEbayOAuthConnectionStatus(getAuthedUserId(req), storage));
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -3767,7 +3762,10 @@ If you cannot identify a sporting goods item, return { "q": "", "sport": "", "br
       const items = await fetchEbayInventory(getAuthedUserId(req), storage, limit);
       res.json({ items, total: items.length });
     } catch (err: any) {
-      res.status(500).json({ message: err.message });
+      const { logEbayError, safeEbayError } = await import("./ebay-errors");
+      logEbayError(err);
+      const safe = safeEbayError(err);
+      res.status(safe.reconnectRequired ? 401 : 502).json(safe);
     }
   });
 

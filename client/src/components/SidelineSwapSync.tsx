@@ -120,7 +120,13 @@ export default function SidelineSwapSync() {
     queryKey: ["/api/admin/sidelineswap-sync/status"],
   });
 
-  const { data: inventoryData, isLoading: inventoryLoading, refetch: refetchInventory } = useQuery<{ items: EbayItem[]; total: number }>({
+  const {
+    data: inventoryData,
+    isLoading: inventoryLoading,
+    isError: inventoryIsError,
+    error: inventoryError,
+    refetch: refetchInventory,
+  } = useQuery<{ items: EbayItem[]; total: number }>({
     queryKey: ["/api/ebay/inventory"],
     retry: false,
   });
@@ -280,6 +286,8 @@ export default function SidelineSwapSync() {
           <span className="text-muted-foreground">eBay inventory:</span>
           {inventoryLoading ? (
             <span className="text-muted-foreground text-xs">Loading...</span>
+          ) : inventoryIsError ? (
+            <span className="font-medium text-red-600 dark:text-red-400">Unavailable</span>
           ) : (
             <span className="font-medium">{items.length} items</span>
           )}
@@ -299,6 +307,26 @@ export default function SidelineSwapSync() {
           Refresh eBay
         </Button>
       </div>
+
+      {inventoryIsError && (
+        <div className="rounded-xl border border-red-400/30 bg-red-500/5 p-4 text-sm text-red-800 dark:text-red-200" data-testid="ebay-inventory-error">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+            <div className="space-y-2">
+              <p><strong>eBay inventory could not be loaded.</strong></p>
+              <p>{inventoryError instanceof Error ? inventoryError.message : "Reconnect the eBay account or try again later."}</p>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => { window.location.href = "/api/ebay/oauth/start"; }}
+                data-testid="button-reconnect-ebay-inventory"
+              >
+                Reconnect eBay
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {!isConfigured && (
         <div className="rounded-xl border border-yellow-400/30 bg-yellow-500/5 p-4 text-sm text-yellow-800 dark:text-yellow-200">
@@ -338,7 +366,7 @@ export default function SidelineSwapSync() {
       {/* Inventory table */}
       {inventoryLoading ? (
         <div className="text-center py-10 text-muted-foreground text-sm">Loading eBay inventory...</div>
-      ) : items.length === 0 ? (
+      ) : inventoryIsError ? null : items.length === 0 ? (
         <div className="text-center py-10 text-muted-foreground text-sm">
           No eBay inventory found. Make sure your eBay account is connected and you have active listings.
         </div>

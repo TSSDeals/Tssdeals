@@ -1,5 +1,6 @@
 import type { InsertDeal } from "@shared/schema";
 import { classifyDealAttributes } from "./sub-filter-classifier";
+import { ebayErrorFromResponse, logEbayError } from "./ebay-errors";
 
 const EBAY_AUTH_URL = "https://api.ebay.com/identity/v1/oauth2/token";
 const EBAY_BROWSE_URL = "https://api.ebay.com/buy/browse/v1/item_summary/search";
@@ -70,8 +71,9 @@ async function getEbayToken(clientId: string, clientSecret: string): Promise<str
   });
 
   if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`eBay auth error ${response.status}: ${text}`);
+    const error = await ebayErrorFromResponse(response, "application token request");
+    logEbayError(error);
+    throw error;
   }
 
   const data = (await response.json()) as EbayTokenResponse;
@@ -149,12 +151,12 @@ export async function searchEbayProducts(
     });
 
     if (!response.ok) {
-      const text = await response.text();
       if (response.status === 401) {
         cachedToken = null;
-        throw new Error("eBay token expired or invalid. Will retry with fresh token on next request.");
       }
-      throw new Error(`eBay Browse API error ${response.status}: ${text}`);
+      const error = await ebayErrorFromResponse(response, "public deal search");
+      logEbayError(error);
+      throw error;
     }
 
     const data = (await response.json()) as EbaySearchResponse;
