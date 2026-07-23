@@ -149,7 +149,14 @@ export async function getValidEbayUserToken(
   const clientSecret = options.clientSecret ?? process.env.EBAY_CLIENT_SECRET;
 
   const assertRequiredScope = (scope: string | null) => {
-    if (!scope || !options.requiredScopesAnyOf?.length) return;
+    if (!options.requiredScopesAnyOf?.length) return;
+    if (!scope?.trim()) {
+      throw new EbayIntegrationError({
+        code: "missing_scope",
+        operation: "authorization check",
+        message: "eBay authorization does not include verifiable inventory permissions. Reconnect the eBay account to grant the current permissions.",
+      });
+    }
     const granted = new Set(scope.split(/\s+/).filter(Boolean));
     if (!options.requiredScopesAnyOf.some((required) => granted.has(required))) {
       throw new EbayIntegrationError({

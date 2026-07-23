@@ -10,6 +10,7 @@
     "check": "tsc",
     "test:search": "tsx --test server/deal-search.test.ts shared/equipment-groups.test.ts",
     "test:ebay-integration": "tsx --test server/ebay-integration.test.ts",
+    "test:ebay-public-sync": "tsx --test server/ebay-public-sync.test.ts",
     "test:startup-safety": "tsx --test server/startup-safety.test.ts",
     "test:taxonomy-audit": "tsx --test server/taxonomy-audit.test.ts",
     "test:taxonomy-review": "tsx --test server/taxonomy-review.test.ts",

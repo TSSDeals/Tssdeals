@@ -1147,11 +1147,24 @@ export default function AdminPage() {
 
   const [dryRun, setDryRun] = useState(true);
 
-  const syncStatus = useQuery<{ running: boolean; startedAt: string | null }>({
+  const syncStatus = useQuery<{
+    running: boolean;
+    startedAt: string | null;
+    ebayPublicSnapshot: {
+      state: "never_run" | "running" | "success" | "failed";
+      lastAttemptCompletedAt: string | null;
+      lastSuccessfulAt: string | null;
+      lastSuccessfulItemCount: number | null;
+      lastAttemptItemCount: number | null;
+      message: string | null;
+      preserveLastKnownGood: boolean;
+    };
+  }>({
     queryKey: ["/api/admin/sync/status"],
     refetchInterval: 3000,
   });
   const syncRunning = syncStatus.data?.running ?? false;
+  const ebaySnapshot = syncStatus.data?.ebayPublicSnapshot;
 
   const schedule = useMemo(() => meta.data?.scheduled?.times?.join(" · ") ?? "—", [meta.data]);
 
@@ -1344,6 +1357,62 @@ export default function AdminPage() {
                   Scheduled runs: <span className="font-semibold text-foreground">{schedule}</span> ({meta.data?.scheduled?.timezone ?? "America/New_York"})
                 </div>
               </div>
+            </div>
+
+            <div
+              className={cn(
+                "mt-5 rounded-2xl border px-4 py-3 text-sm",
+                ebaySnapshot?.state === "failed"
+                  ? "border-amber-500/40 bg-amber-500/10"
+                  : ebaySnapshot?.state === "success"
+                    ? "border-emerald-500/30 bg-emerald-500/10"
+                    : "border-border bg-background/60",
+              )}
+              data-testid="ebay-public-snapshot-status"
+            >
+              <div className="flex items-center gap-2 font-semibold">
+                {ebaySnapshot?.state === "running" ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : ebaySnapshot?.state === "failed" ? (
+                  <AlertTriangle className="h-4 w-4 text-amber-600" />
+                ) : (
+                  <Check className="h-4 w-4 text-emerald-600" />
+                )}
+                Public eBay feed: {ebaySnapshot?.state === "success"
+                  ? "last snapshot succeeded"
+                  : ebaySnapshot?.state === "failed"
+                    ? "latest attempt failed"
+                    : ebaySnapshot?.state === "running"
+                      ? "retrieval in progress"
+                      : "no recorded snapshot yet"}
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                {ebaySnapshot?.message ?? "Run the aggregator once after deployment to establish the first protected snapshot."}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs">
+                <span>
+                  Last successful snapshot:{" "}
+                  <strong>
+                    {ebaySnapshot?.lastSuccessfulAt
+                      ? `${new Date(ebaySnapshot.lastSuccessfulAt).toLocaleString()} (${ebaySnapshot.lastSuccessfulItemCount ?? 0} items)`
+                      : "none recorded"}
+                  </strong>
+                </span>
+                {ebaySnapshot?.lastAttemptCompletedAt && (
+                  <span>
+                    Latest attempt:{" "}
+                    <strong>
+                      {new Date(ebaySnapshot.lastAttemptCompletedAt).toLocaleString()}
+                      {ebaySnapshot.lastAttemptItemCount != null ? ` (${ebaySnapshot.lastAttemptItemCount} candidates)` : ""}
+                    </strong>
+                  </span>
+                )}
+              </div>
+              {ebaySnapshot?.preserveLastKnownGood && (
+                <div className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-400">
+                  Customer search is using the last known-good eBay snapshot; this failed attempt did not replace or deactivate it.
+                </div>
+              )}
             </div>
 
             <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">

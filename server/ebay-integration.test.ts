@@ -121,8 +121,46 @@ test("stored credentials missing inventory scope require reconnection before inv
     }),
     (error: unknown) =>
       error instanceof EbayIntegrationError &&
-      error.code === "missing_scope",
+      error.code === "missing_scope" &&
+      error.reconnectRequired,
   );
+});
+
+for (const [label, scope] of [
+  ["null", null],
+  ["empty", ""],
+  ["whitespace-only", "   \t  "],
+] as const) {
+  test(`${label} stored scope cannot prove required inventory authorization`, async () => {
+    const { storage } = storageWithToken(tokenRecord({
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      scope,
+    }));
+
+    await assert.rejects(
+      getValidEbayUserToken(USER_ID, storage, {
+        requiredScopesAnyOf: getEbayInventoryScopes(),
+      }),
+      (error: unknown) =>
+        error instanceof EbayIntegrationError &&
+        error.code === "missing_scope" &&
+        error.reconnectRequired,
+    );
+  });
+}
+
+test("any one valid stored inventory scope satisfies the requested alternatives", async () => {
+  const { storage } = storageWithToken(tokenRecord({
+    accessToken: "valid-access-token",
+    expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    scope: `https://api.ebay.com/oauth/api_scope ${INVENTORY_SCOPE}`,
+  }));
+
+  const token = await getValidEbayUserToken(USER_ID, storage, {
+    requiredScopesAnyOf: getEbayInventoryScopes(),
+  });
+
+  assert.equal(token, "valid-access-token");
 });
 
 test("upstream inventory 400 preserves every safe eBay error and never becomes zero inventory", async () => {

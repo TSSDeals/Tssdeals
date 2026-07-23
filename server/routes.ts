@@ -21,7 +21,7 @@ import {
   fetchEbayPurchases,
   purchasesToCsv,
 } from "./ebay-reports";
-import { startDealSyncScheduler, runFullSync, getSyncStatus } from "./deal-sync-scheduler";
+import { startDealSyncScheduler, runFullSync, getSyncStatus, getEbayPublicSyncStatus } from "./deal-sync-scheduler";
 import { getStopEpoch, stopRequestedSince, requestStopAll, getLastStopAt } from "./process-control";
 import { configurePush, getVapidPublicKey, isPushConfigured, sendPushToUser } from "./push-notifications";
 import { configureSms, isSmsConfigured, sendSms, sendWelcomeSms, sendSmsBatch } from "./sms-notifications";
@@ -1533,8 +1533,11 @@ export async function registerRoutes(
   });
 
   // Sync status (is a sync currently running?)
-  app.get("/api/admin/sync/status", isAdmin, (_req, res) => {
-    res.json(getSyncStatus());
+  app.get("/api/admin/sync/status", isAdmin, async (_req, res) => {
+    res.json({
+      ...getSyncStatus(),
+      ebayPublicSnapshot: await getEbayPublicSyncStatus(storage),
+    });
   });
 
   // Admin / manual run (auth required). MVP: no real scraping.

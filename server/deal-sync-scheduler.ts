@@ -17,22 +17,51 @@ import { syncPlayItAgain } from "./playitagain-sync";
 import { isPushConfigured, sendPushToUser } from "./push-notifications";
 import { isSmsConfigured, sendPriceAlertSms, sendWelcomeSms } from "./sms-notifications";
 import { getStopEpoch, stopRequestedSince } from "./process-control";
+import type { InsertDeal } from "@shared/schema";
+import {
+  EBAY_PUBLIC_SYNC_STATUS_KEY,
+  defaultEbayPublicSyncStatus,
+  parseEbayPublicSyncStatus,
+  runEbayPublicSnapshotSync,
+  type EbayPublicCollection,
+  type EbayPublicSyncStatus,
+} from "./ebay-public-sync";
 
-async function syncEbayDeals(storage: IStorage): Promise<{ created: number; updated: number; errors: number }> {
+function emptyEbayCollection(errors = 0): EbayPublicCollection {
+  return {
+    deals: [],
+    errors,
+    requestsAttempted: 0,
+    requestsSucceeded: 0,
+  };
+}
+
+function mergeEbayCollections(collections: EbayPublicCollection[]): EbayPublicCollection {
+  return {
+    deals: collections.flatMap((collection) => collection.deals),
+    errors: collections.reduce((sum, collection) => sum + collection.errors, 0),
+    requestsAttempted: collections.reduce((sum, collection) => sum + collection.requestsAttempted, 0),
+    requestsSucceeded: collections.reduce((sum, collection) => sum + collection.requestsSucceeded, 0),
+    stopped: collections.some((collection) => collection.stopped === true),
+  };
+}
+
+async function collectEbayDeals(storage: IStorage): Promise<EbayPublicCollection> {
   const clientId = process.env.EBAY_CLIENT_ID;
   const clientSecret = process.env.EBAY_CLIENT_SECRET;
 
   if (!clientId || !clientSecret) {
     log("eBay sync skipped: credentials not configured", "deal-sync");
-    return { created: 0, updated: 0, errors: 0 };
+    return emptyEbayCollection(1);
   }
 
   const sportKeywords = getEbaySportKeywords();
   const allEquipmentTypes = await storage.listEquipmentTypes();
   const stopEpoch = getStopEpoch();
-  let totalCreated = 0;
-  let totalUpdated = 0;
+  const deals: InsertDeal[] = [];
   let totalErrors = 0;
+  let requestsAttempted = 0;
+  let requestsSucceeded = 0;
 
   for (const sportId of Object.keys(sportKeywords)) {
     if (stopRequestedSince(stopEpoch)) break;
@@ -42,6 +71,7 @@ async function syncEbayDeals(storage: IStorage): Promise<{ created: number; upda
 
     for (const kw of keywords) {
       if (stopRequestedSince(stopEpoch)) break;
+      requestsAttempted++;
       try {
         const eqTypeId = defaultEqType ?? sportId;
         const items = await searchEbayProducts(clientId, clientSecret, {
@@ -51,17 +81,12 @@ async function syncEbayDeals(storage: IStorage): Promise<{ created: number; upda
           condition: "all",
           maxResults: 5000,
         });
+        requestsSucceeded++;
 
         const dealsToInsert = items
           .map((item) => ebayItemToDeal(item, sportId, eqTypeId))
           .filter((d): d is NonNullable<typeof d> => d !== null);
-
-        if (dealsToInsert.length > 0) {
-          await storage.ensureSource("ebay", "eBay", "https://www.ebay.com");
-          const result = await storage.bulkUpsertDeals(dealsToInsert);
-          totalCreated += result.created;
-          totalUpdated += result.updated;
-        }
+        deals.push(...dealsToInsert);
       } catch (err: any) {
         log(`eBay sync error for "${kw}": ${err.message}`, "deal-sync");
         totalErrors++;
@@ -69,20 +94,26 @@ async function syncEbayDeals(storage: IStorage): Promise<{ created: number; upda
     }
   }
 
-  return { created: totalCreated, updated: totalUpdated, errors: totalErrors };
+  return {
+    deals,
+    errors: totalErrors,
+    requestsAttempted,
+    requestsSucceeded,
+    stopped: stopRequestedSince(stopEpoch),
+  };
 }
 
-export async function syncEbaySellerDeals(storage: IStorage): Promise<{ created: number; updated: number; errors: number }> {
+async function collectEbaySellerDeals(storage: IStorage): Promise<EbayPublicCollection> {
   const clientId = process.env.EBAY_CLIENT_ID;
   const clientSecret = process.env.EBAY_CLIENT_SECRET;
 
   if (!clientId || !clientSecret) {
-    return { created: 0, updated: 0, errors: 0 };
+    return emptyEbayCollection(1);
   }
 
   const sellers = await storage.listEbaySellers();
   if (sellers.length === 0) {
-    return { created: 0, updated: 0, errors: 0 };
+    return emptyEbayCollection();
   }
 
   const sellerCategories = [
@@ -101,9 +132,10 @@ export async function syncEbaySellerDeals(storage: IStorage): Promise<{ created:
     { categoryId: "159136", sportId: "swimming", equipmentTypeId: "swim-other", categoryName: "Swimming" },
   ];
 
-  let totalCreated = 0;
-  let totalUpdated = 0;
+  const deals: InsertDeal[] = [];
   let totalErrors = 0;
+  let requestsAttempted = 0;
+  let requestsSucceeded = 0;
 
   const stopEpoch = getStopEpoch();
   for (const seller of sellers) {
@@ -111,6 +143,7 @@ export async function syncEbaySellerDeals(storage: IStorage): Promise<{ created:
     let sellerItemCount = 0;
     for (const cat of sellerCategories) {
       if (stopRequestedSince(stopEpoch)) break;
+      requestsAttempted++;
       try {
         const items = await searchEbayProducts(clientId, clientSecret, {
           keywords: "",
@@ -121,6 +154,7 @@ export async function syncEbaySellerDeals(storage: IStorage): Promise<{ created:
           categoryId: cat.categoryId,
           sellerUsername: seller.username,
         });
+        requestsSucceeded++;
 
         if (items.length === 0) continue;
 
@@ -128,13 +162,8 @@ export async function syncEbaySellerDeals(storage: IStorage): Promise<{ created:
           .map((item) => ebayItemToDeal(item, cat.sportId, cat.equipmentTypeId))
           .filter((d): d is NonNullable<typeof d> => d !== null);
 
-        if (dealsToInsert.length > 0) {
-          await storage.ensureSource("ebay", "eBay", "https://www.ebay.com");
-          const result = await storage.bulkUpsertDeals(dealsToInsert);
-          totalCreated += result.created;
-          totalUpdated += result.updated;
-          sellerItemCount += dealsToInsert.length;
-        }
+        deals.push(...dealsToInsert);
+        sellerItemCount += dealsToInsert.length;
       } catch (err: any) {
         log(`eBay seller "${seller.username}" error in ${cat.categoryName}: ${err.message}`, "deal-sync");
         totalErrors++;
@@ -145,30 +174,34 @@ export async function syncEbaySellerDeals(storage: IStorage): Promise<{ created:
     }
   }
 
-  if (totalCreated > 0 || totalUpdated > 0) {
-    log(`eBay seller sync total: ${totalCreated} created, ${totalUpdated} updated`, "deal-sync");
-  }
-
-  return { created: totalCreated, updated: totalUpdated, errors: totalErrors };
+  return {
+    deals,
+    errors: totalErrors,
+    requestsAttempted,
+    requestsSucceeded,
+    stopped: stopRequestedSince(stopEpoch),
+  };
 }
 
-async function syncEbayCategoryDeals(storage: IStorage): Promise<{ created: number; updated: number; errors: number }> {
+async function collectEbayCategoryDeals(): Promise<EbayPublicCollection> {
   const clientId = process.env.EBAY_CLIENT_ID;
   const clientSecret = process.env.EBAY_CLIENT_SECRET;
 
   if (!clientId || !clientSecret) {
     log("eBay category sync skipped: credentials not configured", "deal-sync");
-    return { created: 0, updated: 0, errors: 0 };
+    return emptyEbayCollection(1);
   }
 
   const categorySyncs = getEbayCategorySyncs();
-  let totalCreated = 0;
-  let totalUpdated = 0;
+  const deals: InsertDeal[] = [];
   let totalErrors = 0;
+  let requestsAttempted = 0;
+  let requestsSucceeded = 0;
 
   const stopEpoch = getStopEpoch();
   for (const catSync of categorySyncs) {
     if (stopRequestedSince(stopEpoch)) break;
+    requestsAttempted++;
     try {
       const items = await searchEbayProducts(clientId, clientSecret, {
         keywords: catSync.keywords || "",
@@ -178,17 +211,12 @@ async function syncEbayCategoryDeals(storage: IStorage): Promise<{ created: numb
         maxResults: 10000,
         categoryId: catSync.categoryId,
       });
+      requestsSucceeded++;
 
       const dealsToInsert = items
         .map((item) => ebayItemToDeal(item, catSync.sportId, catSync.equipmentTypeId))
         .filter((d): d is NonNullable<typeof d> => d !== null);
-
-      if (dealsToInsert.length > 0) {
-        await storage.ensureSource("ebay", "eBay", "https://www.ebay.com");
-        const result = await storage.bulkUpsertDeals(dealsToInsert);
-        totalCreated += result.created;
-        totalUpdated += result.updated;
-      }
+      deals.push(...dealsToInsert);
 
       log(`eBay category "${catSync.categoryName}" (${catSync.categoryId}): ${items.length} items`, "deal-sync");
     } catch (err: any) {
@@ -197,7 +225,67 @@ async function syncEbayCategoryDeals(storage: IStorage): Promise<{ created: numb
     }
   }
 
-  return { created: totalCreated, updated: totalUpdated, errors: totalErrors };
+  return {
+    deals,
+    errors: totalErrors,
+    requestsAttempted,
+    requestsSucceeded,
+    stopped: stopRequestedSince(stopEpoch),
+  };
+}
+
+export async function getEbayPublicSyncStatus(storage: IStorage): Promise<EbayPublicSyncStatus> {
+  try {
+    return parseEbayPublicSyncStatus(await storage.getAppSetting(EBAY_PUBLIC_SYNC_STATUS_KEY));
+  } catch {
+    return defaultEbayPublicSyncStatus();
+  }
+}
+
+async function saveEbayPublicSyncStatus(storage: IStorage, status: EbayPublicSyncStatus): Promise<void> {
+  await storage.setAppSetting(EBAY_PUBLIC_SYNC_STATUS_KEY, JSON.stringify(status));
+}
+
+async function syncEbayPublicDeals(storage: IStorage): Promise<{ created: number; updated: number; errors: number }> {
+  const result = await runEbayPublicSnapshotSync({
+    loadStatus: () => getEbayPublicSyncStatus(storage),
+    saveStatus: (status) => saveEbayPublicSyncStatus(storage, status),
+    collect: async () => {
+      const settled = await Promise.allSettled([
+        collectEbayDeals(storage),
+        collectEbayCategoryDeals(),
+        collectEbaySellerDeals(storage),
+      ]);
+      return mergeEbayCollections(settled.map((entry) =>
+        entry.status === "fulfilled" ? entry.value : emptyEbayCollection(1)
+      ));
+    },
+    publish: async (deals) => {
+      await storage.ensureSource("ebay", "eBay", "https://www.ebay.com");
+      return storage.bulkUpsertDeals(deals);
+    },
+  });
+
+  const status = await getEbayPublicSyncStatus(storage);
+  if (status.state === "failed") {
+    log(status.message ?? "eBay public snapshot failed; last known-good data was preserved.", "deal-sync");
+  } else {
+    log(status.message ?? "eBay public snapshot published.", "deal-sync");
+  }
+  return result;
+}
+
+export async function syncEbaySellerDeals(storage: IStorage): Promise<{ created: number; updated: number; errors: number }> {
+  const collection = await collectEbaySellerDeals(storage);
+  if (collection.stopped || collection.errors > 0) {
+    return { created: 0, updated: 0, errors: Math.max(1, collection.errors) };
+  }
+  if (collection.deals.length === 0) {
+    return { created: 0, updated: 0, errors: 0 };
+  }
+  await storage.ensureSource("ebay", "eBay", "https://www.ebay.com");
+  const published = await storage.bulkUpsertDeals(collection.deals);
+  return { ...published, errors: 0 };
 }
 
 async function syncCJDeals(storage: IStorage): Promise<{ created: number; updated: number; errors: number }> {
@@ -976,10 +1064,8 @@ export async function runFullSync(storage: IStorage): Promise<FullSyncResult | n
   const startTime = Date.now();
 
   try {
-    const [ebay, ebayCats, ebaySellers, cj, shopify, sidelineswap, shareasale, impact, rakuten, amazon, notg, baseballResale, fanatics, multiShopify, playItAgain] = await Promise.allSettled([
-      syncEbayDeals(storage),
-      syncEbayCategoryDeals(storage),
-      syncEbaySellerDeals(storage),
+    const [ebay, cj, shopify, sidelineswap, shareasale, impact, rakuten, amazon, notg, baseballResale, fanatics, multiShopify, playItAgain] = await Promise.allSettled([
+      syncEbayPublicDeals(storage),
       syncCJDeals(storage),
       syncShopifyDeals(storage),
       syncSidelineSwapDeals(storage),
@@ -997,8 +1083,6 @@ export async function runFullSync(storage: IStorage): Promise<FullSyncResult | n
     const fallback = { created: 0, updated: 0, errors: 1 };
     const results = {
       ebay: ebay.status === "fulfilled" ? ebay.value : fallback,
-      ebayCats: ebayCats.status === "fulfilled" ? ebayCats.value : fallback,
-      ebaySellers: ebaySellers.status === "fulfilled" ? ebaySellers.value : fallback,
       cj: cj.status === "fulfilled" ? cj.value : fallback,
       shopify: shopify.status === "fulfilled" ? shopify.value : fallback,
       sidelineswap: sidelineswap.status === "fulfilled" ? sidelineswap.value : fallback,
@@ -1198,6 +1282,15 @@ async function runStaleDealCleanup() {
         SELECT id FROM deals
         WHERE source_id IN ('ebay', 'sidelineswap')
         AND last_seen_at < NOW() - INTERVAL '7 days'
+        AND (
+          source_id <> 'ebay'
+          OR NOT EXISTS (
+            SELECT 1
+            FROM app_settings ebay_snapshot_status
+            WHERE ebay_snapshot_status.key = 'ebay_public_sync_status'
+              AND ebay_snapshot_status.value::jsonb->>'preserveLastKnownGood' = 'true'
+          )
+        )
         LIMIT ${batchSize}
       )
     `));
