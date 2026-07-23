@@ -4,7 +4,7 @@
  * JSON to stdout:
  *   npm run audit:taxonomy
  *
- * JSON + CSV + Markdown files:
+ * Audit JSON/CSVs plus Phase 1.5 review-packet JSON/CSVs/Markdown:
  *   npm run audit:taxonomy -- --format bundle --output-dir ./taxonomy-audit-output
  */
 import { mkdir, writeFile } from "node:fs/promises";
@@ -16,6 +16,12 @@ import {
   taxonomyAuditCorrectionsCsv,
   taxonomyAuditIdentifierFindingsCsv,
   taxonomyAuditMarkdown,
+  taxonomyReviewIdentifierQuarantineCsv,
+  taxonomyReviewMarkdown,
+  taxonomyReviewPacketJson,
+  taxonomyReviewProposedCorrectionsCsv,
+  taxonomyReviewSupportedIdentifierConflictsCsv,
+  taxonomyReviewUnresolvedManualCsv,
 } from "../server/taxonomy-audit";
 
 const invocation = parseTaxonomyAuditInvocation(process.argv.slice(2));
@@ -43,11 +49,19 @@ try {
       await writeFile(resolve(directory, filenames[format]), outputs[format], "utf8");
     }
     if (invocation.format === "bundle") {
-      await writeFile(
-        resolve(directory, "taxonomy-identifiers.csv"),
-        taxonomyAuditIdentifierFindingsCsv(report),
-        "utf8",
-      );
+      const reviewOutputs = {
+        "taxonomy-identifiers.csv": taxonomyAuditIdentifierFindingsCsv(report),
+        "taxonomy-review-packet.json": taxonomyReviewPacketJson(report),
+        "taxonomy-review-proposed-corrections.csv": taxonomyReviewProposedCorrectionsCsv(report),
+        "taxonomy-review-supported-identifier-conflicts.csv":
+          taxonomyReviewSupportedIdentifierConflictsCsv(report),
+        "taxonomy-review-identifier-quarantine.csv": taxonomyReviewIdentifierQuarantineCsv(report),
+        "taxonomy-review-unresolved-manual.csv": taxonomyReviewUnresolvedManualCsv(report),
+        "taxonomy-review-summary.md": taxonomyReviewMarkdown(report),
+      };
+      for (const [filename, contents] of Object.entries(reviewOutputs)) {
+        await writeFile(resolve(directory, filename), contents, "utf8");
+      }
     }
     console.log(JSON.stringify({
       mode: "read-only",

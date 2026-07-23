@@ -20,7 +20,7 @@ Default JSON to stdout:
 npm run audit:taxonomy
 ```
 
-JSON, correction CSV, identifier CSV, and concise Markdown summary in an explicit directory:
+JSON, audit CSVs, approval-review CSVs, and concise audit/review Markdown summaries in an explicit directory:
 
 ```powershell
 npm run audit:taxonomy -- --format bundle --output-dir .\taxonomy-audit-output
@@ -56,7 +56,7 @@ The JSON report contains:
 - validated/scoped UPC, SKU, and item-number findings separated into likely same-product conflicts, unsafe reuse, invalid identifiers, and unresolved collisions, with source/seller/title evidence;
 - the complete code-owned inventory of assignment and display-projection paths.
 
-The bundle contains separate machine-readable CSV files for flattened correction/pending cohorts (`taxonomy-corrections.csv`) and identifier findings (`taxonomy-identifiers.csv`). JSON retains the full structured report. Markdown summarizes total scope, duplicate/group fragmentation counts, mutually exclusive correction outcomes, identifier-finding counts, and the twenty largest correction and identifier cohorts.
+The bundle retains the machine-readable audit cohort files (`taxonomy-corrections.csv`, `taxonomy-identifiers.csv`, `taxonomy-audit.json`, and `taxonomy-audit-summary.md`). Phase 1.5 adds `taxonomy-review-packet.json`, per-deal proposed and unresolved/manual CSVs, supported-identifier and quarantine CSVs, and `taxonomy-review-summary.md`. The full audit JSON also embeds the review packet.
 
 ## Evidence and confidence policy
 
@@ -117,6 +117,35 @@ Phase 1.2 adds production-report regressions for Easton Jen Schro and Wilson C20
 Phase 1.3 adds production-report regressions for six bat-holder/rack/grip products; real bats with incidental grip wording; straight and curly possessive HIVIZ fielder-mask titles; 33-inch/23-ounce/-10 fastpitch and 34-inch/27-ounce slowpitch bats that omit `bat`; 11-inch, 12-inch, and 16-inch softball sizes; bucket combinations, ball holders, party horns, and training balls; Bell bike pedals/grips/pegs and a genuine Huffy bicycle; and goal-target and hoop-weight accessories alongside genuine goals, hoops, rims, backboards, and nets.
 
 Phase 1.4 adds exact report-derived regressions for the Ice Cream Drip themed-gift baseball, unidentified-signature baseball, England FA Signature soccer ball, MacGregor replacement tee tube, Sumind replacement topper/cup, and replacement top tube. Positive controls cover ordinary baseballs and soccer balls, complete batting tees, pitching machines, training balls, bats, gloves, cleats, running shoes, swim goggles, bicycles, goals, hoops, autograph-model gloves, and signature-series bats/gloves. Identifier tests cover valid GTIN-8, UPC-A, EAN-13, and GTIN-14 values; invalid checksums and repeated-digit placeholders; sellerless, numeric, and generic SKU rejection; known-seller/source SKU isolation; translated Wilson/Luxilon records sharing item numbers and UPCs; all four identifier-finding kinds; CSV output; and exact outcome reconciliation.
+
+Phase 1.5 adds multilingual Fanatics source-item-number conflicts; translated Wilson A2000 listings sharing source item numbers and validated GTINs; repeated-digit and check-digit-invalid GTIN quarantine; unrelated-product identifier reuse; sellerless and generic SKU quarantine; matching identifiers with conflicting Bat/Glove direct evidence; and matching Wilson identifiers that safely reinforce independently established Baseball Glove evidence. Packet tests also verify per-deal evidence, negative evidence, identifier evidence, approval status, availability, priority factors, JSON/CSV/Markdown output, and the immutable read-only boundary.
+
+## Phase 1.5 approval-review packet
+
+Phase 1.5 converts each correction decision retained during the read-only snapshot into a per-deal review row. Proposed rows contain the deal ID/title, source/seller, current and proposed taxonomy, positive and negative evidence, identifier evidence, confidence/reason, approval requirement, availability when a structured raw field exists, and deterministic review priority. Pending conflict, unresolved Other, and ambiguous-evidence decisions are emitted separately as per-deal unresolved/manual-review rows.
+
+Priority is review ordering only; it does not authorize execution. The score combines correction-cohort size, shopper-visible fragmentation, evidence strength, source review volume, and structured current availability. Every component is included in the output so reviewers can reproduce the ordering.
+
+Identifier findings remain consensus-ineligible and human-review-only. A likely same-product conflict receives a supported recommendation only when at least two records independently produce the same single compatible direct product-family destination. Identifier agreement alone never supplies a destination. Likely conflicts without that support join invalid identifiers, unsafe reuse, unresolved collisions, sellerless SKUs, and numeric/generic SKUs in the quarantine export.
+
+The bundle adds these approval files:
+
+- `taxonomy-review-proposed-corrections.csv`;
+- `taxonomy-review-supported-identifier-conflicts.csv`;
+- `taxonomy-review-identifier-quarantine.csv`;
+- `taxonomy-review-unresolved-manual.csv`;
+- `taxonomy-review-packet.json`;
+- `taxonomy-review-summary.md`.
+
+## Phase 1.5 supplied Phase 1.4 evidence
+
+The supplied archive SHA-256 is `4B0A75C1A535AAF49DA211ED66DD2E38FE0DFD310517E3984B3BA6D92D916335`. Its `phase1.4-read-only-v6` report was generated at `2026-07-23T01:08:48.264Z` and covered 181,358 deals. It reported 1,283 proposed-correction records across 396 cohorts, 75,303 pending/review records, 104,772 compatible/no-action records, and 40,449 records in Other.
+
+The identifier baseline contains 2,472 findings: 1,959 likely-same-product conflicts, 12 unsafe identifier-reuse findings, 296 invalid identifiers, and 205 unresolved collisions. The archive was inspected and replayed only as offline evidence; this change did not connect to production or execute another production audit.
+
+The largest proposed cohorts are 430 Holabird running shoes stored in Swimming Other, 109 stored in Cycling Other, 92 stored in Cheerleading Other, and 91 Academy swim goggles stored in Swimming Other. Likely-same-product findings are concentrated in 1,066 Fanatics source-item-number scopes, 726 validated global-GTIN scopes, and 164 Wilson Impact source-item-number scopes. These concentrations motivate review priority and the multilingual Fanatics/Wilson fixtures; they do not authorize a destination or prove that every member of a cohort is correct.
+
+The Phase 1.4 correction JSON stores group counts plus at most five representative examples, not all underlying deal rows. It therefore proves the 1,283 baseline count but cannot itself be expanded into a complete per-deal export. Phase 1.5 generates that export during a future explicit read-only snapshot. No production-wide Phase 1.5 output count is claimed in this change.
 
 ## Phase 1.4 supplied Phase 1.3 evidence and representative replay
 

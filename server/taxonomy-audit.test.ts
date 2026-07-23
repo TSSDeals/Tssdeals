@@ -10,6 +10,12 @@ import {
   taxonomyAuditCorrectionsCsv,
   taxonomyAuditIdentifierFindingsCsv,
   taxonomyAuditMarkdown,
+  taxonomyReviewIdentifierQuarantineCsv,
+  taxonomyReviewMarkdown,
+  taxonomyReviewPacketJson,
+  taxonomyReviewProposedCorrectionsCsv,
+  taxonomyReviewSupportedIdentifierConflictsCsv,
+  taxonomyReviewUnresolvedManualCsv,
   type TaxonomyAuditDataset,
 } from "./taxonomy-audit";
 
@@ -640,6 +646,8 @@ test("report separates proposed, conflict, unresolved, ambiguous, and no-action 
     noAction: report.summary.compatibleNoActionRecords,
   }, { proposed: 1, conflict: 1, unresolved: 1, ambiguous: 1, noAction: 1 });
   assert.equal(report.summary.pendingRecords, 3);
+  assert.equal(report.reviewPacket.proposedCorrections.length, report.summary.proposedCorrectionRecords);
+  assert.equal(report.reviewPacket.unresolvedManualReview.length, report.summary.pendingRecords);
   assert.equal(
     report.summary.proposedCorrectionRecords
       + report.summary.conflictReviewRecords
@@ -806,6 +814,230 @@ test("identifier analysis scopes SKUs, validates GTINs, and separates collision 
     && finding.identifierValue === "AMBIG-100"));
 });
 
+test("review packet recommends identifier destinations only with matching direct family evidence", () => {
+  const report = buildTaxonomyAuditReport(phase14Fixture([
+    { id: "fanatics-jersey-en", sourceId: "fanatics", title: "Women's Nike Powder Blue Atlanta Braves 2026 City Connect Stadium Jersey", sportId: "baseball", equipmentTypeId: "bb-shoes-apparel", raw: { itemNumber: "1009398958" } },
+    { id: "fanatics-jersey-de", sourceId: "fanatics", title: "Nike Damen-Trikot der Atlanta Braves in Hellblau fuer die Saison 2026 im City Connect Stadium", sportId: "baseball", equipmentTypeId: "bb-other", raw: { itemNumber: "1009398958" } },
+    { id: "wilson-glove-en", sourceId: "impact-wilson", title: "Wilson A2000 1786 11.5 Baseball Glove", sportId: "baseball", equipmentTypeId: "bb-gloves", raw: { itemNumber: "WBW100390", upc: "036000291452" } },
+    { id: "wilson-glove-es", sourceId: "impact-wilson", title: "Wilson Guante Baseball A2000 1786 11.5", sportId: "baseball", equipmentTypeId: "bb-other", raw: { itemNumber: "WBW100390", upc: "036000291452" } },
+    { id: "invalid-zero-gtin", sourceId: "impact-wilson", title: "Wilson Product Placeholder", sportId: "baseball", equipmentTypeId: "bb-other", raw: { upc: "000000000000" } },
+    { id: "invalid-check-gtin", sourceId: "impact-wilson", title: "Wilson Product Bad Check Digit", sportId: "baseball", equipmentTypeId: "bb-other", raw: { upc: "036000291453" } },
+    { id: "reused-upc-bat", sourceId: "justbats", title: "Marucci CATX USSSA Baseball Bat", sportId: "baseball", equipmentTypeId: "bb-bats", raw: { upc: "4006381333931" } },
+    { id: "reused-upc-shoes", sourceId: "academy-sports", title: "Nike Sabrina Basketball Shoes", sportId: "basketball", equipmentTypeId: "bk-shoes-apparel", raw: { upc: "4006381333931" } },
+    { id: "sellerless-sku-one", sourceId: "justbats", title: "Easton Hype Fire USSSA Baseball Bat", sportId: "baseball", equipmentTypeId: "bb-bats", raw: { sku: "HYPE-NOSELLER-9" } },
+    { id: "sellerless-sku-two", sourceId: "justbats", title: "Easton Hype Fire USA Baseball Bat", sportId: "baseball", equipmentTypeId: "bb-bats", raw: { sku: "HYPE-NOSELLER-9" } },
+    { id: "generic-sku-one", sourceId: "justbats", title: "Louisville Slugger Supra Baseball Bat", sportId: "baseball", equipmentTypeId: "bb-bats", raw: { seller: "catalog", sku: "SKU123" } },
+    { id: "generic-sku-two", sourceId: "justbats", title: "Louisville Slugger Supra USSSA Baseball Bat", sportId: "baseball", equipmentTypeId: "bb-bats", raw: { seller: "catalog", sku: "SKU123" } },
+    { id: "direct-conflict-bat", sourceId: "impact-wilson", title: "Wilson X100 Pro Baseball Bat", sportId: "baseball", equipmentTypeId: "bb-bats", raw: { itemNumber: "WILSON-X100-CONFLICT" } },
+    { id: "direct-conflict-glove", sourceId: "impact-wilson", title: "Wilson X100 Pro Baseball Glove", sportId: "baseball", equipmentTypeId: "bb-gloves", raw: { itemNumber: "WILSON-X100-CONFLICT" } },
+  ]));
+  const packet = report.reviewPacket;
+  assert.equal(
+    packet.likelySameProductConflicts.length + packet.identifierQuarantine.length,
+    report.identifierFindings.length,
+  );
+  assert.ok([
+    ...packet.likelySameProductConflicts,
+    ...packet.identifierQuarantine,
+  ].every((row) => row.consensusEligible === false && row.humanApprovalRequired));
+
+  const fanatics = packet.identifierQuarantine.find((row) =>
+    row.identifierValue === "1009398958");
+  assert.ok(fanatics);
+  assert.equal(fanatics.kind, "likely-same-product-conflict");
+  assert.equal(fanatics.supportedRecommendation, null);
+  assert.equal(fanatics.consensusEligible, false);
+
+  for (const identifier of ["WBW100390", "036000291452"]) {
+    const wilson = packet.likelySameProductConflicts.find((row) =>
+      row.identifierValue === identifier);
+    assert.ok(wilson, identifier);
+    assert.equal(wilson.consensusEligible, false, identifier);
+    assert.equal(wilson.supportedRecommendation?.sportId, "baseball", identifier);
+    assert.equal(wilson.supportedRecommendation?.canonicalEquipmentTypeId, "bb-gloves", identifier);
+    assert.deepEqual(wilson.supportedRecommendation?.supportingDealIds,
+      ["wilson-glove-en", "wilson-glove-es"], identifier);
+    assert.ok((wilson.supportedRecommendation?.directEvidence.length ?? 0) >= 2, identifier);
+  }
+
+  for (const identifier of ["000000000000", "036000291453"]) {
+    const invalid = packet.identifierQuarantine.find((row) =>
+      row.identifierValue === identifier);
+    assert.ok(invalid, identifier);
+    assert.equal(invalid.kind, "invalid-identifier", identifier);
+    assert.equal(invalid.supportedRecommendation, null, identifier);
+  }
+  const unsafe = packet.identifierQuarantine.find((row) =>
+    row.identifierValue === "4006381333931");
+  assert.ok(unsafe);
+  assert.equal(unsafe.kind, "unsafe-identifier-reuse");
+  for (const sku of ["HYPE-NOSELLER-9", "SKU123"]) {
+    const quarantined = packet.identifierQuarantine.find((row) =>
+      row.identifierValue === sku);
+    assert.ok(quarantined, sku);
+    assert.equal(quarantined.kind, "invalid-identifier", sku);
+    assert.equal(quarantined.consensusEligible, false, sku);
+  }
+  const directConflict = packet.identifierQuarantine.find((row) =>
+    row.identifierValue === "WILSON-X100-CONFLICT");
+  assert.ok(directConflict);
+  assert.equal(directConflict.kind, "likely-same-product-conflict");
+  assert.equal(directConflict.supportedRecommendation, null);
+  assert.match(directConflict.quarantineReason ?? "", /direct product-family evidence/i);
+});
+
+test("review packet expands correction cohorts into prioritized per-deal exports", () => {
+  const report = buildTaxonomyAuditReport(phase14Fixture([
+    {
+      id: "review-proposal", sourceId: "ebay",
+      title: "Easton Hype Fire 27/17 USSSA Baseball Bat",
+      sportId: "baseball", equipmentTypeId: "bb-other",
+      raw: {
+        ebaySeller: "bat-seller", productType: "Baseball Bats",
+        itemNumber: "EBAY-REVIEW-100", availability: "In Stock",
+      },
+    },
+    {
+      id: "review-manual", sourceId: "ebay",
+      title: "Easton Premium Sporting Goods Item",
+      sportId: "baseball", equipmentTypeId: "bb-other",
+      raw: { ebaySeller: "mixed-seller", availability: "Out of Stock" },
+    },
+  ]), { generatedAt: "2026-07-23T00:00:00.000Z" });
+  const packet = report.reviewPacket;
+  assert.equal(packet.metadata.mode, "read-only");
+  assert.equal(packet.metadata.applySupported, false);
+  assert.equal(packet.summary.proposedCorrections, 1);
+  assert.equal(packet.summary.unresolvedManualReview, 1);
+
+  const proposal = packet.proposedCorrections[0];
+  assert.equal(proposal.dealId, "review-proposal");
+  assert.equal(proposal.sourceName, "eBay");
+  assert.equal(proposal.seller, "bat-seller");
+  assert.equal(proposal.currentEquipmentTypeId, "bb-other");
+  assert.equal(proposal.proposedCanonicalEquipmentTypeId, "bb-bats");
+  assert.equal(proposal.availability, "available");
+  assert.match(proposal.availabilityEvidence ?? "", /In Stock/);
+  assert.ok(proposal.evidence.length >= 2);
+  assert.ok(Array.isArray(proposal.negativeEvidence));
+  assert.match(proposal.identifierEvidence.join(" "), /EBAY-REVIEW-100/);
+  assert.equal(proposal.priority.shopperVisibleFragmentation, true);
+  assert.equal(proposal.priority.affectedRecordCount, 1);
+  assert.equal(proposal.priority.sourceId, "ebay");
+  assert.ok(proposal.priority.score > 0);
+
+  const manual = packet.unresolvedManualReview[0];
+  assert.equal(manual.dealId, "review-manual");
+  assert.equal(manual.availability, "unavailable");
+  assert.equal(manual.humanApprovalRequired, true);
+  assert.equal(manual.proposedCanonicalEquipmentTypeId, null);
+
+  const proposedCsv = taxonomyReviewProposedCorrectionsCsv(report);
+  const supportedCsv = taxonomyReviewSupportedIdentifierConflictsCsv(report);
+  const quarantineCsv = taxonomyReviewIdentifierQuarantineCsv(report);
+  const unresolvedCsv = taxonomyReviewUnresolvedManualCsv(report);
+  const packetJson = taxonomyReviewPacketJson(report);
+  const markdown = taxonomyReviewMarkdown(report);
+  assert.match(proposedCsv, /^dealId,title,sourceId,sourceName,seller,availability,/);
+  assert.match(proposedCsv, /review-proposal/);
+  assert.match(supportedCsv, /^kind,identifierType,identifierValue,scope,/);
+  assert.match(quarantineCsv, /^kind,identifierType,identifierValue,scope,/);
+  assert.match(unresolvedCsv, /review-manual/);
+  assert.equal(JSON.parse(packetJson).metadata.mode, "read-only");
+  assert.match(markdown, /approval-ready, read-only review material/i);
+  assert.match(markdown, /1,283 proposed-correction records/);
+});
+
+test("review priority compares canonical shopper groups and reads wcInStock only", () => {
+  const base = phase14Fixture([
+    {
+      id: "legacy-glove-alias", sourceId: "ebay",
+      title: "Wilson A2000 1786 11.5 Baseball Glove",
+      sportId: "baseball", equipmentTypeId: "glove",
+      raw: { ebaySeller: "glove-seller", wcInStock: true },
+    },
+    {
+      id: "different-current-group", sourceId: "ebay",
+      title: "Wilson A2000 1786 11.5 Baseball Glove",
+      sportId: "baseball", equipmentTypeId: "bb-balls",
+      raw: { ebaySeller: "glove-seller", productType: "Baseball Gloves", wcInStock: false },
+    },
+    {
+      id: "other-to-canonical", sourceId: "ebay",
+      title: "Easton Hype Fire 27/17 USSSA Baseball Bat",
+      sportId: "baseball", equipmentTypeId: "bb-other",
+      raw: { ebaySeller: "bat-seller", productType: "Baseball Bats" },
+    },
+    {
+      id: "unrelated-boolean", sourceId: "ebay",
+      title: "Easton Premium Sporting Goods Item",
+      sportId: "baseball", equipmentTypeId: "bb-other",
+      raw: { ebaySeller: "mixed-seller", wcOnSale: true },
+    },
+  ]);
+  const report = buildTaxonomyAuditReport({
+    ...base,
+    equipmentTypes: [
+      ...base.equipmentTypes,
+      { id: "glove", name: "Glove", sportId: "baseball", userCreated: true },
+    ],
+  });
+
+  const byId = new Map([
+    ...report.reviewPacket.proposedCorrections,
+    ...report.reviewPacket.unresolvedManualReview,
+  ].map((record) => [record.dealId, record]));
+
+  const legacyAlias = byId.get("legacy-glove-alias");
+  assert.ok(legacyAlias);
+  assert.equal(legacyAlias.proposedCanonicalEquipmentTypeId, "bb-gloves");
+  assert.equal(legacyAlias.priority.shopperVisibleFragmentation, false);
+  assert.equal(legacyAlias.availability, "available");
+  assert.match(legacyAlias.availabilityEvidence ?? "", /wcInStock: true/);
+
+  const differentGroup = byId.get("different-current-group");
+  assert.ok(differentGroup);
+  assert.equal(differentGroup.proposedCanonicalEquipmentTypeId, "bb-gloves");
+  assert.equal(differentGroup.priority.shopperVisibleFragmentation, true);
+  assert.equal(differentGroup.availability, "unavailable");
+  assert.match(differentGroup.availabilityEvidence ?? "", /wcInStock: false/);
+
+  const fromOther = byId.get("other-to-canonical");
+  assert.ok(fromOther);
+  assert.equal(fromOther.proposedCanonicalEquipmentTypeId, "bb-bats");
+  assert.equal(fromOther.priority.shopperVisibleFragmentation, true);
+
+  const unrelatedBoolean = byId.get("unrelated-boolean");
+  assert.ok(unrelatedBoolean);
+  assert.equal(unrelatedBoolean.availability, "unknown");
+  assert.equal(unrelatedBoolean.availabilityEvidence, null);
+});
+
+test("wcInStock accepts supported boolean-like supplier values", () => {
+  const cases = [
+    { value: "true", expected: "available" },
+    { value: "1", expected: "available" },
+    { value: "yes", expected: "available" },
+    { value: "false", expected: "unavailable" },
+    { value: "0", expected: "unavailable" },
+    { value: "no", expected: "unavailable" },
+  ] as const;
+  const report = buildTaxonomyAuditReport(phase14Fixture(cases.map(({ value }, index) => ({
+    id: `wc-in-stock-${index}`, sourceId: "ebay",
+    title: `Easton Hype Fire 27/17 USSSA Baseball Bat ${index}`,
+    sportId: "baseball", equipmentTypeId: "bb-other",
+    raw: { ebaySeller: "bat-seller", productType: "Baseball Bats", wcInStock: value },
+  }))));
+  const byId = new Map(report.reviewPacket.proposedCorrections.map((record) => [record.dealId, record]));
+
+  for (const [index, { value, expected }] of cases.entries()) {
+    const record = byId.get(`wc-in-stock-${index}`);
+    assert.ok(record, value);
+    assert.equal(record.availability, expected, value);
+    assert.match(record.availabilityEvidence ?? "", new RegExp(`wcInStock: ${value}$`));
+  }
+});
+
 test("reports brand aliases, source categories, field coverage, and identifier conflicts", () => {
   const report = buildTaxonomyAuditReport(fixture());
   assert.ok(report.brandInventory.some((brand) =>
@@ -850,6 +1082,12 @@ test("CLI has no apply or mutation mode and the database snapshot is transaction
   assert.doesNotMatch(databaseSource, /\.insert\(|\.update\(|\.delete\(|\bALTER\b|\bTRUNCATE\b/i);
   const auditScript = readFileSync(join(process.cwd(), "script", "phase1-taxonomy-audit.ts"), "utf8");
   assert.match(auditScript, /taxonomy-identifiers\.csv/);
+  assert.match(auditScript, /taxonomy-review-packet\.json/);
+  assert.match(auditScript, /taxonomy-review-proposed-corrections\.csv/);
+  assert.match(auditScript, /taxonomy-review-supported-identifier-conflicts\.csv/);
+  assert.match(auditScript, /taxonomy-review-identifier-quarantine\.csv/);
+  assert.match(auditScript, /taxonomy-review-unresolved-manual\.csv/);
+  assert.match(auditScript, /taxonomy-review-summary\.md/);
   assert.doesNotMatch(auditScript, /\.insert\(|\.update\(|\.delete\(|\bALTER\b|\bTRUNCATE\b/i);
 });
 

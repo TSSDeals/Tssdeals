@@ -12,7 +12,7 @@ import {
   canonicalResultEquipmentTypeId,
 } from "../shared/equipment-groups";
 
-export const TAXONOMY_AUDIT_RULE_VERSION = "phase1.4-read-only-v6";
+export const TAXONOMY_AUDIT_RULE_VERSION = "phase1.5-read-only-v1";
 
 export interface AuditSportRow {
   id: string;
@@ -117,6 +117,100 @@ export interface IdentifierFinding {
     sourceName: string;
     seller: string | null;
   }>;
+}
+
+export type ReviewPriorityLevel = "critical" | "high" | "medium" | "low";
+export type ReviewAvailability = "available" | "unavailable" | "unknown";
+
+export interface ReviewPriority {
+  level: ReviewPriorityLevel;
+  score: number;
+  affectedRecordCount: number;
+  shopperVisibleFragmentation: boolean;
+  evidenceStrength: AuditConfidence;
+  sourceId: string | null;
+  sourceReviewRecordCount: number;
+  availability: ReviewAvailability;
+}
+
+export interface DealReviewRecord {
+  dealId: string;
+  title: string;
+  sourceId: string;
+  sourceName: string;
+  seller: string | null;
+  availability: ReviewAvailability;
+  availabilityEvidence: string | null;
+  currentSportId: string | null;
+  currentEquipmentTypeId: string | null;
+  proposedSportId: string | null;
+  proposedCanonicalEquipmentTypeId: string | null;
+  equipmentFamily: string | null;
+  evidence: string[];
+  negativeEvidence: string[];
+  identifierEvidence: string[];
+  confidence: AuditConfidence;
+  reason: string;
+  humanApprovalRequired: boolean;
+  status: "proposed" | "pending";
+  outcome: Exclude<AuditOutcome, "already-compatible-no-action">;
+  priority: ReviewPriority;
+}
+
+export interface IdentifierRecommendation {
+  sportId: string;
+  canonicalEquipmentTypeId: string;
+  equipmentFamily: string;
+  supportingDealIds: string[];
+  directEvidence: string[];
+}
+
+export interface IdentifierReviewRecord {
+  kind: IdentifierFindingKind;
+  identifierType: IdentifierFinding["identifierType"];
+  identifierValue: string;
+  scope: string;
+  currentIds: string[];
+  recordCount: number;
+  evidence: string[];
+  reason: string;
+  confidence: AuditConfidence;
+  humanApprovalRequired: true;
+  consensusEligible: false;
+  quarantineReason: string | null;
+  supportedRecommendation: IdentifierRecommendation | null;
+  priority: ReviewPriority;
+  records: Array<{
+    dealId: string;
+    title: string;
+    sourceId: string;
+    sourceName: string;
+    seller: string | null;
+    currentSportId: string | null;
+    currentEquipmentTypeId: string | null;
+    availability: ReviewAvailability;
+  }>;
+}
+
+export interface TaxonomyReviewPacket {
+  metadata: {
+    generatedAt: string;
+    ruleVersion: string;
+    mode: "read-only";
+    applySupported: false;
+    baselineEvidence: "phase1.4-production-audit-offline";
+  };
+  summary: {
+    proposedCorrections: number;
+    likelySameProductFindings: number;
+    supportedIdentifierRecommendations: number;
+    identifierQuarantine: number;
+    unresolvedManualReview: number;
+  };
+  proposedCorrections: DealReviewRecord[];
+  likelySameProductConflicts: IdentifierReviewRecord[];
+  identifierQuarantine: IdentifierReviewRecord[];
+  unresolvedManualReview: DealReviewRecord[];
 }
 
 export interface CorrectionGroup {
@@ -233,6 +327,7 @@ export interface TaxonomyAuditReport {
   rawFieldInventory: RawFieldInventoryRow[];
   taxonomyInventory: TaxonomyInventory;
   assignmentPaths: typeof TAXONOMY_ASSIGNMENT_PATHS;
+  reviewPacket: TaxonomyReviewPacket;
 }
 
 const BASEBALL_BAT_AUDIT_IDS = new Set(["bb-bats", "baseball-bat", "bat", "bats"]);
@@ -257,6 +352,9 @@ const RAW_FIELD_ALIASES = {
     "tag", "productTags", "product_tags", "keywords", "googleProductCategory", "itemGroup",
   ],
   seller: ["ebaySeller", "seller", "sellerName", "merchantName", "storeName", "advertiserName"],
+  availability: [
+    "availability", "stockAvailability", "stockStatus", "inventoryStatus", "inventoryPolicy", "wcInStock",
+  ],
 } as const;
 
 type RawFieldKind = keyof typeof RAW_FIELD_ALIASES;
@@ -389,6 +487,65 @@ function rawValues(raw: unknown, kind: RawFieldKind): Array<{ field: string; val
 
 function sellerFor(deal: AuditDealRow): string | null {
   return rawValues(deal.raw, "seller")[0]?.value ?? null;
+}
+
+function availabilityFor(deal: AuditDealRow): {
+  availability: ReviewAvailability;
+  evidence: string | null;
+} {
+  const observation = rawValues(deal.raw, "availability")[0];
+  if (!observation) return { availability: "unknown", evidence: null };
+  const normalized = normalizeText(observation.value);
+  if (/^(?:false|0|no)$/.test(normalized)) {
+    return {
+      availability: "unavailable",
+      evidence: `raw ${observation.field}: ${observation.value}`,
+    };
+  }
+  if (/^(?:true|1|yes)$/.test(normalized)) {
+    return {
+      availability: "available",
+      evidence: `raw ${observation.field}: ${observation.value}`,
+    };
+  }
+  if (/\b(?:out of stock|unavailable|sold out|discontinued|inactive)\b/.test(normalized)) {
+    return {
+      availability: "unavailable",
+      evidence: `raw ${observation.field}: ${observation.value}`,
+    };
+  }
+  if (/\b(?:in stock|available|active|ships?|ready to ship)\b/.test(normalized)) {
+    return {
+      availability: "available",
+      evidence: `raw ${observation.field}: ${observation.value}`,
+    };
+  }
+  return {
+    availability: "unknown",
+    evidence: `raw ${observation.field}: ${observation.value}`,
+  };
+}
+
+function reviewPriority(input: {
+  affectedRecordCount: number;
+  shopperVisibleFragmentation: boolean;
+  evidenceStrength: AuditConfidence;
+  sourceId: string | null;
+  sourceReviewRecordCount: number;
+  availability: ReviewAvailability;
+}): ReviewPriority {
+  const cohortPoints = Math.min(30, Math.ceil(Math.log2(input.affectedRecordCount + 1)) * 5);
+  const sourcePoints = Math.min(15, Math.ceil(Math.log2(input.sourceReviewRecordCount + 1)) * 3);
+  const evidencePoints = input.evidenceStrength === "high" ? 30
+    : input.evidenceStrength === "medium" ? 18 : 6;
+  const availabilityPoints = input.availability === "available" ? 10
+    : input.availability === "unavailable" ? -5 : 0;
+  const score = Math.max(0, Math.min(100,
+    cohortPoints + sourcePoints + evidencePoints
+      + (input.shopperVisibleFragmentation ? 20 : 0) + availabilityPoints));
+  const level: ReviewPriorityLevel = score >= 75 ? "critical"
+    : score >= 55 ? "high" : score >= 30 ? "medium" : "low";
+  return { ...input, score, level };
 }
 
 type EvidenceSignalKind = "title" | "structured" | "identity-consensus" | "stored-taxonomy";
@@ -1184,6 +1341,7 @@ interface DealCorrection {
   proposedSportId: string | null;
   proposedEquipmentTypeId: string | null;
   evidence: string[];
+  negativeEvidence: string[];
   reason: string;
   confidence: AuditConfidence;
   humanApprovalRequired: boolean;
@@ -1205,6 +1363,7 @@ function correctionForDeal(
       deal, family: currentEquipment ? semanticTaxonomyLabel(currentEquipment.name) : null,
       proposedSportId: null, proposedEquipmentTypeId: null,
       evidence: ["stored taxonomy reference is orphaned"],
+      negativeEvidence: ["stored sport or equipment reference is absent from the approved taxonomy snapshot"],
       reason: "A safe destination cannot be inferred until the orphaned reference is reviewed.",
       confidence: "low", humanApprovalRequired: true, status: "pending",
       outcome: "genuine-conflict-review",
@@ -1223,6 +1382,7 @@ function correctionForDeal(
         ...evidence.signals.map((signal) => signal.evidence),
         ...(ownerConflict ? [`equipment owner is ${currentEquipment?.sportId}`] : []),
       ],
+      negativeEvidence: assessment.blockedReasons,
       reason: unresolvedCurrent
         ? "Compatible product evidence identifies a canonical category while the stored classification is unresolved/Other."
         : "Compatible product evidence conflicts with the stored sport or equipment category.",
@@ -1240,6 +1400,7 @@ function correctionForDeal(
     return {
       deal, family: "unresolved", proposedSportId: null, proposedEquipmentTypeId: null,
       evidence: assessment.blockedReasons,
+      negativeEvidence: assessment.blockedReasons,
       reason: mixedOrAmbiguous
         ? "Multiple or shared-category signals do not identify one approved destination."
         : "Explicit equipment or merchandise evidence conflicts with a safe automatic destination.",
@@ -1256,6 +1417,7 @@ function correctionForDeal(
       deal, family: known.family, proposedSportId: deal.sportId ?? null,
       proposedEquipmentTypeId: known.id,
       evidence: [`stored ID ${deal.equipmentTypeId} is a reviewed read-path alias of ${known.id}`],
+      negativeEvidence: [],
       reason: "Stored legacy ID fragments a canonical shopper equipment group.",
       confidence: "medium", humanApprovalRequired: true, status: "proposed",
       outcome: "proposed-correction",
@@ -1268,6 +1430,7 @@ function correctionForDeal(
       proposedSportId: currentEquipment?.sportId ?? null,
       proposedEquipmentTypeId: deal.equipmentTypeId ?? null,
       evidence: [`equipment ${deal.equipmentTypeId} belongs to ${currentEquipment?.sportId}`],
+      negativeEvidence: ["stored sport conflicts with the equipment row's owning sport"],
       reason: "Stored sport conflicts with the owning sport of the stored equipment row.",
       confidence: "medium", humanApprovalRequired: true, status: "pending",
       outcome: "genuine-conflict-review",
@@ -1283,6 +1446,9 @@ function correctionForDeal(
           ? assessment.blockedReasons
           : ["no unique compatible evidence rule matched"]),
       ],
+      negativeEvidence: assessment.blockedReasons.length > 0
+        ? assessment.blockedReasons
+        : ["no unique compatible evidence rule matched"],
       reason: "Ambiguous record must remain pending; Phase 1 does not guess a destination.",
       confidence: "low", humanApprovalRequired: true, status: "pending",
       outcome: "unresolved-other",
@@ -1293,7 +1459,19 @@ function correctionForDeal(
 
 interface CorrectionAnalysis {
   groups: CorrectionGroup[];
+  records: DealCorrection[];
   outcomeCounts: Record<AuditOutcome, number>;
+  identityConsensus: Map<string, IdentityConsensus>;
+}
+
+function correctionGroupKey(correction: DealCorrection): string {
+  return JSON.stringify([
+    correction.proposedSportId, correction.family, correction.deal.sourceId,
+    sellerFor(correction.deal), correction.deal.sportId ?? null,
+    correction.deal.equipmentTypeId ?? null, correction.proposedEquipmentTypeId,
+    correction.reason, correction.confidence, correction.humanApprovalRequired,
+    correction.status, correction.outcome,
+  ]);
 }
 
 function correctionGroups(dataset: TaxonomyAuditDataset): CorrectionAnalysis {
@@ -1302,6 +1480,7 @@ function correctionGroups(dataset: TaxonomyAuditDataset): CorrectionAnalysis {
   const sourcesById = new Map(dataset.sources.map((row) => [row.id, row]));
   const identityConsensus = buildIdentityConsensus(dataset, equipmentById, sourcesById);
   const grouped = new Map<string, CorrectionGroup>();
+  const records: DealCorrection[] = [];
   const outcomeCounts: Record<AuditOutcome, number> = {
     "proposed-correction": 0,
     "genuine-conflict-review": 0,
@@ -1319,15 +1498,10 @@ function correctionGroups(dataset: TaxonomyAuditDataset): CorrectionAnalysis {
       outcomeCounts["already-compatible-no-action"] += 1;
       continue;
     }
+    records.push(correction);
     outcomeCounts[correction.outcome] += 1;
     const seller = sellerFor(deal);
-    const key = JSON.stringify([
-      correction.proposedSportId, correction.family, deal.sourceId, seller,
-      deal.sportId ?? null, deal.equipmentTypeId ?? null,
-      correction.proposedEquipmentTypeId, correction.reason,
-      correction.confidence, correction.humanApprovalRequired, correction.status,
-      correction.outcome,
-    ]);
+    const key = correctionGroupKey(correction);
     let group = grouped.get(key);
     if (!group) {
       group = {
@@ -1361,7 +1535,7 @@ function correctionGroups(dataset: TaxonomyAuditDataset): CorrectionAnalysis {
     || a.sourceId.localeCompare(b.sourceId)
     || (a.seller ?? "").localeCompare(b.seller ?? "")
     || (a.currentEquipmentTypeId ?? "").localeCompare(b.currentEquipmentTypeId ?? ""));
-  return { groups, outcomeCounts };
+  return { groups, records, outcomeCounts, identityConsensus };
 }
 
 const IDENTITY_TITLE_STOP_WORDS = new Set([
@@ -1401,12 +1575,60 @@ function titlesClearlyUnrelated(records: AuditDealRow[]): boolean {
   return true;
 }
 
+function supportedIdentifierRecommendation(
+  records: AuditDealRow[],
+  sourcesById: Map<string, AuditSourceRow>,
+): IdentifierRecommendation | null {
+  const supported = new Map<string, {
+    candidate: CandidateEvidence;
+    dealIds: Set<string>;
+    evidence: Set<string>;
+  }>();
+  for (const deal of records) {
+    const protections = protectedFamilies(deal, sourcesById.get(deal.sourceId));
+    const compatible = Array.from(collectDirectEvidence(deal, sourcesById.get(deal.sourceId)).values())
+      .filter((candidate) => !sportConflictsWithTitle(deal, candidate.sportId))
+      .filter((candidate) => !equipmentFamilyConflictsWithTitle(deal, candidate))
+      .filter((candidate) => candidateHasCompatibleProtection(candidate, protections));
+    const keys = new Set(compatible.map(candidateKey));
+    if (keys.size > 1) return null;
+    if (compatible.length !== 1) continue;
+    const candidate = compatible[0];
+    const key = candidateKey(candidate);
+    const entry = supported.get(key) ?? {
+      candidate,
+      dealIds: new Set<string>(),
+      evidence: new Set<string>(),
+    };
+    entry.dealIds.add(deal.id);
+    for (const signal of candidate.signals) {
+      if (signal.kind !== "identity-consensus" && signal.kind !== "stored-taxonomy") {
+        entry.evidence.add(`${deal.id}: ${signal.evidence}`);
+      }
+    }
+    supported.set(key, entry);
+  }
+  if (supported.size !== 1) return null;
+  const entry = Array.from(supported.values())[0];
+  if (entry.dealIds.size < 2) return null;
+  return {
+    sportId: entry.candidate.sportId,
+    canonicalEquipmentTypeId: entry.candidate.equipmentTypeId,
+    equipmentFamily: entry.candidate.family,
+    supportingDealIds: Array.from(entry.dealIds).sort(),
+    directEvidence: Array.from(entry.evidence).sort(),
+  };
+}
+
+type IdentifierReviewDraft = Omit<IdentifierReviewRecord, "priority">;
+
 function buildFieldInventories(dataset: TaxonomyAuditDataset): {
   fieldCoverage: FieldCoverage[];
   brandInventory: BrandInventoryRow[];
   sourceCategoryInventory: SourceCategoryInventoryRow[];
   rawFieldInventory: RawFieldInventoryRow[];
   identifierFindings: IdentifierFinding[];
+  identifierReviews: IdentifierReviewRecord[];
 } {
   const total = dataset.deals.length;
   const coverage = new Map<string, { present: number; malformed: number; values: Set<string> }>();
@@ -1419,6 +1641,7 @@ function buildFieldInventories(dataset: TaxonomyAuditDataset): {
     classifications: Map<string, AuditDealRow[]>;
   }>();
   const sourceNames = new Map(dataset.sources.map((source) => [source.id, source.name]));
+  const sourcesById = new Map(dataset.sources.map((source) => [source.id, source]));
 
   const touchCoverage = (field: string, values: string[], malformed = false) => {
     const entry = coverage.get(field) ?? { present: 0, malformed: 0, values: new Set<string>() };
@@ -1523,6 +1746,7 @@ function buildFieldInventories(dataset: TaxonomyAuditDataset): {
   })).sort((a, b) => b.recordCount - a.recordCount || a.field.localeCompare(b.field));
 
   const identifierFindings: IdentifierFinding[] = [];
+  const identifierReviewDrafts: IdentifierReviewDraft[] = [];
   for (const identity of Array.from(identifiers.values())) {
     const { observation, records } = identity;
     const classificationConflict = identity.classifications.size >= 2;
@@ -1562,7 +1786,7 @@ function buildFieldInventories(dataset: TaxonomyAuditDataset): {
       "invalid-identifier": "The identifier is structurally invalid or too weak to provide identity consensus.",
       "unresolved-collision": "The scoped identifier collision lacks enough compatible product evidence to decide whether the records are the same product.",
     };
-    identifierFindings.push({
+    const finding: IdentifierFinding = {
       kind,
       identifierType: observation.type,
       identifierValue: observation.value,
@@ -1580,18 +1804,222 @@ function buildFieldInventories(dataset: TaxonomyAuditDataset): {
         sourceName: sourceNames.get(sourceId) ?? sourceId,
         seller: sellerFor({ id, title, sourceId, raw }),
       })),
+    };
+    identifierFindings.push(finding);
+
+    const recommendation = kind === "likely-same-product-conflict"
+      ? supportedIdentifierRecommendation(records, sourcesById)
+      : null;
+    const quarantineReason = recommendation
+      ? null
+      : kind === "likely-same-product-conflict"
+        ? "matching direct product-family evidence does not independently support one destination across at least two records"
+        : reasonByKind[kind];
+    identifierReviewDrafts.push({
+      kind,
+      identifierType: observation.type,
+      identifierValue: observation.value,
+      scope: observation.scope,
+      currentIds: finding.currentIds,
+      recordCount: records.length,
+      evidence,
+      reason: reasonByKind[kind],
+      confidence: finding.confidence,
+      humanApprovalRequired: true,
+      consensusEligible: false,
+      quarantineReason,
+      supportedRecommendation: recommendation,
+      records: records.map(({ id, title, sourceId, sportId, equipmentTypeId, raw }) => ({
+        dealId: id,
+        title,
+        sourceId,
+        sourceName: sourceNames.get(sourceId) ?? sourceId,
+        seller: sellerFor({ id, title, sourceId, raw }),
+        currentSportId: sportId ?? null,
+        currentEquipmentTypeId: equipmentTypeId ?? null,
+        availability: availabilityFor({ id, title, sourceId, raw }).availability,
+      })),
     });
   }
   identifierFindings.sort((a, b) => a.kind.localeCompare(b.kind)
     || a.identifierType.localeCompare(b.identifierType)
     || a.identifierValue.localeCompare(b.identifierValue));
-  return { fieldCoverage, brandInventory, sourceCategoryInventory, rawFieldInventory, identifierFindings };
+  const sourceReviewDealIds = new Map<string, Set<string>>();
+  for (const review of identifierReviewDrafts) {
+    for (const record of review.records) {
+      const ids = sourceReviewDealIds.get(record.sourceId) ?? new Set<string>();
+      ids.add(record.dealId);
+      sourceReviewDealIds.set(record.sourceId, ids);
+    }
+  }
+  const identifierReviews = identifierReviewDrafts.map((review): IdentifierReviewRecord => {
+    const sourceIds = Array.from(new Set(review.records.map((record) => record.sourceId)));
+    const sourceId = sourceIds.length === 1 ? sourceIds[0] : null;
+    const availability: ReviewAvailability = review.records.some((record) => record.availability === "available")
+      ? "available"
+      : review.records.length > 0
+          && review.records.every((record) => record.availability === "unavailable")
+        ? "unavailable" : "unknown";
+    return {
+      ...review,
+      priority: reviewPriority({
+        affectedRecordCount: review.recordCount,
+        shopperVisibleFragmentation: review.currentIds.length > 1,
+        evidenceStrength: review.supportedRecommendation ? "high" : review.confidence,
+        sourceId,
+        sourceReviewRecordCount: sourceId
+          ? sourceReviewDealIds.get(sourceId)?.size ?? review.recordCount
+          : review.recordCount,
+        availability,
+      }),
+    };
+  }).sort((a, b) => b.priority.score - a.priority.score
+    || b.recordCount - a.recordCount
+    || a.identifierType.localeCompare(b.identifierType)
+    || a.identifierValue.localeCompare(b.identifierValue));
+  return {
+    fieldCoverage,
+    brandInventory,
+    sourceCategoryInventory,
+    rawFieldInventory,
+    identifierFindings,
+    identifierReviews,
+  };
+}
+
+function identifierEvidenceForDeal(
+  deal: AuditDealRow,
+  identityConsensus: Map<string, IdentityConsensus>,
+): string[] {
+  return identifierObservations(deal).map((identity) => {
+    if (identity.invalidReason) {
+      return `${identity.type} ${identity.value} quarantined: ${identity.invalidReason}`;
+    }
+    const consensus = identityConsensus.get(identity.key);
+    if (consensus) {
+      return `${identity.type} ${identity.value} (${consensus.scope}) agrees across ${consensus.supportingRecords} correctly classified records`;
+    }
+    return `${identity.type} ${identity.value} (${identity.scope}) has no eligible identity consensus`;
+  });
+}
+
+function shopperVisibleFragmentationForCorrection(
+  correction: DealCorrection,
+  equipmentById: Map<string, AuditEquipmentRow>,
+): boolean {
+  if (!correction.proposedEquipmentTypeId) return false;
+  const currentEquipment = correction.deal.equipmentTypeId
+    ? equipmentById.get(correction.deal.equipmentTypeId) : undefined;
+  if (isOther(correction.deal.equipmentTypeId, currentEquipment?.name)) return true;
+  const currentDisplayId = canonicalResultEquipmentTypeId(
+    correction.deal.sportId,
+    correction.deal.equipmentTypeId,
+  );
+  const proposedDisplayId = canonicalResultEquipmentTypeId(
+    correction.proposedSportId,
+    correction.proposedEquipmentTypeId,
+  );
+  return currentDisplayId !== proposedDisplayId;
+}
+
+function buildTaxonomyReviewPacket(
+  dataset: TaxonomyAuditDataset,
+  correctionAnalysis: CorrectionAnalysis,
+  identifierReviews: IdentifierReviewRecord[],
+  generatedAt: string,
+): TaxonomyReviewPacket {
+  const sourcesById = new Map(dataset.sources.map((source) => [source.id, source]));
+  const equipmentById = new Map(dataset.equipmentTypes.map((equipment) => [equipment.id, equipment]));
+  const cohortCounts = new Map<string, number>();
+  const sourceReviewCounts = new Map<string, number>();
+  for (const correction of correctionAnalysis.records) {
+    const cohortKey = correctionGroupKey(correction);
+    cohortCounts.set(cohortKey, (cohortCounts.get(cohortKey) ?? 0) + 1);
+    sourceReviewCounts.set(
+      correction.deal.sourceId,
+      (sourceReviewCounts.get(correction.deal.sourceId) ?? 0) + 1,
+    );
+  }
+
+  const dealReviews = correctionAnalysis.records.map((correction): DealReviewRecord => {
+    const deal = correction.deal;
+    const availability = availabilityFor(deal);
+    const affectedRecordCount = cohortCounts.get(correctionGroupKey(correction)) ?? 1;
+    const shopperVisibleFragmentation = shopperVisibleFragmentationForCorrection(
+      correction,
+      equipmentById,
+    );
+    return {
+      dealId: deal.id,
+      title: deal.title,
+      sourceId: deal.sourceId,
+      sourceName: sourcesById.get(deal.sourceId)?.name ?? deal.sourceId,
+      seller: sellerFor(deal),
+      availability: availability.availability,
+      availabilityEvidence: availability.evidence,
+      currentSportId: deal.sportId ?? null,
+      currentEquipmentTypeId: deal.equipmentTypeId ?? null,
+      proposedSportId: correction.proposedSportId,
+      proposedCanonicalEquipmentTypeId: correction.proposedEquipmentTypeId,
+      equipmentFamily: correction.family,
+      evidence: correction.evidence,
+      negativeEvidence: correction.negativeEvidence,
+      identifierEvidence: identifierEvidenceForDeal(deal, correctionAnalysis.identityConsensus),
+      confidence: correction.confidence,
+      reason: correction.reason,
+      humanApprovalRequired: correction.humanApprovalRequired,
+      status: correction.status,
+      outcome: correction.outcome,
+      priority: reviewPriority({
+        affectedRecordCount,
+        shopperVisibleFragmentation,
+        evidenceStrength: correction.confidence,
+        sourceId: deal.sourceId,
+        sourceReviewRecordCount: sourceReviewCounts.get(deal.sourceId) ?? 1,
+        availability: availability.availability,
+      }),
+    };
+  }).sort((a, b) => b.priority.score - a.priority.score
+    || a.sourceId.localeCompare(b.sourceId)
+    || a.dealId.localeCompare(b.dealId));
+
+  const proposedCorrections = dealReviews.filter((record) =>
+    record.outcome === "proposed-correction");
+  const unresolvedManualReview = dealReviews.filter((record) =>
+    record.outcome !== "proposed-correction");
+  const likelySameProductFindings = identifierReviews.filter((record) =>
+    record.kind === "likely-same-product-conflict");
+  const likelySameProductConflicts = likelySameProductFindings.filter((record) =>
+    record.supportedRecommendation !== null);
+  const identifierQuarantine = identifierReviews.filter((record) =>
+    record.supportedRecommendation === null);
+  return {
+    metadata: {
+      generatedAt,
+      ruleVersion: TAXONOMY_AUDIT_RULE_VERSION,
+      mode: "read-only",
+      applySupported: false,
+      baselineEvidence: "phase1.4-production-audit-offline",
+    },
+    summary: {
+      proposedCorrections: proposedCorrections.length,
+      likelySameProductFindings: likelySameProductFindings.length,
+      supportedIdentifierRecommendations: likelySameProductConflicts.length,
+      identifierQuarantine: identifierQuarantine.length,
+      unresolvedManualReview: unresolvedManualReview.length,
+    },
+    proposedCorrections,
+    likelySameProductConflicts,
+    identifierQuarantine,
+    unresolvedManualReview,
+  };
 }
 
 export function buildTaxonomyAuditReport(
   dataset: TaxonomyAuditDataset,
   options: { generatedAt?: string } = {},
 ): TaxonomyAuditReport {
+  const generatedAt = options.generatedAt ?? new Date().toISOString();
   const fieldInventories = buildFieldInventories(dataset);
   const taxonomyFindings = taxonomyStructureFindings(dataset)
     .sort((a, b) => a.kind.localeCompare(b.kind) || a.label.localeCompare(b.label));
@@ -1613,9 +2041,15 @@ export function buildTaxonomyAuditReport(
   const otherRecords = dataset.deals.filter((deal) =>
     isOther(deal.equipmentTypeId, deal.equipmentTypeId ? equipmentById.get(deal.equipmentTypeId)?.name : null)).length;
   const unclassifiedRecords = dataset.deals.filter((deal) => !deal.sportId || !deal.equipmentTypeId).length;
+  const reviewPacket = buildTaxonomyReviewPacket(
+    dataset,
+    correctionAnalysis,
+    fieldInventories.identifierReviews,
+    generatedAt,
+  );
   return {
     metadata: {
-      generatedAt: options.generatedAt ?? new Date().toISOString(),
+      generatedAt,
       ruleVersion: TAXONOMY_AUDIT_RULE_VERSION,
       mode: "read-only",
       scope: "all-deals-all-sports",
@@ -1651,6 +2085,7 @@ export function buildTaxonomyAuditReport(
     rawFieldInventory: fieldInventories.rawFieldInventory,
     taxonomyInventory: buildTaxonomyInventory(dataset),
     assignmentPaths: TAXONOMY_ASSIGNMENT_PATHS,
+    reviewPacket,
   };
 }
 
@@ -1694,6 +2129,158 @@ export function taxonomyAuditIdentifierFindingsCsv(report: TaxonomyAuditReport):
     }).join(","));
   }
   return `${lines.join("\n")}\n`;
+}
+
+function taxonomyDealReviewCsv(rows: DealReviewRecord[]): string {
+  const columns = [
+    "dealId", "title", "sourceId", "sourceName", "seller", "availability",
+    "availabilityEvidence", "currentSportId", "currentEquipmentTypeId", "proposedSportId",
+    "proposedCanonicalEquipmentTypeId", "equipmentFamily", "evidence", "negativeEvidence",
+    "identifierEvidence", "confidence", "reason", "humanApprovalRequired", "status", "outcome",
+    "priorityLevel", "priorityScore", "affectedRecordCount", "shopperVisibleFragmentation",
+    "sourceReviewRecordCount",
+  ] as const;
+  const lines = [columns.join(",")];
+  for (const row of rows) {
+    const values: Record<(typeof columns)[number], unknown> = {
+      dealId: row.dealId,
+      title: row.title,
+      sourceId: row.sourceId,
+      sourceName: row.sourceName,
+      seller: row.seller,
+      availability: row.availability,
+      availabilityEvidence: row.availabilityEvidence,
+      currentSportId: row.currentSportId,
+      currentEquipmentTypeId: row.currentEquipmentTypeId,
+      proposedSportId: row.proposedSportId,
+      proposedCanonicalEquipmentTypeId: row.proposedCanonicalEquipmentTypeId,
+      equipmentFamily: row.equipmentFamily,
+      evidence: row.evidence,
+      negativeEvidence: row.negativeEvidence,
+      identifierEvidence: row.identifierEvidence,
+      confidence: row.confidence,
+      reason: row.reason,
+      humanApprovalRequired: row.humanApprovalRequired,
+      status: row.status,
+      outcome: row.outcome,
+      priorityLevel: row.priority.level,
+      priorityScore: row.priority.score,
+      affectedRecordCount: row.priority.affectedRecordCount,
+      shopperVisibleFragmentation: row.priority.shopperVisibleFragmentation,
+      sourceReviewRecordCount: row.priority.sourceReviewRecordCount,
+    };
+    lines.push(columns.map((column) => csvCell(values[column])).join(","));
+  }
+  return `${lines.join("\n")}\n`;
+}
+
+function taxonomyIdentifierReviewCsv(rows: IdentifierReviewRecord[]): string {
+  const columns = [
+    "kind", "identifierType", "identifierValue", "scope", "currentIds", "recordCount",
+    "evidence", "reason", "confidence", "humanApprovalRequired", "consensusEligible",
+    "quarantineReason", "recommendedSportId", "recommendedCanonicalEquipmentTypeId",
+    "recommendedEquipmentFamily", "recommendationSupportingDealIds", "recommendationDirectEvidence",
+    "priorityLevel", "priorityScore", "affectedRecordCount", "shopperVisibleFragmentation",
+    "sourceId", "sourceReviewRecordCount", "availability", "records",
+  ] as const;
+  const lines = [columns.join(",")];
+  for (const row of rows) {
+    const values: Record<(typeof columns)[number], unknown> = {
+      kind: row.kind,
+      identifierType: row.identifierType,
+      identifierValue: row.identifierValue,
+      scope: row.scope,
+      currentIds: row.currentIds,
+      recordCount: row.recordCount,
+      evidence: row.evidence,
+      reason: row.reason,
+      confidence: row.confidence,
+      humanApprovalRequired: row.humanApprovalRequired,
+      consensusEligible: row.consensusEligible,
+      quarantineReason: row.quarantineReason,
+      recommendedSportId: row.supportedRecommendation?.sportId ?? null,
+      recommendedCanonicalEquipmentTypeId:
+        row.supportedRecommendation?.canonicalEquipmentTypeId ?? null,
+      recommendedEquipmentFamily: row.supportedRecommendation?.equipmentFamily ?? null,
+      recommendationSupportingDealIds: row.supportedRecommendation?.supportingDealIds ?? [],
+      recommendationDirectEvidence: row.supportedRecommendation?.directEvidence ?? [],
+      priorityLevel: row.priority.level,
+      priorityScore: row.priority.score,
+      affectedRecordCount: row.priority.affectedRecordCount,
+      shopperVisibleFragmentation: row.priority.shopperVisibleFragmentation,
+      sourceId: row.priority.sourceId,
+      sourceReviewRecordCount: row.priority.sourceReviewRecordCount,
+      availability: row.priority.availability,
+      records: row.records.map((record) =>
+        `${record.dealId}: ${record.title} [${record.sourceId}/${record.sourceName}/${record.seller ?? "no seller"}/${record.currentSportId ?? "null"}/${record.currentEquipmentTypeId ?? "null"}/${record.availability}]`),
+    };
+    lines.push(columns.map((column) => csvCell(values[column])).join(","));
+  }
+  return `${lines.join("\n")}\n`;
+}
+
+export function taxonomyReviewProposedCorrectionsCsv(report: TaxonomyAuditReport): string {
+  return taxonomyDealReviewCsv(report.reviewPacket.proposedCorrections);
+}
+
+export function taxonomyReviewUnresolvedManualCsv(report: TaxonomyAuditReport): string {
+  return taxonomyDealReviewCsv(report.reviewPacket.unresolvedManualReview);
+}
+
+export function taxonomyReviewSupportedIdentifierConflictsCsv(report: TaxonomyAuditReport): string {
+  return taxonomyIdentifierReviewCsv(report.reviewPacket.likelySameProductConflicts);
+}
+
+export function taxonomyReviewIdentifierQuarantineCsv(report: TaxonomyAuditReport): string {
+  return taxonomyIdentifierReviewCsv(report.reviewPacket.identifierQuarantine);
+}
+
+export function taxonomyReviewPacketJson(report: TaxonomyAuditReport): string {
+  return `${JSON.stringify(report.reviewPacket, null, 2)}\n`;
+}
+
+export function taxonomyReviewMarkdown(report: TaxonomyAuditReport): string {
+  const packet = report.reviewPacket;
+  const priorityCounts = (rows: Array<{ priority: ReviewPriority }>) => {
+    const counts: Record<ReviewPriorityLevel, number> = {
+      critical: 0, high: 0, medium: 0, low: 0,
+    };
+    for (const row of rows) counts[row.priority.level] += 1;
+    return counts;
+  };
+  const proposalPriorities = priorityCounts(packet.proposedCorrections);
+  const unresolvedPriorities = priorityCounts(packet.unresolvedManualReview);
+  return [
+    "# TSSDeals Phase 1.5 taxonomy review packet",
+    "",
+    `Generated: ${packet.metadata.generatedAt}`,
+    "",
+    "> Approval-ready, read-only review material. This packet has no apply or mutation mode.",
+    "",
+    "## Review queues",
+    "",
+    `- Proposed corrections ready for human review: ${packet.summary.proposedCorrections}.`,
+    `- Likely same-product identifier findings: ${packet.summary.likelySameProductFindings}.`,
+    `- Likely same-product conflicts with a direct-evidence-supported recommendation: ${packet.summary.supportedIdentifierRecommendations}.`,
+    `- Identifier quarantine: ${packet.summary.identifierQuarantine}.`,
+    `- Unresolved/manual-review deal records: ${packet.summary.unresolvedManualReview}.`,
+    "",
+    "## Priority distribution",
+    "",
+    `- Proposed corrections: critical ${proposalPriorities.critical}, high ${proposalPriorities.high}, medium ${proposalPriorities.medium}, low ${proposalPriorities.low}.`,
+    `- Unresolved/manual: critical ${unresolvedPriorities.critical}, high ${unresolvedPriorities.high}, medium ${unresolvedPriorities.medium}, low ${unresolvedPriorities.low}.`,
+    "",
+    "Priority combines cohort size, shopper-visible fragmentation, evidence strength, source review volume, and current availability when a structured supplier value is present.",
+    "",
+    "## Identifier approval boundary",
+    "",
+    "Every identifier conflict remains human-review-only and consensus-ineligible. A likely same-product conflict receives a recommendation only when at least two records independently produce the same compatible direct product-family destination. Identifier agreement alone never creates a classification. Invalid identifiers, unsafe reuse, unresolved collisions, sellerless SKUs, numeric/generic SKUs, and conflicting direct evidence remain quarantined.",
+    "",
+    "## Baseline evidence",
+    "",
+    "The supplied Phase 1.4 production bundle was inspected offline only. It reported 1,283 proposed-correction records and 2,472 identifier findings: 1,959 likely-same-product conflicts, 12 unsafe-reuse findings, 296 invalid identifiers, and 205 unresolved collisions. Its correction cohorts retain representative examples rather than every deal, so this Phase 1.5 packet is generated from a future read-only snapshot and was not run against production in this change.",
+    "",
+  ].join("\n");
 }
 
 export function taxonomyAuditMarkdown(report: TaxonomyAuditReport): string {
@@ -1761,11 +2348,13 @@ export function taxonomyAuditMarkdown(report: TaxonomyAuditReport): string {
   }
   lines.push(
     "",
-    "## Phase 1.4 evidence policy",
+    "## Phase 1.5 evidence and review policy",
     "",
     "A sport name alone is never ball evidence. Explicit softball/fastpitch/slowpitch, mixed Baseball/Softball, training-ball, ball-container, glove-accessory, ball-memorabilia, and batting-tee replacement-component evidence is evaluated before ordinary equipment destinations. Canonical stored sport/equipment families use an explicit compatibility layer so compatible products are counted as no action rather than pending. High confidence still requires two independent compatible signal types; proposed corrections, genuine conflicts, unresolved Other records, ambiguous evidence, and compatible no-action records are reported separately.",
     "",
     "Validated UPC/GTIN values must pass a structural check digit and cannot be repeated-digit placeholders. SKU identity is source- and known-seller-scoped; sellerless, numeric, or generic SKUs cannot provide consensus. Source item numbers are source-scoped. Identifier consensus can only reinforce matching direct product-family evidence; it cannot create a destination by itself.",
+    "",
+    "The approval-review packet expands correction decisions per deal, partitions directly supported likely-same-product recommendations from identifier quarantine, and orders review using transparent cohort, fragmentation, evidence, source-volume, and availability factors. Every identifier conflict remains consensus-ineligible and human-review-only.",
     "",
     "## Assignment-path assessment",
     "",
