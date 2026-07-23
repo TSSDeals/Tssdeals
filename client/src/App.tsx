@@ -21,6 +21,7 @@ import AppIndex from "@/pages/AppIndex";
 import TeamPage from "@/pages/TeamPage";
 import TeamStatsLanding from "@/pages/TeamStatsLanding";
 import AdminInvoices from "@/pages/AdminInvoices";
+import AdminTaxonomyReview from "@/pages/AdminTaxonomyReview";
 import DealBlastPage from "@/pages/DealBlastPage";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -62,6 +63,7 @@ function Router() {
       <Route path="/app/blog/:slug" component={Blog} />
       <Route path="/app/blog" component={Blog} />
       <Route path="/app/fanatics" component={Fanatics} />
+      <Route path="/app/admin/taxonomy-review" component={AdminTaxonomyReview} />
       <Route path="/app/admin" component={Admin} />
 
       {/* Buyer's Guide */}
