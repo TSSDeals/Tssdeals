@@ -645,6 +645,21 @@ export function createTaxonomyReviewDecision(
   };
 }
 
+export function updateTaxonomyReviewDecisionNote(
+  decisions: ReadonlyMap<string, TaxonomyReviewDecision>,
+  itemKey: string,
+  reviewerNote: string,
+): Map<string, TaxonomyReviewDecision> {
+  const existing = decisions.get(itemKey);
+  if (!existing) return new Map(decisions);
+  const next = new Map(decisions);
+  next.set(itemKey, {
+    ...existing,
+    reviewerNote: reviewerNote.trim() || null,
+  });
+  return next;
+}
+
 function sortedDecisions(
   workspace: TaxonomyReviewWorkspace,
   decisions: Iterable<TaxonomyReviewDecision>,

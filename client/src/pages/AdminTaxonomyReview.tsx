@@ -47,6 +47,7 @@ import {
   sha256AuditBundle,
   taxonomyReviewDecisionsCsv,
   taxonomyReviewDecisionsJson,
+  updateTaxonomyReviewDecisionNote,
   type ReviewClassification,
   type ReviewDecisionValue,
   type ReviewFilters,
@@ -488,10 +489,14 @@ export default function AdminTaxonomyReview() {
                       <TableCell className="align-top">
                         <DecisionButtons item={item} decision={decisions.get(item.key)}
                           note={notes[item.key] ?? ""}
-                          onNote={(value) => setNotes((current) => ({
-                            ...current,
-                            [item.key]: value,
-                          }))}
+                          onNote={(value) => {
+                            setNotes((current) => ({
+                              ...current,
+                              [item.key]: value,
+                            }));
+                            setDecisions((current) =>
+                              updateTaxonomyReviewDecisionNote(current, item.key, value));
+                          }}
                           onDecide={(value) => decide(item, value)} />
                       </TableCell>
                     </TableRow>

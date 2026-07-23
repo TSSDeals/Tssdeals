@@ -11,6 +11,7 @@ import {
   sha256AuditBundle,
   taxonomyReviewDecisionsCsv,
   taxonomyReviewDecisionsJson,
+  updateTaxonomyReviewDecisionNote,
   type TaxonomyReviewDecision,
 } from "../shared/taxonomy-review";
 
@@ -320,6 +321,36 @@ test("decision exports are deterministic and retain the complete review identity
   assert.match(csv, /admin@example\.com/);
   assert.match(csv, /phase1\.5-read-only-v1/);
   assert.match(csv, new RegExp(BUNDLE_IDENTITY));
+});
+
+test("note-only edits update both exports without changing decision or timestamp", () => {
+  const review = workspace();
+  const original = createTaxonomyReviewDecision(review, {
+    itemKey: "deal:deal-bat",
+    decision: "approve",
+    reviewer: "admin@example.com",
+    reviewedAt: "2026-07-23T03:05:00.000Z",
+    reviewerNote: "Initial note",
+  });
+  const decisions = updateTaxonomyReviewDecisionNote(
+    new Map([[original.itemKey, original]]),
+    original.itemKey,
+    "Latest visible reviewer note",
+  );
+  const updated = decisions.get(original.itemKey);
+  assert.ok(updated);
+  assert.equal(updated.reviewerNote, "Latest visible reviewer note");
+  assert.equal(updated.decision, "approve");
+  assert.equal(updated.reviewedAt, "2026-07-23T03:05:00.000Z");
+
+  const json = taxonomyReviewDecisionsJson(review, decisions.values());
+  const csv = taxonomyReviewDecisionsCsv(review, decisions.values());
+  assert.match(json, /"reviewerNote": "Latest visible reviewer note"/);
+  assert.match(csv, /Latest visible reviewer note/);
+  assert.doesNotMatch(json, /Initial note/);
+  assert.doesNotMatch(csv, /Initial note/);
+  assert.match(json, /"decision": "approve"/);
+  assert.match(json, /"reviewedAt": "2026-07-23T03:05:00.000Z"/);
 });
 
 test("bundle identity is a deterministic SHA-256 of the imported packet bytes", async () => {
