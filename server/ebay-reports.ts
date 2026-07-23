@@ -16,7 +16,7 @@ const OAUTH_SCOPES = [
   "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
   "https://api.ebay.com/oauth/api_scope/sell.inventory",
   "https://api.ebay.com/oauth/api_scope/sell.inventory.readonly",
-].join(" ");
+];
 
 interface EbayOrder {
   orderId: string;
@@ -50,15 +50,57 @@ interface EbayOrdersResponse {
   errors?: Array<{ message: string; errorId: number }>;
 }
 
-export function getEbayOAuthUrl(clientId: string, redirectUri: string, state: string): string {
+export function getEbayOAuthScopes(): string[] {
+  return [...OAUTH_SCOPES];
+}
+
+export function getEbayOAuthUrl(
+  clientId: string,
+  redirectUri: string,
+  state: string,
+  requestedScopes: readonly string[] = OAUTH_SCOPES,
+): string {
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,
     response_type: "code",
-    scope: OAUTH_SCOPES,
+    scope: requestedScopes.join(" "),
     state,
   });
   return `${EBAY_AUTH_BASE}?${params.toString()}`;
+}
+
+export function resolveEbayAuthorizationScope(
+  tokenResponseScope: unknown,
+  requestedScopes: readonly string[],
+): string {
+  const requested = [...new Set(requestedScopes.map((scope) => scope.trim()).filter(Boolean))];
+  if (requested.length === 0) {
+    throw new EbayIntegrationError({
+      code: "missing_scope",
+      operation: "authorization code exchange",
+      message: "The eBay authorization request did not include verifiable permissions. Reconnect the eBay account to try again.",
+    });
+  }
+
+  const returned = typeof tokenResponseScope === "string"
+    ? [...new Set(tokenResponseScope.split(/\s+/).map((scope) => scope.trim()).filter(Boolean))]
+    : [];
+
+  if (returned.length === 0) {
+    return requested.join(" ");
+  }
+
+  const requestedSet = new Set(requested);
+  if (returned.some((scope) => !requestedSet.has(scope))) {
+    throw new EbayIntegrationError({
+      code: "missing_scope",
+      operation: "authorization code exchange",
+      message: "eBay returned permissions that do not match the authorization request. Reconnect the eBay account to try again.",
+    });
+  }
+
+  return returned.join(" ");
 }
 
 export async function exchangeEbayCode(
@@ -66,10 +108,12 @@ export async function exchangeEbayCode(
   clientId: string,
   clientSecret: string,
   redirectUri: string,
+  requestedScopes: readonly string[],
+  fetchImpl: typeof fetch = fetch,
 ): Promise<{ accessToken: string; refreshToken: string; expiresIn: number; scope: string }> {
   const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
 
-  const response = await fetch(EBAY_TOKEN_URL, {
+  const response = await fetchImpl(EBAY_TOKEN_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
@@ -91,7 +135,7 @@ export async function exchangeEbayCode(
     accessToken: data.access_token,
     refreshToken: data.refresh_token,
     expiresIn: data.expires_in,
-    scope: data.scope || "",
+    scope: resolveEbayAuthorizationScope(data.scope, requestedScopes),
   };
 }
 
