@@ -1181,6 +1181,17 @@ export default function AdminPage() {
       subtitle="Run the aggregator on demand and manage tracked websites."
       rightSlot={
         <div className="flex items-center gap-2">
+          <a href="/app/admin/taxonomy-review">
+            <Button
+              variant="outline"
+              size="sm"
+              className="ring-focus rounded-xl"
+              data-testid="admin-taxonomy-review"
+            >
+              <ShieldCheck className="mr-1.5 h-4 w-4" />
+              Taxonomy Review
+            </Button>
+          </a>
           <a href="/admin/invoices">
             <Button
               variant="outline"

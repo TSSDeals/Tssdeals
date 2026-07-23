@@ -11,6 +11,7 @@
     "test:search": "tsx --test server/deal-search.test.ts shared/equipment-groups.test.ts",
     "test:startup-safety": "tsx --test server/startup-safety.test.ts",
     "test:taxonomy-audit": "tsx --test server/taxonomy-audit.test.ts",
+    "test:taxonomy-review": "tsx --test server/taxonomy-review.test.ts",
     "maintenance:phase0": "tsx script/phase0-maintenance.ts",
     "preflight:phase0": "tsx script/phase0-preflight.ts",
     "audit:taxonomy": "tsx script/phase1-taxonomy-audit.ts",
