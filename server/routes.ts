@@ -21,7 +21,7 @@ import {
   fetchEbayPurchases,
   purchasesToCsv,
 } from "./ebay-reports";
-import { startDealSyncScheduler, runFullSync, getSyncStatus } from "./deal-sync-scheduler";
+import { startDealSyncScheduler, runFullSync, getSyncStatus, getEbayPublicSyncStatus } from "./deal-sync-scheduler";
 import { getStopEpoch, stopRequestedSince, requestStopAll, getLastStopAt } from "./process-control";
 import { configurePush, getVapidPublicKey, isPushConfigured, sendPushToUser } from "./push-notifications";
 import { configureSms, isSmsConfigured, sendSms, sendWelcomeSms, sendSmsBatch } from "./sms-notifications";
@@ -1533,8 +1533,11 @@ export async function registerRoutes(
   });
 
   // Sync status (is a sync currently running?)
-  app.get("/api/admin/sync/status", isAdmin, (_req, res) => {
-    res.json(getSyncStatus());
+  app.get("/api/admin/sync/status", isAdmin, async (_req, res) => {
+    res.json({
+      ...getSyncStatus(),
+      ebayPublicSnapshot: await getEbayPublicSyncStatus(storage),
+    });
   });
 
   // Admin / manual run (auth required). MVP: no real scraping.
@@ -2413,13 +2416,8 @@ export async function registerRoutes(
 
   app.get("/api/ebay/oauth/status", isAdmin, async (req: any, res) => {
     try {
-      const token = await storage.getEbayOauthToken(getAuthedUserId(req));
-      res.json({
-        connected: !!token,
-        ebayUsername: token?.ebayUsername ?? null,
-        expiresAt: token?.expiresAt ?? null,
-        updatedAt: token?.updatedAt ?? null,
-      });
+      const { getEbayOAuthConnectionStatus } = await import("./ebay-reports");
+      res.json(await getEbayOAuthConnectionStatus(getAuthedUserId(req), storage));
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -3767,7 +3765,10 @@ If you cannot identify a sporting goods item, return { "q": "", "sport": "", "br
       const items = await fetchEbayInventory(getAuthedUserId(req), storage, limit);
       res.json({ items, total: items.length });
     } catch (err: any) {
-      res.status(500).json({ message: err.message });
+      const { logEbayError, safeEbayError } = await import("./ebay-errors");
+      logEbayError(err);
+      const safe = safeEbayError(err);
+      res.status(safe.reconnectRequired ? 401 : 502).json(safe);
     }
   });
 

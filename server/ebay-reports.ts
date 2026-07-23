@@ -1,4 +1,11 @@
 import type { IStorage } from "./storage";
+import {
+  EbayIntegrationError,
+  ebayErrorFromResponse,
+  ebayErrorFromText,
+  logEbayError,
+  safeEbayError,
+} from "./ebay-errors";
 
 const EBAY_AUTH_BASE = "https://auth.ebay.com/oauth2/authorize";
 const EBAY_TOKEN_URL = "https://api.ebay.com/identity/v1/oauth2/token";
@@ -76,8 +83,7 @@ export async function exchangeEbayCode(
   });
 
   if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`eBay token exchange failed (${response.status}): ${text}`);
+    throw await ebayErrorFromResponse(response, "authorization code exchange");
   }
 
   const data = await response.json();
@@ -93,10 +99,11 @@ export async function refreshEbayToken(
   refreshToken: string,
   clientId: string,
   clientSecret: string,
+  fetchImpl: typeof fetch = fetch,
 ): Promise<{ accessToken: string; expiresIn: number }> {
   const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
 
-  const response = await fetch(EBAY_TOKEN_URL, {
+  const response = await fetchImpl(EBAY_TOKEN_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
@@ -105,13 +112,11 @@ export async function refreshEbayToken(
     body: new URLSearchParams({
       grant_type: "refresh_token",
       refresh_token: refreshToken,
-      scope: OAUTH_SCOPES,
     }).toString(),
   });
 
   if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`eBay token refresh failed (${response.status}): ${text}`);
+    throw await ebayErrorFromResponse(response, "token refresh");
   }
 
   const data = await response.json();
@@ -124,21 +129,61 @@ export async function refreshEbayToken(
 export async function getValidEbayUserToken(
   userId: string,
   storage: IStorage,
+  options: {
+    clientId?: string;
+    clientSecret?: string;
+    fetchImpl?: typeof fetch;
+    requiredScopesAnyOf?: string[];
+  } = {},
 ): Promise<string> {
   const tokenRecord = await storage.getEbayOauthToken(userId);
   if (!tokenRecord) {
-    throw new Error("eBay account not connected. Please connect your eBay account first.");
+    throw new EbayIntegrationError({
+      code: "reauthorization_required",
+      operation: "authorization check",
+      message: "eBay account is not connected. Connect the eBay account to continue.",
+    });
   }
 
-  const clientId = process.env.EBAY_CLIENT_ID;
-  const clientSecret = process.env.EBAY_CLIENT_SECRET;
-  if (!clientId || !clientSecret) {
-    throw new Error("eBay API credentials not configured.");
-  }
+  const clientId = options.clientId ?? process.env.EBAY_CLIENT_ID;
+  const clientSecret = options.clientSecret ?? process.env.EBAY_CLIENT_SECRET;
 
-  if (new Date() >= new Date(tokenRecord.expiresAt.getTime() - 60000)) {
+  const assertRequiredScope = (scope: string | null) => {
+    if (!options.requiredScopesAnyOf?.length) return;
+    if (!scope?.trim()) {
+      throw new EbayIntegrationError({
+        code: "missing_scope",
+        operation: "authorization check",
+        message: "eBay authorization does not include verifiable inventory permissions. Reconnect the eBay account to grant the current permissions.",
+      });
+    }
+    const granted = new Set(scope.split(/\s+/).filter(Boolean));
+    if (!options.requiredScopesAnyOf.some((required) => granted.has(required))) {
+      throw new EbayIntegrationError({
+        code: "missing_scope",
+        operation: "authorization check",
+        message: "eBay authorization is missing inventory access. Reconnect the eBay account to grant the current permissions.",
+      });
+    }
+  };
+
+  assertRequiredScope(tokenRecord.scope);
+
+  if (Date.now() >= tokenRecord.expiresAt.getTime() - 60000) {
+    if (!clientId || !clientSecret) {
+      throw new EbayIntegrationError({
+        code: "upstream_error",
+        operation: "token refresh",
+        message: "The eBay integration is not configured to refresh an expired authorization.",
+      });
+    }
     try {
-      const refreshed = await refreshEbayToken(tokenRecord.refreshToken, clientId, clientSecret);
+      const refreshed = await refreshEbayToken(
+        tokenRecord.refreshToken,
+        clientId,
+        clientSecret,
+        options.fetchImpl,
+      );
       await storage.upsertEbayOauthToken(userId, {
         accessToken: refreshed.accessToken,
         refreshToken: tokenRecord.refreshToken,
@@ -148,12 +193,80 @@ export async function getValidEbayUserToken(
       });
       return refreshed.accessToken;
     } catch (err) {
-      await storage.deleteEbayOauthToken(userId);
-      throw new Error("eBay session expired. Please reconnect your eBay account.");
+      logEbayError(err);
+      throw err;
     }
   }
 
   return tokenRecord.accessToken;
+}
+
+const INVENTORY_SCOPES = [
+  "https://api.ebay.com/oauth/api_scope/sell.inventory",
+  "https://api.ebay.com/oauth/api_scope/sell.inventory.readonly",
+];
+
+export function getEbayInventoryScopes(): string[] {
+  return [...INVENTORY_SCOPES];
+}
+
+export async function getEbayOAuthConnectionStatus(
+  userId: string,
+  storage: IStorage,
+  options: {
+    clientId?: string;
+    clientSecret?: string;
+    fetchImpl?: typeof fetch;
+  } = {},
+): Promise<{
+  connected: boolean;
+  state: "connected" | "not_connected" | "reauthorization_required" | "error";
+  message: string | null;
+  reconnectRequired: boolean;
+  ebayUsername: string | null;
+  expiresAt: Date | null;
+  updatedAt: Date | null;
+}> {
+  const token = await storage.getEbayOauthToken(userId);
+  if (!token) {
+    return {
+      connected: false,
+      state: "not_connected",
+      message: null,
+      reconnectRequired: false,
+      ebayUsername: null,
+      expiresAt: null,
+      updatedAt: null,
+    };
+  }
+
+  try {
+    await getValidEbayUserToken(userId, storage, {
+      ...options,
+      requiredScopesAnyOf: INVENTORY_SCOPES,
+    });
+    const current = await storage.getEbayOauthToken(userId);
+    return {
+      connected: true,
+      state: "connected",
+      message: null,
+      reconnectRequired: false,
+      ebayUsername: current?.ebayUsername ?? token.ebayUsername ?? null,
+      expiresAt: current?.expiresAt ?? token.expiresAt,
+      updatedAt: current?.updatedAt ?? token.updatedAt,
+    };
+  } catch (error) {
+    const safe = safeEbayError(error);
+    return {
+      connected: false,
+      state: safe.reconnectRequired ? "reauthorization_required" : "error",
+      message: safe.message,
+      reconnectRequired: safe.reconnectRequired,
+      ebayUsername: token.ebayUsername ?? null,
+      expiresAt: token.expiresAt,
+      updatedAt: token.updatedAt,
+    };
+  }
 }
 
 export async function fetchEbaySalesOrders(
@@ -196,13 +309,17 @@ export async function fetchEbaySalesOrders(
         offset = 0;
         continue;
       }
-      throw new Error(`eBay orders API error (${response.status}): ${text}`);
+      throw ebayErrorFromText(response.status, text, "sales order retrieval");
     }
 
     const data = (await response.json()) as EbayOrdersResponse;
 
     if (data.errors && data.errors.length > 0) {
-      throw new Error(`eBay API error: ${data.errors[0].message}`);
+      throw ebayErrorFromText(
+        200,
+        JSON.stringify({ errors: data.errors }),
+        "sales order retrieval",
+      );
     }
 
     if (data.orders) {
@@ -327,14 +444,10 @@ export async function fetchEbayPurchases(
   }
 
   if (!response.ok) {
-    const text = await response.text();
-    if (response.status === 403) {
-      throw new Error(`eBay purchases API access denied (403). Please ensure the buy.order.readonly scope is enabled on your eBay developer app, then disconnect and reconnect your eBay account. Details: ${text.slice(0, 300)}`);
-    }
     if (response.status === 404) {
       return [];
     }
-    throw new Error(`eBay purchases API error (${response.status}): ${text}`);
+    throw await ebayErrorFromResponse(response, "purchase order retrieval");
   }
 
   const data = await response.json();

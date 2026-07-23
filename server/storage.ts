@@ -18,6 +18,7 @@ import {
 } from "./deal-search";
 import {
   autoIncludeRules,
+  appSettings,
   deals,
   dealCategories,
   dealPriceAlerts,
@@ -72,6 +73,9 @@ import { assertTaxonomyApproval, type TaxonomyApprovalContext } from "./taxonomy
 const defaultSeedDatabase = db;
 
 export interface IStorage {
+  getAppSetting(key: string): Promise<string | null>;
+  setAppSetting(key: string, value: string): Promise<void>;
+
   listSports(): Promise<Sport[]>;
   createSport(name: string, approval: TaxonomyApprovalContext): Promise<Sport>;
   listEquipmentTypes(sportId?: string): Promise<EquipmentType[]>;
@@ -259,6 +263,21 @@ export function dedupeDealPool(pool: Deal[], opts?: { crossSource?: boolean }): 
 }
 
 export class DatabaseStorage implements IStorage {
+  async getAppSetting(key: string): Promise<string | null> {
+    const [setting] = await db.select().from(appSettings).where(eq(appSettings.key, key));
+    return setting?.value ?? null;
+  }
+
+  async setAppSetting(key: string, value: string): Promise<void> {
+    await db
+      .insert(appSettings)
+      .values({ key, value, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: appSettings.key,
+        set: { value, updatedAt: new Date() },
+      });
+  }
+
   async listSports(): Promise<Sport[]> {
     return await db.select().from(sports).orderBy(sports.name);
   }
@@ -605,10 +624,17 @@ export class DatabaseStorage implements IStorage {
     }
 
     const staleCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const preserveLastKnownGoodEbaySnapshot = dsql`EXISTS (
+      SELECT 1
+      FROM app_settings ebay_snapshot_status
+      WHERE ebay_snapshot_status.key = 'ebay_public_sync_status'
+        AND ebay_snapshot_status.value::jsonb->>'preserveLastKnownGood' = 'true'
+    )`;
     whereParts.push(
       or(
         not(inArray(deals.sourceId, marketplaceSources)),
         gte(deals.lastSeenAt, staleCutoff),
+        and(eq(deals.sourceId, "ebay"), preserveLastKnownGoodEbaySnapshot),
       )
     );
 

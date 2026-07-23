@@ -371,7 +371,15 @@ export default function AdminPage() {
   const [reportEndDate, setReportEndDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [disconnecting, setDisconnecting] = useState(false);
 
-  const ebayOauthStatus = useQuery({
+  const ebayOauthStatus = useQuery<{
+    connected: boolean;
+    state: "connected" | "not_connected" | "reauthorization_required" | "error";
+    message: string | null;
+    reconnectRequired: boolean;
+    ebayUsername: string | null;
+    expiresAt: string | null;
+    updatedAt: string | null;
+  }>({
     queryKey: ["/api/ebay/oauth/status"],
     enabled: isAuthenticated,
   });
@@ -1139,11 +1147,24 @@ export default function AdminPage() {
 
   const [dryRun, setDryRun] = useState(true);
 
-  const syncStatus = useQuery<{ running: boolean; startedAt: string | null }>({
+  const syncStatus = useQuery<{
+    running: boolean;
+    startedAt: string | null;
+    ebayPublicSnapshot: {
+      state: "never_run" | "running" | "success" | "failed";
+      lastAttemptCompletedAt: string | null;
+      lastSuccessfulAt: string | null;
+      lastSuccessfulItemCount: number | null;
+      lastAttemptItemCount: number | null;
+      message: string | null;
+      preserveLastKnownGood: boolean;
+    };
+  }>({
     queryKey: ["/api/admin/sync/status"],
     refetchInterval: 3000,
   });
   const syncRunning = syncStatus.data?.running ?? false;
+  const ebaySnapshot = syncStatus.data?.ebayPublicSnapshot;
 
   const schedule = useMemo(() => meta.data?.scheduled?.times?.join(" · ") ?? "—", [meta.data]);
 
@@ -1336,6 +1357,62 @@ export default function AdminPage() {
                   Scheduled runs: <span className="font-semibold text-foreground">{schedule}</span> ({meta.data?.scheduled?.timezone ?? "America/New_York"})
                 </div>
               </div>
+            </div>
+
+            <div
+              className={cn(
+                "mt-5 rounded-2xl border px-4 py-3 text-sm",
+                ebaySnapshot?.state === "failed"
+                  ? "border-amber-500/40 bg-amber-500/10"
+                  : ebaySnapshot?.state === "success"
+                    ? "border-emerald-500/30 bg-emerald-500/10"
+                    : "border-border bg-background/60",
+              )}
+              data-testid="ebay-public-snapshot-status"
+            >
+              <div className="flex items-center gap-2 font-semibold">
+                {ebaySnapshot?.state === "running" ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : ebaySnapshot?.state === "failed" ? (
+                  <AlertTriangle className="h-4 w-4 text-amber-600" />
+                ) : (
+                  <Check className="h-4 w-4 text-emerald-600" />
+                )}
+                Public eBay feed: {ebaySnapshot?.state === "success"
+                  ? "last snapshot succeeded"
+                  : ebaySnapshot?.state === "failed"
+                    ? "latest attempt failed"
+                    : ebaySnapshot?.state === "running"
+                      ? "retrieval in progress"
+                      : "no recorded snapshot yet"}
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                {ebaySnapshot?.message ?? "Run the aggregator once after deployment to establish the first protected snapshot."}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs">
+                <span>
+                  Last successful snapshot:{" "}
+                  <strong>
+                    {ebaySnapshot?.lastSuccessfulAt
+                      ? `${new Date(ebaySnapshot.lastSuccessfulAt).toLocaleString()} (${ebaySnapshot.lastSuccessfulItemCount ?? 0} items)`
+                      : "none recorded"}
+                  </strong>
+                </span>
+                {ebaySnapshot?.lastAttemptCompletedAt && (
+                  <span>
+                    Latest attempt:{" "}
+                    <strong>
+                      {new Date(ebaySnapshot.lastAttemptCompletedAt).toLocaleString()}
+                      {ebaySnapshot.lastAttemptItemCount != null ? ` (${ebaySnapshot.lastAttemptItemCount} candidates)` : ""}
+                    </strong>
+                  </span>
+                )}
+              </div>
+              {ebaySnapshot?.preserveLastKnownGood && (
+                <div className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-400">
+                  Customer search is using the last known-good eBay snapshot; this failed attempt did not replace or deactivate it.
+                </div>
+              )}
             </div>
 
             <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -3382,16 +3459,16 @@ export default function AdminPage() {
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Checking connection...
                 </div>
-              ) : (ebayOauthStatus.data as any)?.connected ? (
+              ) : ebayOauthStatus.data?.connected ? (
                 <>
                   <div className="flex items-center gap-3 flex-wrap">
                     <div className="flex items-center gap-2 rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/30 px-3 py-2">
                       <Link2 className="h-4 w-4 text-green-600 dark:text-green-400" />
                       <span className="text-sm font-medium text-green-700 dark:text-green-300">
                         eBay account connected
-                        {(ebayOauthStatus.data as any)?.ebayUsername && (
+                        {ebayOauthStatus.data?.ebayUsername && (
                           <span className="ml-1 text-green-600 dark:text-green-400">
-                            ({(ebayOauthStatus.data as any).ebayUsername})
+                            ({ebayOauthStatus.data.ebayUsername})
                           </span>
                         )}
                       </span>
@@ -3457,6 +3534,11 @@ export default function AdminPage() {
                 </>
               ) : (
                 <div className="space-y-3">
+                  {ebayOauthStatus.data?.message && (
+                    <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/30 dark:text-red-200" data-testid="ebay-oauth-error">
+                      {ebayOauthStatus.data.message}
+                    </div>
+                  )}
                   <div className="text-sm text-muted-foreground">
                     Connect your eBay seller account to pull sales and purchase reports. You'll be redirected to eBay to authorize access.
                   </div>

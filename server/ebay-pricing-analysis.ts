@@ -2,6 +2,8 @@ import { db } from "./db";
 import { ebayPricingReports, ebayItemCosts } from "@shared/schema";
 import { eq, desc } from "drizzle-orm";
 import { log } from "./index";
+import { ebayErrorFromResponse, logEbayError } from "./ebay-errors";
+import { pricingReportFailureFields } from "./ebay-pricing-status";
 
 const EBAY_AUTH_URL = "https://api.ebay.com/identity/v1/oauth2/token";
 const EBAY_BROWSE_URL = "https://api.ebay.com/buy/browse/v1/item_summary/search";
@@ -100,13 +102,11 @@ async function searchEbay(
     headers: {
       Authorization: `Bearer ${token}`,
       "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
-      "X-EBAY-C-ENDUSERCTX": "affiliateCampaignId=<null>",
     },
   });
 
   if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`eBay search error ${response.status}: ${text}`);
+    throw await ebayErrorFromResponse(response, "pricing inventory search");
   }
 
   return response.json() as Promise<EbaySearchResponse>;
@@ -118,6 +118,7 @@ export async function fetchMyStoreListings(): Promise<EbayItemSummary[]> {
   const seenIds = new Set<string>();
   const pageSize = 200;
   const maxPages = 10;
+  const failures: unknown[] = [];
 
   const categoryIds = [
     "888",    // Sporting Goods
@@ -147,7 +148,9 @@ export async function fetchMyStoreListings(): Promise<EbayItemSummary[]> {
       try {
         data = await searchEbay(token, params);
       } catch (e: any) {
-        log(`eBay store search (cat ${catId}) failed: ${e.message}`, "ebay-pricing");
+        failures.push(e);
+        logEbayError(e);
+        log(`eBay store search (cat ${catId}) failed`, "ebay-pricing");
         break;
       }
 
@@ -165,6 +168,10 @@ export async function fetchMyStoreListings(): Promise<EbayItemSummary[]> {
       await delay(200);
     }
     await delay(100);
+  }
+
+  if (failures.length > 0) {
+    throw failures[0];
   }
 
   return allItems;
@@ -453,10 +460,12 @@ export async function generatePricingReport(): Promise<string> {
     log(`eBay pricing report complete: ${reportItems.length} items analyzed`, "ebay-pricing");
     return report.id;
   } catch (err: any) {
-    log(`eBay pricing report failed: ${err.message}`, "ebay-pricing");
+    logEbayError(err);
+    const failure = pricingReportFailureFields(err);
+    log(`eBay pricing report failed: ${failure.errorMessage}`, "ebay-pricing");
     await db
       .update(ebayPricingReports)
-      .set({ status: "error", errorMessage: err.message, completedAt: new Date() })
+      .set(failure)
       .where(eq(ebayPricingReports.id, report.id));
     return report.id;
   } finally {
