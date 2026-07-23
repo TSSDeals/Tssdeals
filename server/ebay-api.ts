@@ -1,6 +1,11 @@
 import type { InsertDeal } from "@shared/schema";
 import { classifyDealAttributes } from "./sub-filter-classifier";
-import { ebayErrorFromResponse, logEbayError } from "./ebay-errors";
+import { EbayIntegrationError, ebayErrorFromResponse, logEbayError } from "./ebay-errors";
+import {
+  fetchEbayBrowseJson,
+  type EbayBrowseBudget,
+  type EbayBrowsePurpose,
+} from "./ebay-browse-client";
 
 const EBAY_AUTH_URL = "https://api.ebay.com/identity/v1/oauth2/token";
 const EBAY_BROWSE_URL = "https://api.ebay.com/buy/browse/v1/item_summary/search";
@@ -11,7 +16,7 @@ interface EbayTokenResponse {
   token_type: string;
 }
 
-interface EbayItemSummary {
+export interface EbayItemSummary {
   itemId: string;
   title: string;
   price: { value: string; currency: string };
@@ -50,6 +55,9 @@ interface EbaySyncOptions {
   maxPrice?: number;
   sellerUsername?: string;
   categoryId?: string;
+  browseBudget?: EbayBrowseBudget;
+  browsePurpose?: EbayBrowsePurpose;
+  browseMaxRetries?: number;
 }
 
 let cachedToken: { token: string; expiresAt: number } | null = null;
@@ -142,24 +150,23 @@ export async function searchEbayProducts(
 
     const url = `${EBAY_BROWSE_URL}?${params.toString()}`;
 
-    const response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
-        Accept: "application/json",
-      },
-    });
-
-    if (!response.ok) {
-      if (response.status === 401) {
+    let data: EbaySearchResponse;
+    try {
+      data = await fetchEbayBrowseJson<EbaySearchResponse>(url, {
+        token,
+        operation: options.browsePurpose === "pricing"
+          ? "pricing marketplace search"
+          : "public deal search",
+        purpose: options.browsePurpose,
+        budget: options.browseBudget,
+        maxRetries: options.browseMaxRetries,
+      });
+    } catch (error) {
+      if (error instanceof EbayIntegrationError && error.upstreamStatus === 401) {
         cachedToken = null;
       }
-      const error = await ebayErrorFromResponse(response, "public deal search");
-      logEbayError(error);
       throw error;
     }
-
-    const data = (await response.json()) as EbaySearchResponse;
 
     if (data.errors?.length) {
       throw new Error(`eBay API errors: ${data.errors.map((e) => e.message).join(", ")}`);

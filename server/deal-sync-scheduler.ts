@@ -1,7 +1,7 @@
 import cron from "node-cron";
 import { log } from "./index";
 import type { IStorage } from "./storage";
-import { searchEbayProducts, ebayItemToDeal, getEbaySportKeywords, getEbayCategorySyncs } from "./ebay-api";
+import { searchEbayProducts, ebayItemToDeal, getEbayCategorySyncs } from "./ebay-api";
 import { searchCJProductsPaginated, cjProductToDeal, getSportKeywords, getCJPartners } from "./cj-affiliate";
 import { syncShopifyStore } from "./shopify-sync";
 import { syncSidelineSwap } from "./sidelineswap";
@@ -26,6 +26,12 @@ import {
   type EbayPublicCollection,
   type EbayPublicSyncStatus,
 } from "./ebay-public-sync";
+import {
+  createEbayBrowseBudget,
+  isEbayRateLimitError,
+  withEbayPublicBrowsePriority,
+  type EbayBrowseBudget,
+} from "./ebay-browse-client";
 
 function emptyEbayCollection(errors = 0): EbayPublicCollection {
   return {
@@ -46,64 +52,10 @@ function mergeEbayCollections(collections: EbayPublicCollection[]): EbayPublicCo
   };
 }
 
-async function collectEbayDeals(storage: IStorage): Promise<EbayPublicCollection> {
-  const clientId = process.env.EBAY_CLIENT_ID;
-  const clientSecret = process.env.EBAY_CLIENT_SECRET;
-
-  if (!clientId || !clientSecret) {
-    log("eBay sync skipped: credentials not configured", "deal-sync");
-    return emptyEbayCollection(1);
-  }
-
-  const sportKeywords = getEbaySportKeywords();
-  const allEquipmentTypes = await storage.listEquipmentTypes();
-  const stopEpoch = getStopEpoch();
-  const deals: InsertDeal[] = [];
-  let totalErrors = 0;
-  let requestsAttempted = 0;
-  let requestsSucceeded = 0;
-
-  for (const sportId of Object.keys(sportKeywords)) {
-    if (stopRequestedSince(stopEpoch)) break;
-    const keywords = sportKeywords[sportId] ?? [`${sportId} sporting goods`];
-    const sportEqTypes = allEquipmentTypes.filter(et => et.sportId === sportId);
-    const defaultEqType = sportEqTypes.find(et => et.id.endsWith("-other"))?.id ?? sportEqTypes[0]?.id ?? null;
-
-    for (const kw of keywords) {
-      if (stopRequestedSince(stopEpoch)) break;
-      requestsAttempted++;
-      try {
-        const eqTypeId = defaultEqType ?? sportId;
-        const items = await searchEbayProducts(clientId, clientSecret, {
-          keywords: kw,
-          sportId,
-          equipmentTypeId: eqTypeId,
-          condition: "all",
-          maxResults: 5000,
-        });
-        requestsSucceeded++;
-
-        const dealsToInsert = items
-          .map((item) => ebayItemToDeal(item, sportId, eqTypeId))
-          .filter((d): d is NonNullable<typeof d> => d !== null);
-        deals.push(...dealsToInsert);
-      } catch (err: any) {
-        log(`eBay sync error for "${kw}": ${err.message}`, "deal-sync");
-        totalErrors++;
-      }
-    }
-  }
-
-  return {
-    deals,
-    errors: totalErrors,
-    requestsAttempted,
-    requestsSucceeded,
-    stopped: stopRequestedSince(stopEpoch),
-  };
-}
-
-async function collectEbaySellerDeals(storage: IStorage): Promise<EbayPublicCollection> {
+async function collectEbaySellerDeals(
+  storage: IStorage,
+  browseBudget: EbayBrowseBudget,
+): Promise<EbayPublicCollection> {
   const clientId = process.env.EBAY_CLIENT_ID;
   const clientSecret = process.env.EBAY_CLIENT_SECRET;
 
@@ -136,6 +88,7 @@ async function collectEbaySellerDeals(storage: IStorage): Promise<EbayPublicColl
   let totalErrors = 0;
   let requestsAttempted = 0;
   let requestsSucceeded = 0;
+  let rateLimited = false;
 
   const stopEpoch = getStopEpoch();
   for (const seller of sellers) {
@@ -150,9 +103,12 @@ async function collectEbaySellerDeals(storage: IStorage): Promise<EbayPublicColl
           sportId: cat.sportId,
           equipmentTypeId: cat.equipmentTypeId,
           condition: "all",
-          maxResults: 2000,
+          maxResults: 200,
           categoryId: cat.categoryId,
           sellerUsername: seller.username,
+          browseBudget,
+          browsePurpose: "public_feed",
+          browseMaxRetries: 1,
         });
         requestsSucceeded++;
 
@@ -167,8 +123,13 @@ async function collectEbaySellerDeals(storage: IStorage): Promise<EbayPublicColl
       } catch (err: any) {
         log(`eBay seller "${seller.username}" error in ${cat.categoryName}: ${err.message}`, "deal-sync");
         totalErrors++;
+        if (isEbayRateLimitError(err)) {
+          rateLimited = true;
+          break;
+        }
       }
     }
+    if (rateLimited) break;
     if (sellerItemCount > 0) {
       log(`eBay seller "${seller.username}": ${sellerItemCount} items synced`, "deal-sync");
     }
@@ -179,11 +140,13 @@ async function collectEbaySellerDeals(storage: IStorage): Promise<EbayPublicColl
     errors: totalErrors,
     requestsAttempted,
     requestsSucceeded,
-    stopped: stopRequestedSince(stopEpoch),
+    stopped: stopRequestedSince(stopEpoch) || rateLimited,
   };
 }
 
-async function collectEbayCategoryDeals(): Promise<EbayPublicCollection> {
+async function collectEbayCategoryDeals(
+  browseBudget: EbayBrowseBudget,
+): Promise<EbayPublicCollection> {
   const clientId = process.env.EBAY_CLIENT_ID;
   const clientSecret = process.env.EBAY_CLIENT_SECRET;
 
@@ -197,6 +160,7 @@ async function collectEbayCategoryDeals(): Promise<EbayPublicCollection> {
   let totalErrors = 0;
   let requestsAttempted = 0;
   let requestsSucceeded = 0;
+  let rateLimited = false;
 
   const stopEpoch = getStopEpoch();
   for (const catSync of categorySyncs) {
@@ -208,8 +172,11 @@ async function collectEbayCategoryDeals(): Promise<EbayPublicCollection> {
         sportId: catSync.sportId,
         equipmentTypeId: catSync.equipmentTypeId,
         condition: "all",
-        maxResults: 10000,
+        maxResults: 200,
         categoryId: catSync.categoryId,
+        browseBudget,
+        browsePurpose: "public_feed",
+        browseMaxRetries: 1,
       });
       requestsSucceeded++;
 
@@ -222,6 +189,10 @@ async function collectEbayCategoryDeals(): Promise<EbayPublicCollection> {
     } catch (err: any) {
       log(`eBay category sync error for "${catSync.categoryName}" (${catSync.categoryId}): ${err.message}`, "deal-sync");
       totalErrors++;
+      if (isEbayRateLimitError(err)) {
+        rateLimited = true;
+        break;
+      }
     }
   }
 
@@ -230,7 +201,7 @@ async function collectEbayCategoryDeals(): Promise<EbayPublicCollection> {
     errors: totalErrors,
     requestsAttempted,
     requestsSucceeded,
-    stopped: stopRequestedSince(stopEpoch),
+    stopped: stopRequestedSince(stopEpoch) || rateLimited,
   };
 }
 
@@ -250,16 +221,13 @@ async function syncEbayPublicDeals(storage: IStorage): Promise<{ created: number
   const result = await runEbayPublicSnapshotSync({
     loadStatus: () => getEbayPublicSyncStatus(storage),
     saveStatus: (status) => saveEbayPublicSyncStatus(storage, status),
-    collect: async () => {
-      const settled = await Promise.allSettled([
-        collectEbayDeals(storage),
-        collectEbayCategoryDeals(),
-        collectEbaySellerDeals(storage),
-      ]);
-      return mergeEbayCollections(settled.map((entry) =>
-        entry.status === "fulfilled" ? entry.value : emptyEbayCollection(1)
-      ));
-    },
+    collect: () => withEbayPublicBrowsePriority(async () => {
+      const browseBudget = createEbayBrowseBudget("public feed sync", 250);
+      const categories = await collectEbayCategoryDeals(browseBudget);
+      if (categories.stopped) return categories;
+      const sellers = await collectEbaySellerDeals(storage, browseBudget);
+      return mergeEbayCollections([categories, sellers]);
+    }),
     publish: async (deals) => {
       await storage.ensureSource("ebay", "eBay", "https://www.ebay.com");
       return storage.bulkUpsertDeals(deals);
@@ -276,7 +244,9 @@ async function syncEbayPublicDeals(storage: IStorage): Promise<{ created: number
 }
 
 export async function syncEbaySellerDeals(storage: IStorage): Promise<{ created: number; updated: number; errors: number }> {
-  const collection = await collectEbaySellerDeals(storage);
+  const collection = await withEbayPublicBrowsePriority(() =>
+    collectEbaySellerDeals(storage, createEbayBrowseBudget("seller feed sync", 100))
+  );
   if (collection.stopped || collection.errors > 0) {
     return { created: 0, updated: 0, errors: Math.max(1, collection.errors) };
   }

@@ -2,8 +2,14 @@ import { db } from "./db";
 import { ebayPricingReports, ebayItemCosts } from "@shared/schema";
 import { eq, desc } from "drizzle-orm";
 import { log } from "./index";
-import { ebayErrorFromResponse, logEbayError } from "./ebay-errors";
+import { logEbayError } from "./ebay-errors";
 import { pricingReportFailureFields } from "./ebay-pricing-status";
+import {
+  createEbayBrowseBudget,
+  fetchEbayBrowseJson,
+  isEbayRateLimitError,
+  type EbayBrowseBudget,
+} from "./ebay-browse-client";
 
 const EBAY_AUTH_URL = "https://api.ebay.com/identity/v1/oauth2/token";
 const EBAY_BROWSE_URL = "https://api.ebay.com/buy/browse/v1/item_summary/search";
@@ -96,28 +102,26 @@ async function getAppToken(): Promise<string> {
 async function searchEbay(
   token: string,
   params: URLSearchParams,
+  budget: EbayBrowseBudget,
 ): Promise<EbaySearchResponse> {
   const url = `${EBAY_BROWSE_URL}?${params.toString()}`;
-  const response = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
-    },
+  return fetchEbayBrowseJson<EbaySearchResponse>(url, {
+    token,
+    operation: "pricing marketplace search",
+    purpose: "pricing",
+    budget,
+    maxRetries: 0,
   });
-
-  if (!response.ok) {
-    throw await ebayErrorFromResponse(response, "pricing inventory search");
-  }
-
-  return response.json() as Promise<EbaySearchResponse>;
 }
 
-export async function fetchMyStoreListings(): Promise<EbayItemSummary[]> {
+export async function fetchMyStoreListings(
+  budget = createEbayBrowseBudget("pricing report", 100),
+): Promise<EbayItemSummary[]> {
   const token = await getAppToken();
   const allItems: EbayItemSummary[] = [];
   const seenIds = new Set<string>();
   const pageSize = 200;
-  const maxPages = 10;
+  const maxPages = 1;
   const failures: unknown[] = [];
 
   const categoryIds = [
@@ -146,7 +150,7 @@ export async function fetchMyStoreListings(): Promise<EbayItemSummary[]> {
 
       let data: EbaySearchResponse | null = null;
       try {
-        data = await searchEbay(token, params);
+        data = await searchEbay(token, params, budget);
       } catch (e: any) {
         failures.push(e);
         logEbayError(e);
@@ -198,6 +202,8 @@ async function findComparableActiveListings(
   token: string,
   title: string,
   categoryId: string | null,
+  budget: EbayBrowseBudget,
+  cache: Map<string, Promise<EbaySearchResponse>>,
 ): Promise<{ items: EbayItemSummary[]; avgPriceCents: number | null; medianPriceCents: number | null; lowestPriceCents: number | null; highestPriceCents: number | null }> {
   const keywords = extractSearchKeywords(title);
   if (!keywords) return { items: [], avgPriceCents: null, medianPriceCents: null, lowestPriceCents: null, highestPriceCents: null };
@@ -215,7 +221,13 @@ async function findComparableActiveListings(
   }
 
   try {
-    const data = await searchEbay(token, params);
+    const cacheKey = params.toString();
+    let request = cache.get(cacheKey);
+    if (!request) {
+      request = searchEbay(token, params, budget);
+      cache.set(cacheKey, request);
+    }
+    const data = await request;
     const items = (data.itemSummaries || []).filter(
       item => item.seller?.username?.toLowerCase() !== MY_SELLER_USERNAME.toLowerCase()
     );
@@ -234,67 +246,9 @@ async function findComparableActiveListings(
 
     return { items, avgPriceCents: avg, medianPriceCents: median, lowestPriceCents: lowest, highestPriceCents: highest };
   } catch (err: any) {
+    if (isEbayRateLimitError(err)) throw err;
     log(`Comparable search failed for "${keywords}": ${err.message}`, "ebay-pricing");
     return { items: [], avgPriceCents: null, medianPriceCents: null, lowestPriceCents: null, highestPriceCents: null };
-  }
-}
-
-async function findMarketProxyListings(
-  token: string,
-  title: string,
-  categoryId: string | null,
-): Promise<{ avgPriceCents: number | null; medianPriceCents: number | null; proxyCount: number }> {
-  const keywords = extractSearchKeywords(title);
-  if (!keywords) return { avgPriceCents: null, medianPriceCents: null, proxyCount: 0 };
-
-  const filters = [
-    "buyingOptions:{FIXED_PRICE|AUCTION}",
-    "deliveryCountry:US",
-  ];
-
-  const params = new URLSearchParams({
-    q: keywords,
-    limit: "50",
-    fieldgroups: "EXTENDED",
-    filter: filters.join(","),
-    sort: "price",
-  });
-
-  if (categoryId) {
-    params.set("category_ids", categoryId);
-  }
-
-  try {
-    const url = `https://api.ebay.com/buy/browse/v1/item_summary/search?${params.toString()}`;
-    const response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
-      },
-    });
-
-    if (!response.ok) {
-      return { avgPriceCents: null, medianPriceCents: null, proxyCount: 0 };
-    }
-
-    const data = await response.json() as EbaySearchResponse;
-    const items = (data.itemSummaries || []).filter(
-      item => item.seller?.username?.toLowerCase() !== MY_SELLER_USERNAME.toLowerCase()
-    );
-
-    if (items.length === 0) {
-      return { avgPriceCents: null, medianPriceCents: null, proxyCount: 0 };
-    }
-
-    const prices = items.map(i => Math.round(parseFloat(i.price.value) * 100)).filter(p => p > 0);
-    prices.sort((a, b) => a - b);
-
-    const avg = prices.length > 0 ? Math.round(prices.reduce((s, p) => s + p, 0) / prices.length) : null;
-    const median = prices.length > 0 ? prices[Math.floor(prices.length / 2)] : null;
-
-    return { avgPriceCents: avg, medianPriceCents: median, proxyCount: prices.length };
-  } catch {
-    return { avgPriceCents: null, medianPriceCents: null, proxyCount: 0 };
   }
 }
 
@@ -365,8 +319,9 @@ export async function generatePricingReport(): Promise<string> {
   try {
     log("Starting eBay pricing analysis report...", "ebay-pricing");
     const token = await getAppToken();
+    const browseBudget = createEbayBrowseBudget("pricing report", 100);
 
-    const myListings = await fetchMyStoreListings();
+    const myListings = await fetchMyStoreListings(browseBudget);
     log(`Found ${myListings.length} active listings for ${MY_SELLER_USERNAME}`, "ebay-pricing");
 
     if (myListings.length === 0) {
@@ -381,6 +336,7 @@ export async function generatePricingReport(): Promise<string> {
     const costMap = new Map(existingCosts.map(c => [c.ebayItemId, c.procurementCostCents]));
 
     const reportItems: PricingReportItem[] = [];
+    const comparableCache = new Map<string, Promise<EbaySearchResponse>>();
 
     for (let i = 0; i < myListings.length; i++) {
       const item = myListings[i];
@@ -388,10 +344,13 @@ export async function generatePricingReport(): Promise<string> {
       const categoryId = item.categories?.[0]?.categoryId || null;
       const categoryName = item.categories?.[0]?.categoryName || null;
 
-      const comparables = await findComparableActiveListings(token, item.title, categoryId);
-      await delay(300);
-
-      const marketProxy = await findMarketProxyListings(token, item.title, categoryId);
+      const comparables = await findComparableActiveListings(
+        token,
+        item.title,
+        categoryId,
+        browseBudget,
+        comparableCache,
+      );
       await delay(300);
 
       const procurementCostCents = costMap.get(item.itemId) || null;
@@ -399,8 +358,8 @@ export async function generatePricingReport(): Promise<string> {
       const suggestedPriceCents = calculateSuggestedPrice(
         comparables.avgPriceCents,
         comparables.medianPriceCents,
-        marketProxy.avgPriceCents,
-        marketProxy.medianPriceCents,
+        null,
+        null,
         procurementCostCents,
       );
 
@@ -415,7 +374,7 @@ export async function generatePricingReport(): Promise<string> {
       const competitiveness = determineCompetitiveness(
         myPriceCents,
         comparables.avgPriceCents,
-        marketProxy.avgPriceCents,
+        null,
       );
 
       reportItems.push({
@@ -432,9 +391,9 @@ export async function generatePricingReport(): Promise<string> {
         lowestListedPriceCents: comparables.lowestPriceCents,
         highestListedPriceCents: comparables.highestPriceCents,
         comparableCount: comparables.items.length,
-        soldCount: marketProxy.proxyCount,
-        avgSoldPriceCents: marketProxy.avgPriceCents,
-        medianSoldPriceCents: marketProxy.medianPriceCents,
+        soldCount: 0,
+        avgSoldPriceCents: null,
+        medianSoldPriceCents: null,
         suggestedPriceCents,
         procurementCostCents,
         estimatedProfitCents,

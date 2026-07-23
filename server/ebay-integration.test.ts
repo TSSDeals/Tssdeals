@@ -286,6 +286,22 @@ test("pricing inventory retrieval failures produce an error report status, never
   assert.notEqual(fields.status, "complete");
 });
 
+test("pricing Browse 429 produces an error report status and preserves prior reports", () => {
+  const rateLimited = new EbayIntegrationError({
+    code: "rate_limited",
+    operation: "pricing marketplace search",
+    message: "eBay is temporarily rate-limiting marketplace requests. The last known-good report was preserved.",
+    upstreamStatus: 429,
+  });
+
+  const fields = pricingReportFailureFields(rateLimited);
+  assert.equal(fields.status, "error");
+  assert.match(fields.errorMessage, /rate-limit/i);
+  assert.ok(fields.completedAt instanceof Date);
+  assert.notEqual(fields.status, "complete");
+  assert.equal(Object.prototype.hasOwnProperty.call(fields, "reportData"), false);
+});
+
 test("refresh helper classifies missing-scope 400 as a reconnect requirement", async () => {
   const fetchImpl: typeof fetch = async () => new Response(JSON.stringify({
     error: "invalid_scope",
