@@ -14,6 +14,7 @@ import { syncFanaticsDeals } from "./fanatics-sync";
 import { syncSidelineSwap, getSidelineSwapSports } from "./sidelineswap";
 import {
   getEbayOAuthUrl,
+  getEbayOAuthScopes,
   exchangeEbayCode,
   getValidEbayUserToken,
   fetchEbaySalesOrders,
@@ -2333,7 +2334,11 @@ export async function registerRoutes(
   });
 
   // eBay OAuth2 user authorization flow
-  const oauthStates = new Map<string, { userId: string; createdAt: number }>();
+  const oauthStates = new Map<string, {
+    userId: string;
+    createdAt: number;
+    requestedScopes: string[];
+  }>();
 
   app.get("/api/ebay/oauth/start", isAdmin, (req: any, res) => {
     const clientId = process.env.EBAY_CLIENT_ID;
@@ -2351,11 +2356,12 @@ export async function registerRoutes(
 
     const state = crypto.randomBytes(24).toString("hex");
     const userId = getAuthedUserId(req);
-    oauthStates.set(state, { userId, createdAt: Date.now() });
+    const requestedScopes = getEbayOAuthScopes();
+    oauthStates.set(state, { userId, createdAt: Date.now(), requestedScopes });
 
     setTimeout(() => oauthStates.delete(state), 10 * 60 * 1000);
 
-    const url = getEbayOAuthUrl(clientId, redirectUri, state);
+    const url = getEbayOAuthUrl(clientId, redirectUri, state, requestedScopes);
     res.redirect(url);
   });
 
@@ -2398,7 +2404,13 @@ export async function registerRoutes(
         redirectUri = `${protocol}://${host}/api/ebay/oauth/callback`;
       }
 
-      const tokens = await exchangeEbayCode(code, clientId, clientSecret, redirectUri);
+      const tokens = await exchangeEbayCode(
+        code,
+        clientId,
+        clientSecret,
+        redirectUri,
+        stateData.requestedScopes,
+      );
 
       await storage.upsertEbayOauthToken(stateData.userId, {
         accessToken: tokens.accessToken,

@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { IStorage } from "./storage";
 import {
+  exchangeEbayCode,
   getEbayInventoryScopes,
   getEbayOAuthConnectionStatus,
+  getEbayOAuthScopes,
   getValidEbayUserToken,
   refreshEbayToken,
 } from "./ebay-reports";
@@ -161,6 +163,65 @@ test("any one valid stored inventory scope satisfies the requested alternatives"
   });
 
   assert.equal(token, "valid-access-token");
+});
+
+test("authorization exchange without response scope persists state-bound scopes for status and inventory", async () => {
+  const requestedScopes = getEbayOAuthScopes();
+  const tokenFetch: typeof fetch = async () => new Response(JSON.stringify({
+    access_token: "authorized-access-token",
+    refresh_token: "authorized-refresh-token",
+    expires_in: 7200,
+    token_type: "User Access Token",
+  }), { status: 200 });
+
+  const exchanged = await exchangeEbayCode(
+    "authorization-code",
+    "client",
+    "secret",
+    "redirect-uri",
+    requestedScopes,
+    tokenFetch,
+  );
+
+  assert.equal(exchanged.scope, requestedScopes.join(" "));
+
+  const { storage } = storageWithToken(tokenRecord({
+    accessToken: exchanged.accessToken,
+    refreshToken: exchanged.refreshToken,
+    expiresAt: new Date(Date.now() + exchanged.expiresIn * 1000),
+    scope: exchanged.scope,
+  }));
+
+  const status = await getEbayOAuthConnectionStatus(USER_ID, storage);
+  assert.equal(status.connected, true);
+  assert.equal(status.state, "connected");
+  assert.equal(status.reconnectRequired, false);
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+    if (url.includes("/inventory_item?")) {
+      return new Response(JSON.stringify({
+        inventoryItems: [{
+          sku: "TEST-SKU",
+          product: { title: "Test inventory item" },
+          availability: { shipToLocationAvailability: { quantity: 1 } },
+        }],
+      }), { status: 200 });
+    }
+    if (url.includes("/offer?")) {
+      return new Response(JSON.stringify({ offers: [] }), { status: 200 });
+    }
+    throw new Error(`Unexpected eBay request: ${url}`);
+  };
+
+  try {
+    const inventory = await fetchEbayInventory(USER_ID, storage, 100);
+    assert.equal(inventory.length, 1);
+    assert.equal(inventory[0].sku, "TEST-SKU");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("upstream inventory 400 preserves every safe eBay error and never becomes zero inventory", async () => {
