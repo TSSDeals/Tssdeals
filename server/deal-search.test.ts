@@ -12,7 +12,11 @@ import {
   projectDealSearchClassification,
   type SearchableDeal,
 } from "./deal-search";
-import { canonicalResultEquipmentTypeId } from "../shared/equipment-groups";
+import {
+  LEGACY_SHOPPER_MEMORABILIA_SPORT_IDS,
+  SHOPPER_MEMORABILIA_SPORT_ID,
+  canonicalResultEquipmentTypeId,
+} from "../shared/equipment-groups";
 
 for (const equipmentTypeId of ["baseball-bat", "bat", "bb-bats"]) {
   test(`canonical Baseball Bats filter includes ${equipmentTypeId}`, () => {
@@ -398,3 +402,23 @@ for (const deal of [
     assert.equal(matchesDealClassificationFilters(deal, { sportId: "baseball", equipmentTypeId: "bb-gloves" }), false);
   });
 }
+
+test("legacy Baseball Memorabilia rows resolve through unified Memorabilia, not playable Baseball", () => {
+  const legacy = {
+    title: "Vintage Yankees World Series keepsake",
+    sportId: LEGACY_SHOPPER_MEMORABILIA_SPORT_IDS[0],
+    equipmentTypeId: "baseball-memorabilia-other",
+  };
+  assert.equal(matchesDealClassificationFilters(legacy, { sportId: SHOPPER_MEMORABILIA_SPORT_ID }), true);
+  assert.equal(matchesDealClassificationFilters(legacy, { sportId: LEGACY_SHOPPER_MEMORABILIA_SPORT_IDS[0] }), true);
+  assert.equal(matchesDealClassificationFilters(legacy, { sportId: "baseball" }), false);
+});
+
+test("memorabilia title projection does not broaden playable Baseball or affect ordinary equipment", () => {
+  const signed = { title: "Aaron Judge Signed Baseball", sportId: "baseball", equipmentTypeId: "bb-balls" };
+  const ordinary = { title: "Rawlings ROLB1 Practice Baseballs 12 Pack", sportId: "baseball", equipmentTypeId: "bb-balls" };
+  assert.equal(matchesDealClassificationFilters(signed, { sportId: SHOPPER_MEMORABILIA_SPORT_ID }), true);
+  assert.equal(matchesDealClassificationFilters(signed, { sportId: "baseball" }), false);
+  assert.equal(matchesDealClassificationFilters(ordinary, { sportId: SHOPPER_MEMORABILIA_SPORT_ID }), false);
+  assert.equal(matchesDealClassificationFilters(ordinary, { sportId: "baseball" }), true);
+});

@@ -4,6 +4,7 @@ import {
   BASEBALL_BAT_GROUP_IDS,
   BASEBALL_GLOVE_GROUP_IDS,
   CANONICAL_BASEBALL_BAT_ID,
+  LEGACY_SHOPPER_MEMORABILIA_SPORT_IDS,
   SHOPPER_BASEBALL_ACCESSORIES_ID,
   SHOPPER_BASEBALL_APPAREL_ID,
   SHOPPER_BASEBALL_BATTING_HELMETS_ID,
@@ -16,6 +17,7 @@ import {
   curateShopperEquipmentTypes,
   expandEquipmentTypeIds,
   isShopperMemorabiliaDeal,
+  normalizeShopperSportId,
   shopperMemorabiliaEquipmentId,
   shopperResultEquipmentTypeId,
 } from "./equipment-groups";
@@ -114,6 +116,25 @@ test("shopper sports add one read-only Memorabilia path", () => {
   assert.equal(curateShopperSports(sports as any).filter(({ id }) => id === SHOPPER_MEMORABILIA_SPORT_ID).length, 1);
 });
 
+test("shopper sports consolidate stored Baseball Memorabilia into one unified option", () => {
+  const legacyId = LEGACY_SHOPPER_MEMORABILIA_SPORT_IDS[0];
+  const sports = curateShopperSports([
+    { id: "baseball", name: "Baseball" },
+    { id: legacyId, name: "Baseball Memorabilia" },
+    { id: SHOPPER_MEMORABILIA_SPORT_ID, name: "Memorabilia" },
+    { id: "legacy-memorabilia-label", name: "Memorabilia" },
+  ]);
+  assert.deepEqual(sports.map(({ id, name }) => ({ id, name })), [
+    { id: "baseball", name: "Baseball" },
+    { id: SHOPPER_MEMORABILIA_SPORT_ID, name: "Memorabilia" },
+  ]);
+  assert.equal(normalizeShopperSportId(legacyId), SHOPPER_MEMORABILIA_SPORT_ID);
+  assert.deepEqual(
+    curateShopperEquipmentTypes([], legacyId).map(({ id }) => id),
+    SHOPPER_MEMORABILIA_EQUIPMENT.map(({ id }) => id),
+  );
+});
+
 test("an all-sports view never exposes the massive global equipment taxonomy", () => {
   assert.deepEqual(curateShopperEquipmentTypes([
     { id: "golf-drivers", name: "Drivers", sportId: "golf" },
@@ -137,6 +158,18 @@ test("signed baseball, bat, and A2000 glove project into Memorabilia instead of 
   assert.equal(shopperMemorabiliaEquipmentId(signedGlove), "memorabilia-signed-gloves");
   assert.equal(shopperMemorabiliaEquipmentId(signedCard), "memorabilia-signed-cards");
   assert.equal(shopperResultEquipmentTypeId(signedGlove), "memorabilia-signed-gloves");
+});
+
+test("legacy Baseball Memorabilia rows remain in unified Memorabilia without stored-row mutation", () => {
+  const legacyDeal = {
+    title: "Vintage Yankees World Series keepsake",
+    sportId: LEGACY_SHOPPER_MEMORABILIA_SPORT_IDS[0],
+    equipmentTypeId: "baseball-memorabilia-other",
+  };
+  assert.equal(isShopperMemorabiliaDeal(legacyDeal), true);
+  assert.equal(shopperMemorabiliaEquipmentId(legacyDeal), "memorabilia-other-collectibles");
+  assert.equal(shopperResultEquipmentTypeId(legacyDeal), "memorabilia-other-collectibles");
+  assert.equal(legacyDeal.sportId, LEGACY_SHOPPER_MEMORABILIA_SPORT_IDS[0]);
 });
 
 test("ordinary playable equipment and branded Signature/Autograph models stay playable", () => {

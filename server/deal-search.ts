@@ -1,4 +1,12 @@
-import { expandEquipmentTypeIds, isBaseballBatGroupId, isBaseballGloveGroupId } from "../shared/equipment-groups";
+import {
+  expandEquipmentTypeIds,
+  isBaseballBatGroupId,
+  isBaseballGloveGroupId,
+  isShopperMemorabiliaDeal,
+  isShopperMemorabiliaSportId,
+  normalizeShopperSportId,
+  shopperMemorabiliaEquipmentId,
+} from "../shared/equipment-groups";
 
 export type DealSearchConcept =
   | { kind: "text"; value: string }
@@ -277,16 +285,27 @@ export function matchesDealClassificationFilters(
   deal: SearchableDeal,
   filters: { q?: string; sportId?: string; equipmentTypeId?: string; equipmentTypeIds?: string[] },
 ): boolean {
-  const requestedEquipment = expandEquipmentTypeIds(filters.sportId, filters.equipmentTypeIds?.length
+  const normalizedSportId = normalizeShopperSportId(filters.sportId);
+  if (isShopperMemorabiliaSportId(normalizedSportId)) {
+    if (!isShopperMemorabiliaDeal(deal)) return false;
+    const requestedShopperEquipment = filters.equipmentTypeIds?.length
+      ? filters.equipmentTypeIds
+      : (filters.equipmentTypeId ? [filters.equipmentTypeId] : []);
+    return requestedShopperEquipment.length === 0
+      || requestedShopperEquipment.includes(shopperMemorabiliaEquipmentId(deal) ?? "");
+  }
+  if (normalizedSportId === "baseball" && isShopperMemorabiliaDeal(deal)) return false;
+
+  const requestedEquipment = expandEquipmentTypeIds(normalizedSportId, filters.equipmentTypeIds?.length
     ? filters.equipmentTypeIds
     : (filters.equipmentTypeId ? [filters.equipmentTypeId] : []));
-  const baseballGloveRequest = filters.sportId === "baseball" && requestedEquipment.some(isBaseballGloveGroupId);
+  const baseballGloveRequest = normalizedSportId === "baseball" && requestedEquipment.some(isBaseballGloveGroupId);
   if (baseballGloveRequest && hasBaseballGloveNegativeEvidence(deal)) return false;
-  const exactSport = !filters.sportId || deal.sportId === filters.sportId;
+  const exactSport = !normalizedSportId || deal.sportId === normalizedSportId;
   const exactEquipment = requestedEquipment.length === 0 || requestedEquipment.includes(deal.equipmentTypeId ?? "");
   if (exactSport && exactEquipment) return true;
 
-  if (filters.sportId !== "baseball") return false;
+  if (normalizedSportId !== "baseball") return false;
   if (requestedEquipment.length === 0 && hasStrongBaseballGloveSearchIntent(filters.q)) {
     return hasBaseballGloveEvidence(deal);
   }
