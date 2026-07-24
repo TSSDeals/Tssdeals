@@ -1,6 +1,7 @@
 import type { InsertDeal } from "@shared/schema";
 
 export const EBAY_PUBLIC_SYNC_STATUS_KEY = "ebay_public_sync_status";
+export const EBAY_PUBLIC_SYNC_RUNNING_LEASE_MS = 5 * 60 * 1000;
 
 export type EbayPublicSyncState = "never_run" | "running" | "success" | "failed";
 
@@ -90,6 +91,37 @@ export function parseEbayPublicSyncStatus(value: string | null | undefined): Eba
   } catch {
     return defaultEbayPublicSyncStatus();
   }
+}
+
+export function recoverStaleEbayPublicSyncStatus(
+  status: EbayPublicSyncStatus,
+  options: {
+    hasActiveTask: boolean;
+    now?: Date;
+    leaseMs?: number;
+  },
+): EbayPublicSyncStatus {
+  if (status.state !== "running" || options.hasActiveTask) return status;
+
+  const now = options.now ?? new Date();
+  const leaseMs = options.leaseMs ?? EBAY_PUBLIC_SYNC_RUNNING_LEASE_MS;
+  const startedAtMs = status.lastAttemptStartedAt
+    ? Date.parse(status.lastAttemptStartedAt)
+    : Number.NaN;
+  const leaseExpired =
+    !Number.isFinite(startedAtMs) ||
+    now.getTime() - startedAtMs >= leaseMs;
+
+  if (!leaseExpired) return status;
+
+  return {
+    ...status,
+    state: "failed",
+    lastAttemptCompletedAt: now.toISOString(),
+    lastAttemptErrorCount: Math.max(1, status.lastAttemptErrorCount),
+    message: "The previous eBay public refresh was interrupted or the server restarted. Its running lease expired; the last known-good snapshot was preserved and a new refresh can now be started.",
+    preserveLastKnownGood: true,
+  };
 }
 
 function uniqueDealsByUrl(deals: InsertDeal[]): InsertDeal[] {

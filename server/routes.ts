@@ -1703,7 +1703,7 @@ export async function registerRoutes(
   // Protected public eBay snapshot refresh. The request returns immediately;
   // progress and the last-known-good state are exposed by /api/admin/sync/status.
   app.post("/api/ebay/public-sync", isAdmin, async (_req: any, res) => {
-    const started = queueEbayPublicSync(storage);
+    const started = await queueEbayPublicSync(storage);
     return res.status(started ? 202 : 200).json({
       ok: true,
       started,

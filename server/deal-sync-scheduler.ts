@@ -23,6 +23,7 @@ import {
   createSingleFlightTask,
   defaultEbayPublicSyncStatus,
   parseEbayPublicSyncStatus,
+  recoverStaleEbayPublicSyncStatus,
   runEbayPublicSnapshotSync,
   type EbayPublicCollection,
   type EbayPublicSyncStatus,
@@ -215,7 +216,16 @@ async function collectEbayCategoryDeals(
 
 export async function getEbayPublicSyncStatus(storage: IStorage): Promise<EbayPublicSyncStatus> {
   try {
-    return parseEbayPublicSyncStatus(await storage.getAppSetting(EBAY_PUBLIC_SYNC_STATUS_KEY));
+    const persisted = parseEbayPublicSyncStatus(
+      await storage.getAppSetting(EBAY_PUBLIC_SYNC_STATUS_KEY),
+    );
+    const reconciled = recoverStaleEbayPublicSyncStatus(persisted, {
+      hasActiveTask: ebayPublicSyncTask.isRunning(),
+    });
+    if (reconciled !== persisted) {
+      await saveEbayPublicSyncStatus(storage, reconciled);
+    }
+    return reconciled;
   } catch {
     return defaultEbayPublicSyncStatus();
   }
@@ -258,7 +268,11 @@ function beginEbayPublicSync(storage: IStorage) {
   return ebayPublicSyncTask.start(() => performEbayPublicSync(storage));
 }
 
-export function queueEbayPublicSync(storage: IStorage): boolean {
+export async function queueEbayPublicSync(storage: IStorage): Promise<boolean> {
+  const status = await getEbayPublicSyncStatus(storage);
+  if (status.state === "running" && !ebayPublicSyncTask.isRunning()) {
+    return false;
+  }
   const started = beginEbayPublicSync(storage);
   if (started.started) {
     void started.completion.catch((error) => {

@@ -6,6 +6,7 @@ import {
   createSingleFlightTask,
   defaultEbayPublicSyncStatus,
   isCustomerMarketplaceDealVisible,
+  recoverStaleEbayPublicSyncStatus,
   runEbayPublicSnapshotSync,
   type EbayPublicSyncStatus,
 } from "./ebay-public-sync";
@@ -188,6 +189,71 @@ test("single-flight background task starts promptly and coalesces duplicate clic
   assert.equal(runner.isRunning(), false);
 });
 
+test("expired persisted running state with no active task recovers after restart", async () => {
+  const persisted: EbayPublicSyncStatus = {
+    ...previousSuccess(),
+    state: "running",
+    lastAttemptStartedAt: "2026-07-24T11:50:00.000Z",
+    lastAttemptCompletedAt: null,
+    message: "eBay public Browse snapshot retrieval is running.",
+    preserveLastKnownGood: true,
+  };
+
+  const recovered = recoverStaleEbayPublicSyncStatus(persisted, {
+    hasActiveTask: false,
+    now: new Date("2026-07-24T12:00:00.000Z"),
+    leaseMs: 5 * 60 * 1000,
+  });
+
+  assert.equal(recovered.state, "failed");
+  assert.equal(recovered.lastAttemptCompletedAt, "2026-07-24T12:00:00.000Z");
+  assert.equal(recovered.lastSuccessfulItemCount, 38);
+  assert.equal(recovered.preserveLastKnownGood, true);
+  assert.match(recovered.message ?? "", /server restarted/i);
+  assert.match(recovered.message ?? "", /new refresh can now be started/i);
+
+  const runner = createSingleFlightTask<number>();
+  const next = runner.start(async () => 1);
+  assert.equal(next.started, true);
+  assert.equal(await next.completion, 1);
+});
+
+test("live single-flight task is never reclaimed even after its persisted lease age", () => {
+  const persisted: EbayPublicSyncStatus = {
+    ...previousSuccess(),
+    state: "running",
+    lastAttemptStartedAt: "2026-07-24T11:00:00.000Z",
+    lastAttemptCompletedAt: null,
+    preserveLastKnownGood: true,
+  };
+
+  const unchanged = recoverStaleEbayPublicSyncStatus(persisted, {
+    hasActiveTask: true,
+    now: new Date("2026-07-24T12:00:00.000Z"),
+    leaseMs: 5 * 60 * 1000,
+  });
+
+  assert.equal(unchanged, persisted);
+});
+
+test("recent orphaned running state remains leased until the bounded recovery window", () => {
+  const persisted: EbayPublicSyncStatus = {
+    ...previousSuccess(),
+    state: "running",
+    lastAttemptStartedAt: "2026-07-24T11:58:00.000Z",
+    lastAttemptCompletedAt: null,
+    preserveLastKnownGood: true,
+  };
+
+  const unchanged = recoverStaleEbayPublicSyncStatus(persisted, {
+    hasActiveTask: false,
+    now: new Date("2026-07-24T12:00:00.000Z"),
+    leaseMs: 5 * 60 * 1000,
+  });
+
+  assert.equal(unchanged, persisted);
+});
+
 test("complete public eBay ingestion publishes once and remains visible to an eBay-only customer search", async () => {
   const saved: EbayPublicSyncStatus[] = [];
   const published: InsertDeal[] = [];
@@ -263,9 +329,10 @@ test("admin public sync is queued in the background and the UI polls persisted s
   const schedulerSource = readFileSync(new URL("./deal-sync-scheduler.ts", import.meta.url), "utf8");
   const adminSource = readFileSync(new URL("../client/src/pages/Admin.tsx", import.meta.url), "utf8");
 
-  assert.match(routesSource, /post\("\/api\/ebay\/public-sync"[\s\S]{0,300}queueEbayPublicSync/);
+  assert.match(routesSource, /post\("\/api\/ebay\/public-sync"[\s\S]{0,300}await queueEbayPublicSync/);
   assert.match(routesSource, /status\(started \? 202 : 200\)/);
-  assert.match(schedulerSource, /queueEbayPublicSync/);
+  assert.match(schedulerSource, /const reconciled = recoverStaleEbayPublicSyncStatus[\s\S]{0,300}ebayPublicSyncTask\.isRunning/);
+  assert.match(schedulerSource, /async function queueEbayPublicSync/);
   assert.match(schedulerSource, /browseMaxRetries:\s*0/);
   assert.match(adminSource, /apiRequest\("POST", "\/api\/ebay\/public-sync"/);
   assert.match(adminSource, /refetchInterval:\s*3000/);
