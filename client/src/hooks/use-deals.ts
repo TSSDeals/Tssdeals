@@ -54,7 +54,7 @@ export function useDeals(input?: DealsListInput | null) {
   });
 }
 
-export function useDefaultFeed(opts?: { perSport?: number; sportIds?: string[] }) {
+export function useDefaultFeed(opts?: { perSport?: number; sportIds?: string[]; enabled?: boolean }) {
   const perSport = opts?.perSport ?? 10;
   const sportIds = opts?.sportIds;
   const params = new URLSearchParams();
@@ -69,6 +69,7 @@ export function useDefaultFeed(opts?: { perSport?: number; sportIds?: string[] }
       return res.json() as Promise<{ sportId: string; sportName: string; deals: any[] }[]>;
     },
     placeholderData: (prev) => prev,
+    enabled: opts?.enabled ?? true,
   });
 }
 
