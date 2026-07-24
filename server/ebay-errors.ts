@@ -1,6 +1,7 @@
 export type EbayErrorKind =
   | "reauthorization_required"
   | "missing_scope"
+  | "rate_limited"
   | "upstream_error";
 
 export interface EbayUpstreamDetail {
@@ -128,6 +129,9 @@ function classify(
   ) {
     return "reauthorization_required";
   }
+  if (status === 429) {
+    return "rate_limited";
+  }
   return "upstream_error";
 }
 
@@ -156,6 +160,8 @@ export function ebayErrorFromText(
     ? "eBay authorization is missing a required permission. Reconnect the eBay account to grant the current permissions."
     : code === "reauthorization_required"
       ? "eBay authorization has expired or was revoked. Reconnect the eBay account."
+      : code === "rate_limited"
+        ? "eBay is temporarily rate-limiting marketplace requests. The last known-good data was preserved; try again later."
       : `eBay could not complete ${operation}. Try again later or review the eBay integration diagnostics.`;
 
   return new EbayIntegrationError({

@@ -8,6 +8,7 @@ import {
   runEbayPublicSnapshotSync,
   type EbayPublicSyncStatus,
 } from "./ebay-public-sync";
+import { EbayIntegrationError } from "./ebay-errors";
 
 function ebayDeal(url: string, title = "Wilson A2000 Baseball Glove"): InsertDeal {
   return {
@@ -104,6 +105,33 @@ test("upstream Browse exception preserves the last successful snapshot", async (
   assert.equal(saved.at(-1)?.preserveLastKnownGood, true);
 });
 
+test("Browse 429 preserves the last successful public snapshot", async () => {
+  const saved: EbayPublicSyncStatus[] = [];
+
+  const result = await runEbayPublicSnapshotSync({
+    loadStatus: async () => previousSuccess(),
+    saveStatus: async (status) => { saved.push(status); },
+    collect: async () => {
+      throw new EbayIntegrationError({
+        code: "rate_limited",
+        operation: "public deal search",
+        message: "eBay is temporarily rate-limiting marketplace requests.",
+        upstreamStatus: 429,
+      });
+    },
+    publish: async () => {
+      assert.fail("a rate-limited retrieval must not publish");
+    },
+    now: () => new Date("2026-07-23T12:00:00.000Z"),
+  });
+
+  assert.deepEqual(result, { created: 0, updated: 0, errors: 1 });
+  assert.equal(saved.at(-1)?.state, "failed");
+  assert.equal(saved.at(-1)?.lastSuccessfulAt, "2026-07-22T12:00:00.000Z");
+  assert.equal(saved.at(-1)?.lastSuccessfulItemCount, 38);
+  assert.equal(saved.at(-1)?.preserveLastKnownGood, true);
+});
+
 test("complete public eBay ingestion publishes once and remains visible to an eBay-only customer search", async () => {
   const saved: EbayPublicSyncStatus[] = [];
   const published: InsertDeal[] = [];
@@ -168,4 +196,8 @@ test("customer query and stale cleanup both honor the durable eBay snapshot guar
   assert.match(storageSource, /ebay_public_sync_status[\s\S]{0,500}preserveLastKnownGood/);
   assert.match(storageSource, /eq\(deals\.sourceId,\s*"ebay"\),\s*preserveLastKnownGoodEbaySnapshot/);
   assert.match(schedulerSource, /source_id <> 'ebay'[\s\S]{0,500}ebay_public_sync_status[\s\S]{0,300}preserveLastKnownGood/);
+  assert.doesNotMatch(schedulerSource, /collectEbayDeals/);
+  assert.match(schedulerSource, /createEbayBrowseBudget\("public feed sync", 250\)/);
+  assert.match(schedulerSource, /maxResults:\s*200/);
+  assert.doesNotMatch(schedulerSource, /maxResults:\s*(?:2000|5000|10000)/);
 });
