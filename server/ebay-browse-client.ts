@@ -103,7 +103,12 @@ export async function fetchEbayBrowseJson<T>(
 
   const request = (async () => {
     const purpose = options.purpose ?? "other";
-    const maxRetries = Math.max(0, options.maxRetries ?? (purpose === "pricing" ? 0 : 1));
+    // Public feed snapshots must terminate immediately on quota exhaustion so
+    // one admin click cannot wait/retry through the proxy timeout or consume
+    // additional calls needed by later scheduled runs.
+    const maxRetries = purpose === "public_feed"
+      ? 0
+      : Math.max(0, options.maxRetries ?? (purpose === "pricing" ? 0 : 1));
     const maxRetryDelayMs = options.maxRetryDelayMs ?? DEFAULT_MAX_RETRY_DELAY_MS;
     const fetchImpl = options.fetchImpl ?? fetch;
     const sleep = options.sleep ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
@@ -116,20 +121,12 @@ export async function fetchEbayBrowseJson<T>(
     }
 
     if (rateLimitedUntil > now()) {
-      if (purpose === "pricing") {
-        throw rateLimitError(
-          options.operation,
-          "eBay Browse is currently rate-limited. The pricing report was stopped to preserve capacity for the public marketplace feed.",
-        );
-      }
-      const remainingMs = rateLimitedUntil - now();
-      if (remainingMs > maxRetryDelayMs) {
-        throw rateLimitError(
-          options.operation,
-          "eBay Browse remains rate-limited beyond the safe retry window. The last known-good marketplace feed was preserved.",
-        );
-      }
-      await sleep(remainingMs);
+      throw rateLimitError(
+        options.operation,
+        purpose === "pricing"
+          ? "eBay Browse is currently rate-limited. The pricing report was stopped to preserve capacity for the public marketplace feed."
+          : "eBay Browse quota is currently exhausted. No additional marketplace requests were attempted; the last known-good feed was preserved.",
+      );
     }
 
     for (let attempt = 0; ; attempt++) {

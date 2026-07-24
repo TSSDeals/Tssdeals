@@ -22,7 +22,14 @@ import {
   fetchEbayPurchases,
   purchasesToCsv,
 } from "./ebay-reports";
-import { startDealSyncScheduler, runFullSync, getSyncStatus, getEbayPublicSyncStatus } from "./deal-sync-scheduler";
+import {
+  startDealSyncScheduler,
+  runFullSync,
+  getSyncStatus,
+  getEbayPublicSyncStatus,
+  queueEbayPublicSync,
+} from "./deal-sync-scheduler";
+import { createEbayBrowseBudget, isEbayRateLimitError } from "./ebay-browse-client";
 import { getStopEpoch, stopRequestedSince, requestStopAll, getLastStopAt } from "./process-control";
 import { configurePush, getVapidPublicKey, isPushConfigured, sendPushToUser } from "./push-notifications";
 import { configureSms, isSmsConfigured, sendSms, sendWelcomeSms, sendSmsBatch } from "./sms-notifications";
@@ -1693,7 +1700,22 @@ export async function registerRoutes(
     });
   });
 
-  // eBay Browse API sync endpoint (auth required)
+  // Protected public eBay snapshot refresh. The request returns immediately;
+  // progress and the last-known-good state are exposed by /api/admin/sync/status.
+  app.post("/api/ebay/public-sync", isAdmin, async (_req: any, res) => {
+    const started = queueEbayPublicSync(storage);
+    return res.status(started ? 202 : 200).json({
+      ok: true,
+      started,
+      message: started
+        ? "eBay public feed refresh started in the background. Status will update automatically."
+        : "An eBay public feed refresh is already running.",
+    });
+  });
+
+  // Legacy targeted eBay Browse endpoint. Keep it bounded and fail-fast on
+  // quota exhaustion; the normal admin refresh button uses the background
+  // public snapshot endpoint above.
   app.post("/api/ebay/sync", isAdmin, async (req: any, res) => {
     try {
       const clientId = process.env.EBAY_CLIENT_ID;
@@ -1723,6 +1745,8 @@ export async function registerRoutes(
       let totalSkipped = 0;
       let totalErrors = 0;
       const syncLog: string[] = [];
+      const browseBudget = createEbayBrowseBudget("targeted admin sync", 100);
+      let rateLimited = false;
 
       const eqTypeKeywordMap: Record<string, Record<string, string[]>> = {
         baseball: {
@@ -1888,6 +1912,7 @@ export async function registerRoutes(
       }
 
       const stopEpoch = getStopEpoch();
+      syncLoop:
       for (const sid of sportsToSync) {
         if (stopRequestedSince(stopEpoch)) break;
         const keywords = input.keywords
@@ -1908,6 +1933,9 @@ export async function registerRoutes(
               condition: input.condition === "all" ? undefined : input.condition,
               maxPrice: input.maxPrice,
               sellerUsername: input.sellerUsername,
+              browseBudget,
+              browsePurpose: "public_feed",
+              browseMaxRetries: 0,
             });
 
             const dealsToInsert = items
@@ -1930,13 +1958,22 @@ export async function registerRoutes(
             }
           } catch (err: any) {
             totalErrors++;
+            if (isEbayRateLimitError(err)) {
+              rateLimited = true;
+              syncLog.push("eBay Browse quota is exhausted. No additional requests were attempted.");
+              break syncLoop;
+            }
             syncLog.push(`${sid}/${kw}: ERROR - ${err.message}`);
           }
         }
       }
 
-      res.json({
-        ok: true,
+      res.status(rateLimited ? 429 : 200).json({
+        ok: !rateLimited,
+        code: rateLimited ? "rate_limited" : undefined,
+        message: rateLimited
+          ? "eBay Browse quota is exhausted. No additional requests were attempted; existing public deals were preserved."
+          : undefined,
         created: totalCreated,
         updated: totalUpdated,
         skipped: totalSkipped,

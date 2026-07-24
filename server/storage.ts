@@ -2,6 +2,12 @@ import { eq, and, asc, desc, gte, ilike, inArray, isNull, isNotNull, not, or, sq
 import { normalizeBrand } from "./brand-normalizer";
 import { expandEquipmentTypeIds, isBaseballBatGroupId, isBaseballGloveGroupId } from "../shared/equipment-groups";
 import {
+  collectValidDealSubFilterCandidates,
+  validPrimarySubFilterId,
+  writeDealSubFilterCandidates,
+  type DealSubFilterCandidate,
+} from "./deal-sub-filter-sync";
+import {
   BASEBALL_BAT_EVIDENCE_PATTERN,
   BASEBALL_BAT_NEGATIVE_EVIDENCE_PATTERN,
   BASEBALL_GLOVE_EVIDENCE_PATTERN,
@@ -831,11 +837,20 @@ export class DatabaseStorage implements IStorage {
     let updated = 0;
     const PRICE_DROP_THRESHOLD = 20;
     const upsertedIds: string[] = [];
+    const pendingSubFilterCandidates: DealSubFilterCandidate[] = [];
 
-    // Load valid sub_filter IDs from the DB so we can null out any that don't exist
-    // (production DB may have different IDs than what the classifiers generate)
-    const validSubFilterRows = await db.select({ id: equipmentSubFilters.id }).from(equipmentSubFilters);
-    const validSubFilterIds = new Set(validSubFilterRows.map((r) => r.id));
+    // Production taxonomy can differ from classifier defaults. Validate both
+    // existence and the current equipment-type mapping before persisting tags.
+    const validSubFilterRows = await db
+      .select({
+        id: equipmentSubFilters.id,
+        equipmentTypeId: equipmentSubFilters.equipmentTypeId,
+      })
+      .from(equipmentSubFilters);
+    const currentSubFilterMappings = new Map(
+      validSubFilterRows.map((row) => [row.id, row.equipmentTypeId]),
+    );
+    const { classifyAllSubFilters } = await import("./sub-filter-classifier");
 
     const seenTitles = new Set<string>();
 
@@ -843,9 +858,11 @@ export class DatabaseStorage implements IStorage {
       // Normalize brand to canonical form before any DB operation
       deal.brand = normalizeBrand(deal.brand);
 
-      if (deal.subFilterId && !validSubFilterIds.has(deal.subFilterId)) {
-        deal.subFilterId = null;
-      }
+      deal.subFilterId = validPrimarySubFilterId(
+        deal.subFilterId,
+        deal.equipmentTypeId,
+        currentSubFilterMappings,
+      );
       const normalizedTitle = deal.title.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 120);
       const dedupKey = `${deal.sourceId}|${normalizedTitle}|${deal.priceCents}`;
       if (seenTitles.has(dedupKey)) {
@@ -939,7 +956,14 @@ export class DatabaseStorage implements IStorage {
         `);
 
         upsertedIds.push(ex.id);
-        await this.syncDealSubFilters(ex.id, deal);
+        pendingSubFilterCandidates.push(
+          ...collectValidDealSubFilterCandidates(
+            ex.id,
+            deal,
+            currentSubFilterMappings,
+            classifyAllSubFilters,
+          ),
+        );
         updated++;
       } else {
         const insertNow = new Date();
@@ -971,11 +995,44 @@ export class DatabaseStorage implements IStorage {
           `);
 
           upsertedIds.push(inserted[0].id);
-          await this.syncDealSubFilters(inserted[0].id, deal);
+          pendingSubFilterCandidates.push(
+            ...collectValidDealSubFilterCandidates(
+              inserted[0].id,
+              deal,
+              currentSubFilterMappings,
+              classifyAllSubFilters,
+            ),
+          );
         }
         created++;
       }
     }
+
+    // Multi-tagging is best-effort and runs in bounded batches after the main
+    // deal upserts. The INSERT...SELECT joins the live taxonomy, closing the
+    // race where a sub-filter is deleted or remapped after the initial read.
+    await writeDealSubFilterCandidates(
+      pendingSubFilterCandidates,
+      async (chunk) => {
+        const candidateValues = dsql.join(
+          chunk.map((candidate) =>
+            dsql`(${candidate.dealId}, ${candidate.subFilterId}, ${candidate.equipmentTypeId})`
+          ),
+          dsql`, `,
+        );
+        await db.execute(dsql`
+          INSERT INTO deal_sub_filters (deal_id, sub_filter_id)
+          SELECT candidate.deal_id, candidate.sub_filter_id
+          FROM (VALUES ${candidateValues})
+            AS candidate(deal_id, sub_filter_id, equipment_type_id)
+          INNER JOIN equipment_sub_filters current_sub_filter
+            ON current_sub_filter.id = candidate.sub_filter_id
+           AND current_sub_filter.equipment_type_id = candidate.equipment_type_id
+          ON CONFLICT (deal_id, sub_filter_id) DO NOTHING
+        `);
+      },
+      (message) => console.warn(`[deal-sub-filters] ${message}`),
+    );
 
     // Recalculate percent_off for all deals we just touched using the enriched pricing logic
     if (upsertedIds.length > 0) {
@@ -1112,42 +1169,6 @@ export class DatabaseStorage implements IStorage {
     await db.execute(dsql`DELETE FROM deal_sub_filters WHERE sub_filter_id = ${id}`);
     await db.update(deals).set({ subFilterId: null }).where(eq(deals.subFilterId, id));
     await db.delete(equipmentSubFilters).where(eq(equipmentSubFilters.id, id));
-  }
-
-  /**
-   * Sync the multi-tag join table for a single deal during sync/upsert.
-   * Strategy: classify the title against every rule for the deal's equipment
-   * type and INSERT…ON CONFLICT DO NOTHING. This grows the tag set as new
-   * rules match but never removes admin-added tags. The legacy single tag
-   * (deal.subFilterId) is also included so it stays consistent with the join
-   * table.
-   */
-  private async syncDealSubFilters(
-    dealId: string,
-    deal: { title?: string | null; equipmentTypeId?: string | null; subFilterId?: string | null; subFilterIds?: string[] | null },
-  ): Promise<void> {
-    try {
-      const { classifyAllSubFilters } = await import("./sub-filter-classifier");
-      const { dealSubFilters } = await import("@shared/schema");
-      const tags = new Set<string>();
-      if (deal.subFilterId) tags.add(deal.subFilterId);
-      if (Array.isArray(deal.subFilterIds)) {
-        for (const t of deal.subFilterIds) if (t) tags.add(t);
-      }
-      if (deal.title && deal.equipmentTypeId) {
-        for (const t of classifyAllSubFilters(deal.title, deal.equipmentTypeId)) {
-          tags.add(t);
-        }
-      }
-      if (tags.size === 0) return;
-      await db
-        .insert(dealSubFilters)
-        .values(Array.from(tags).map((subFilterId) => ({ dealId, subFilterId })))
-        .onConflictDoNothing();
-    } catch (e) {
-      // Multi-tag sync is best-effort and must never break the main upsert.
-      console.warn(`[deal-sub-filters] sync failed for ${dealId}:`, (e as Error).message);
-    }
   }
 
   async listAutoIncludeRules(): Promise<AutoIncludeRule[]> {

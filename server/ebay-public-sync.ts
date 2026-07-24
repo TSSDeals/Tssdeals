@@ -22,6 +22,7 @@ export interface EbayPublicCollection {
   requestsAttempted: number;
   requestsSucceeded: number;
   stopped?: boolean;
+  failureKind?: "rate_limited" | "interrupted";
 }
 
 export interface EbayPublicSyncResult {
@@ -36,6 +37,31 @@ export interface EbayPublicSnapshotDependencies {
   collect(): Promise<EbayPublicCollection>;
   publish(deals: InsertDeal[]): Promise<{ created: number; updated: number }>;
   now?: () => Date;
+}
+
+export interface SingleFlightStart<T> {
+  started: boolean;
+  completion: Promise<T>;
+}
+
+export function createSingleFlightTask<T>() {
+  let active: Promise<T> | null = null;
+
+  return {
+    start(task: () => Promise<T>): SingleFlightStart<T> {
+      if (active) return { started: false, completion: active };
+      const completion = Promise.resolve().then(task);
+      active = completion;
+      const clear = () => {
+        if (active === completion) active = null;
+      };
+      void completion.then(clear, clear);
+      return { started: true, completion };
+    },
+    isRunning(): boolean {
+      return active !== null;
+    },
+  };
 }
 
 export function defaultEbayPublicSyncStatus(): EbayPublicSyncStatus {
@@ -94,6 +120,12 @@ function failedStatus(
   };
 }
 
+function isRateLimitedFailure(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { code?: unknown; upstreamStatus?: unknown };
+  return candidate.code === "rate_limited" || candidate.upstreamStatus === 429;
+}
+
 export async function runEbayPublicSnapshotSync(
   dependencies: EbayPublicSnapshotDependencies,
 ): Promise<EbayPublicSyncResult> {
@@ -116,14 +148,16 @@ export async function runEbayPublicSnapshotSync(
   let collection: EbayPublicCollection;
   try {
     collection = await dependencies.collect();
-  } catch {
+  } catch (error) {
     await dependencies.saveStatus(failedStatus(
       previous,
       startedAt,
       now().toISOString(),
       0,
       1,
-      "eBay public Browse retrieval failed. The last known-good snapshot was preserved.",
+      isRateLimitedFailure(error)
+        ? "eBay Browse quota is exhausted. No further requests were attempted; the last known-good snapshot was preserved."
+        : "eBay public Browse retrieval failed. The last known-good snapshot was preserved.",
     ));
     return { created: 0, updated: 0, errors: 1 };
   }
@@ -136,8 +170,10 @@ export async function runEbayPublicSnapshotSync(
     collection.requestsSucceeded !== collection.requestsAttempted;
 
   if (incomplete || candidates.length === 0) {
-    const reason = collection.stopped
-      ? "eBay public Browse retrieval was interrupted. The last known-good snapshot was preserved."
+    const reason = collection.failureKind === "rate_limited"
+      ? "eBay Browse quota is exhausted. No further requests were attempted; the last known-good snapshot was preserved."
+      : collection.stopped
+        ? "eBay public Browse retrieval was interrupted. The last known-good snapshot was preserved."
       : candidates.length === 0
         ? "eBay public Browse retrieval returned zero publishable items. The last known-good snapshot was preserved."
         : "eBay public Browse retrieval was incomplete. The last known-good snapshot was preserved.";

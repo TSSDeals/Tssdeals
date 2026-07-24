@@ -20,6 +20,7 @@ import { getStopEpoch, stopRequestedSince } from "./process-control";
 import type { InsertDeal } from "@shared/schema";
 import {
   EBAY_PUBLIC_SYNC_STATUS_KEY,
+  createSingleFlightTask,
   defaultEbayPublicSyncStatus,
   parseEbayPublicSyncStatus,
   runEbayPublicSnapshotSync,
@@ -49,6 +50,11 @@ function mergeEbayCollections(collections: EbayPublicCollection[]): EbayPublicCo
     requestsAttempted: collections.reduce((sum, collection) => sum + collection.requestsAttempted, 0),
     requestsSucceeded: collections.reduce((sum, collection) => sum + collection.requestsSucceeded, 0),
     stopped: collections.some((collection) => collection.stopped === true),
+    failureKind: collections.some((collection) => collection.failureKind === "rate_limited")
+      ? "rate_limited"
+      : collections.some((collection) => collection.failureKind === "interrupted")
+        ? "interrupted"
+        : undefined,
   };
 }
 
@@ -108,7 +114,7 @@ async function collectEbaySellerDeals(
           sellerUsername: seller.username,
           browseBudget,
           browsePurpose: "public_feed",
-          browseMaxRetries: 1,
+          browseMaxRetries: 0,
         });
         requestsSucceeded++;
 
@@ -141,6 +147,7 @@ async function collectEbaySellerDeals(
     requestsAttempted,
     requestsSucceeded,
     stopped: stopRequestedSince(stopEpoch) || rateLimited,
+    failureKind: rateLimited ? "rate_limited" : undefined,
   };
 }
 
@@ -176,7 +183,7 @@ async function collectEbayCategoryDeals(
         categoryId: catSync.categoryId,
         browseBudget,
         browsePurpose: "public_feed",
-        browseMaxRetries: 1,
+        browseMaxRetries: 0,
       });
       requestsSucceeded++;
 
@@ -202,6 +209,7 @@ async function collectEbayCategoryDeals(
     requestsAttempted,
     requestsSucceeded,
     stopped: stopRequestedSince(stopEpoch) || rateLimited,
+    failureKind: rateLimited ? "rate_limited" : undefined,
   };
 }
 
@@ -217,7 +225,7 @@ async function saveEbayPublicSyncStatus(storage: IStorage, status: EbayPublicSyn
   await storage.setAppSetting(EBAY_PUBLIC_SYNC_STATUS_KEY, JSON.stringify(status));
 }
 
-async function syncEbayPublicDeals(storage: IStorage): Promise<{ created: number; updated: number; errors: number }> {
+async function performEbayPublicSync(storage: IStorage): Promise<{ created: number; updated: number; errors: number }> {
   const result = await runEbayPublicSnapshotSync({
     loadStatus: () => getEbayPublicSyncStatus(storage),
     saveStatus: (status) => saveEbayPublicSyncStatus(storage, status),
@@ -241,6 +249,27 @@ async function syncEbayPublicDeals(storage: IStorage): Promise<{ created: number
     log(status.message ?? "eBay public snapshot published.", "deal-sync");
   }
   return result;
+}
+
+type EbayPublicSyncResult = { created: number; updated: number; errors: number };
+const ebayPublicSyncTask = createSingleFlightTask<EbayPublicSyncResult>();
+
+function beginEbayPublicSync(storage: IStorage) {
+  return ebayPublicSyncTask.start(() => performEbayPublicSync(storage));
+}
+
+export function queueEbayPublicSync(storage: IStorage): boolean {
+  const started = beginEbayPublicSync(storage);
+  if (started.started) {
+    void started.completion.catch((error) => {
+      log(`eBay public sync background error: ${(error as Error).message}`, "deal-sync");
+    });
+  }
+  return started.started;
+}
+
+export async function runEbayPublicSync(storage: IStorage): Promise<EbayPublicSyncResult> {
+  return beginEbayPublicSync(storage).completion;
 }
 
 export async function syncEbaySellerDeals(storage: IStorage): Promise<{ created: number; updated: number; errors: number }> {
@@ -1035,7 +1064,7 @@ export async function runFullSync(storage: IStorage): Promise<FullSyncResult | n
 
   try {
     const [ebay, cj, shopify, sidelineswap, shareasale, impact, rakuten, amazon, notg, baseballResale, fanatics, multiShopify, playItAgain] = await Promise.allSettled([
-      syncEbayPublicDeals(storage),
+      runEbayPublicSync(storage),
       syncCJDeals(storage),
       syncShopifyDeals(storage),
       syncSidelineSwapDeals(storage),
