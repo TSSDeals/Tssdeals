@@ -4,7 +4,6 @@ import { AppShell } from "@/components/AppShell";
 import { DealCard } from "@/components/DealCard";
 import { DealComposer } from "@/components/DealComposer";
 import { EmptyState } from "@/components/EmptyState";
-import { StatPill } from "@/components/StatPill";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,11 +22,10 @@ import { useEquipmentTypes, useSubFilters, useEbaySellers, useSources, useSports
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowDownWideNarrow, ArrowUpDown, Camera, CheckCircle2, ChevronDown, ChevronRight, ChevronUp, ExternalLink, Flame, Gift, RefreshCcw, Search, ShoppingBag, Sparkles, SlidersHorizontal, Store, Tag, TicketX, TrendingDown, X, XCircle } from "lucide-react";
+import { ArrowUpDown, Camera, CheckCircle2, ChevronDown, ChevronRight, ChevronUp, ExternalLink, Flame, Gift, RefreshCcw, Search, ShoppingBag, Sparkles, SlidersHorizontal, Store, Tag, TicketX, TrendingDown, X, XCircle } from "lucide-react";
 import { Link } from "wouter";
-import { RetailerBanner } from "@/components/RetailerBanner";
-import { BrandStoreStrip } from "@/components/BrandStoreStrip";
 import { DealCarousel } from "@/components/DealCarousel";
+import { DealsSearchHero } from "@/components/DealsSearchHero";
 import {
   BASEBALL_BAT_GROUP_IDS,
   CANONICAL_BASEBALL_BAT_ID,
@@ -44,6 +42,11 @@ import {
   buildZeroResultRecovery,
   type SearchRecoveryAction,
 } from "@shared/search-language";
+import {
+  addRecentShopperSearch,
+  groupShopperSubFilters,
+  parseRecentShopperSearches,
+} from "@shared/shopper-search-ux";
 
 type SortOption = "newest" | "oldest" | "price-low" | "price-high" | "discount-high" | "a-z" | "z-a";
 
@@ -90,6 +93,7 @@ const DEFAULT_FEED_SPORTS: { id: string; name: string }[] = [
 ];
 const FEED_SPORT_IDS = DEFAULT_FEED_SPORTS.map((s) => s.id);
 const FEED_COUNT_OPTIONS = [10, 20, 50, 100];
+const RECENT_SEARCHES_KEY = "tss_recent_searches";
 
 function safeLocalGet(key: string): string | null {
   try {
@@ -117,7 +121,12 @@ export default function DealsPage() {
 
   const [pending, setPending] = useState<FilterState>(DEFAULT_FILTERS);
   const [applied, setApplied] = useState<FilterState>(DEFAULT_FILTERS);
+  const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
+  const [recentSearches, setRecentSearches] = useState<string[]>(() =>
+    parseRecentShopperSearches(safeLocalGet(RECENT_SEARCHES_KEY)),
+  );
   const preSearchMinPercentOff = useRef<number | null>(null);
+  const resultsRef = useRef<HTMLParagraphElement>(null);
   const [photoSearching, setPhotoSearching] = useState(false);
   const [photoIdentified, setPhotoIdentified] = useState<string | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -166,7 +175,7 @@ export default function DealsPage() {
   }
 
   const eqTypes = useEquipmentTypes(pending.sportId === "all" ? undefined : pending.sportId);
-  const ebaySellersList = useEbaySellers();
+  const ebaySellersList = useEbaySellers(advancedFiltersOpen);
 
   const activeEqTypeId = useMemo(() => {
     if (pending.sportId === "all" || pending.equipmentTypeId === "all") return undefined;
@@ -174,8 +183,10 @@ export default function DealsPage() {
     return pending.equipmentTypeId;
   }, [pending.sportId, pending.equipmentTypeId]);
   const subFilters = useSubFilters(activeEqTypeId);
-
-  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const categoryRefinements = useMemo(
+    () => groupShopperSubFilters(pending.equipmentTypeId, (subFilters.data ?? []) as any[]),
+    [pending.equipmentTypeId, subFilters.data],
+  );
 
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
     featured: true,
@@ -212,6 +223,38 @@ export default function DealsPage() {
     setFeedSports((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
 
   const hasUnapplied = JSON.stringify(pending) !== JSON.stringify(applied);
+
+  const runSearch = (next: FilterState = pending) => {
+    setPending(next);
+    setApplied(next);
+    setAdvancedFiltersOpen(false);
+    if (next.q.trim()) {
+      setRecentSearches((current) => {
+        const updated = addRecentShopperSearch(current, next.q);
+        safeLocalSet(RECENT_SEARCHES_KEY, JSON.stringify(updated));
+        return updated;
+      });
+    }
+    window.requestAnimationFrame(() => {
+      resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
+
+  const isDefaultView = useMemo(() => {
+    return (
+      !applied.q.trim() &&
+      applied.sportId === "all" &&
+      applied.equipmentTypeId === "all" &&
+      applied.subFilterId === "all" &&
+      applied.ebaySeller === "all" &&
+      applied.source === "all" &&
+      applied.brand === "all" &&
+      !applied.priceDropOnly &&
+      applied.maxPrice === 0 &&
+      applied.minPercentOff === 50 &&
+      applied.sortBy === "newest"
+    );
+  }, [applied]);
 
   const prefsApplied = useRef(false);
   useEffect(() => {
@@ -255,6 +298,7 @@ export default function DealsPage() {
 
   const { data: popularProductsData } = useQuery<any[]>({
     queryKey: ["/api/popular-products"],
+    enabled: isDefaultView,
   });
 
   const brandsQuery = useQuery<string[]>({
@@ -265,22 +309,6 @@ export default function DealsPage() {
       return res.json();
     },
   });
-
-  const isDefaultView = useMemo(() => {
-    return (
-      !applied.q.trim() &&
-      applied.sportId === "all" &&
-      applied.equipmentTypeId === "all" &&
-      applied.subFilterId === "all" &&
-      applied.ebaySeller === "all" &&
-      applied.source === "all" &&
-      applied.brand === "all" &&
-      !applied.priceDropOnly &&
-      applied.maxPrice === 0 &&
-      applied.minPercentOff === 50 &&
-      applied.sortBy === "newest"
-    );
-  }, [applied]);
 
   const queryInput = useMemo(
     () => ({
@@ -308,21 +336,25 @@ export default function DealsPage() {
     () => FEED_SPORT_IDS.filter((id) => feedSports.includes(id)),
     [feedSports],
   );
-  const defaultFeed = useDefaultFeed({ perSport: feedPerSport, sportIds: feedSportsCanonical });
+  const defaultFeed = useDefaultFeed({
+    perSport: feedPerSport,
+    sportIds: feedSportsCanonical,
+    enabled: isDefaultView,
+  });
   const deals = useDeals(isDefaultView ? null : queryInput);
-  const featuredDeals = useDeals({
+  const featuredDeals = useDeals(isDefaultView ? {
     ...queryInput,
     featured: true,
     limit: 12,
-  });
-  const twinSeamQuery = useDeals({
-    ...(isDefaultView ? {} : queryInput),
+  } : null);
+  const twinSeamQuery = useDeals(isDefaultView ? {
     source: "twin-seam-sports",
     limit: 24,
-  });
+  } : null);
 
   const bonusDealsQuery = useQuery<any[]>({
     queryKey: ["/api/bonus-deals"],
+    enabled: isDefaultView,
   });
 
   const sourceById = useMemo(() => {
@@ -345,12 +377,13 @@ export default function DealsPage() {
 
   const restDeals = useMemo(() => {
     const all = deals.data ?? [];
+    if (!isDefaultView) return all as any[];
     const featuredIds = new Set(featured.map((d: any) => d.id));
     const excludeSourceIds = new Set(["twin-seam-sports", ourStoreId].filter(Boolean));
     return (all as any[]).filter((d: any) =>
       !featuredIds.has(d.id) && !excludeSourceIds.has(d.sourceId)
     );
-  }, [deals.data, featured, ourStoreId]);
+  }, [deals.data, featured, ourStoreId, isDefaultView]);
 
   const zeroResultRecovery = useMemo(
     () => buildZeroResultRecovery(applied),
@@ -441,45 +474,82 @@ export default function DealsPage() {
   const subtitle = meta.data
     ? `Drops at ${meta.data.scheduled.times.join(" · ")} (${meta.data.scheduled.timezone}). Default: 50%+ off, all conditions.`
     : "Filter by sport, equipment, condition, and percent-off — then open the deal instantly.";
+  const dealUtilities = (
+    <div className="flex flex-wrap items-center gap-2">
+      <DealComposer
+        sources={sources.data as any}
+        defaultSourceId={ourStoreId}
+        data-testid="deal-create"
+      />
+      <Button
+        variant="secondary"
+        onClick={() => {
+          featuredDeals.refetch();
+          twinSeamQuery.refetch();
+          deals.refetch();
+          defaultFeed.refetch();
+        }}
+        className="ring-focus rounded-xl"
+        data-testid="refresh"
+      >
+        <RefreshCcw className={cn("mr-2 h-4 w-4", (deals.isFetching || featuredDeals.isFetching || twinSeamQuery.isFetching || defaultFeed.isFetching) && "animate-spin")} />
+        Refresh
+      </Button>
+    </div>
+  );
 
   return (
     <AppShell
-      title="Deals feed"
+      title="Find the right gear, faster"
       subtitle={subtitle}
-      rightSlot={
-        <div className="flex flex-wrap items-center gap-2">
-          <DealComposer
-            sources={sources.data as any}
-            defaultSourceId={ourStoreId}
-            data-testid="deal-create"
-          />
-          <Button
-            variant="secondary"
-            onClick={() => {
-              featuredDeals.refetch();
-              twinSeamQuery.refetch();
-              deals.refetch();
-              defaultFeed.refetch();
-            }}
-            className="ring-focus rounded-xl"
-            data-testid="refresh"
-          >
-            <RefreshCcw className={cn("mr-2 h-4 w-4", (deals.isFetching || featuredDeals.isFetching || twinSeamQuery.isFetching || defaultFeed.isFetching) && "animate-spin")} />
-            Refresh
-          </Button>
-        </div>
-      }
+      hidePageHeader
     >
       <Seo title="Deals — TwinSeam Deals" description="Browse sporting goods deals and filter by sport, equipment type, condition, and percent off." />
 
-      {/* Retailer Banner Carousel */}
-      <RetailerBanner />
+      <DealsSearchHero
+        query={pending.q}
+        recentSearches={recentSearches}
+        photoSearching={photoSearching}
+        photoIdentified={photoIdentified}
+        photoInputRef={photoInputRef}
+        onQueryChange={(value) => {
+          if (!value.trim()) setPhotoIdentified(null);
+          setPending((current) => {
+            const next = { ...current, q: value };
+            if (value.trim()) {
+              if (preSearchMinPercentOff.current === null) preSearchMinPercentOff.current = current.minPercentOff;
+              next.minPercentOff = 0;
+            } else if (preSearchMinPercentOff.current !== null) {
+              next.minPercentOff = preSearchMinPercentOff.current;
+              preSearchMinPercentOff.current = null;
+            }
+            return next;
+          });
+        }}
+        onSearch={(query) => runSearch({ ...pending, q: query, minPercentOff: query.trim() ? 0 : pending.minPercentOff })}
+        onPhotoSearch={handlePhotoSearch}
+        onClearPhoto={() => {
+          setPhotoIdentified(null);
+          setPending((current) => ({ ...current, q: "", sportId: "all", brand: "all", minPercentOff: DEFAULT_FILTERS.minPercentOff }));
+          preSearchMinPercentOff.current = null;
+        }}
+        onCategory={(sportId, equipmentTypeId) => runSearch({
+          ...pending,
+          q: "",
+          sportId,
+          equipmentTypeId,
+          subFilterId: "all",
+          brand: "all",
+          minPercentOff: 0,
+        })}
+      />
 
-      {/* Brand & Store Scrolling Strip */}
-      <BrandStoreStrip />
+      <div className="hidden justify-end lg:flex" data-testid="deal-utilities">
+        {dealUtilities}
+      </div>
 
       {/* Browse by Sport bar */}
-      <div className="card-elevated animate-float-in p-3 md:p-4" data-testid="browse-by-sport-bar">
+      <div className="hidden" aria-hidden="true">
         <div className="flex items-center justify-between gap-3 mb-2">
           <div className="flex items-center gap-2">
             <Search className="h-4 w-4 text-primary" />
@@ -537,7 +607,7 @@ export default function DealsPage() {
 
       {/* Popular Products */}
       {popularProductsData && popularProductsData.length > 0 && (
-        <div className="card-elevated animate-float-in p-3 md:p-4" data-testid="popular-products-bar">
+        <div className="hidden" aria-hidden="true">
           <div className="flex items-center gap-2 mb-2">
             <ShoppingBag className="h-4 w-4 text-accent" />
             <span className="text-sm font-semibold">Popular Products</span>
@@ -563,11 +633,11 @@ export default function DealsPage() {
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div className="flex items-center gap-2">
               <div className="grid h-10 w-10 place-items-center rounded-2xl border border-border bg-background/60 shadow-sm">
-                <ArrowDownWideNarrow className="h-5 w-5 text-primary" />
+                <SlidersHorizontal className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <div className="font-display text-lg font-bold">Filters</div>
-                <div className="text-xs text-muted-foreground">Adjust then click Apply to update results.</div>
+                <div className="font-display text-lg font-bold">Narrow the results</div>
+                <div className="text-xs text-muted-foreground">High-value choices stay visible; optional controls are tucked away.</div>
               </div>
             </div>
 
@@ -584,21 +654,118 @@ export default function DealsPage() {
               )}
               <button
                 type="button"
-                className="flex items-center gap-1.5 rounded-xl border border-border bg-background/60 px-3 py-1.5 text-xs font-semibold md:hidden"
-                onClick={() => setMobileFiltersOpen((v) => !v)}
-                data-testid="toggle-mobile-filters"
+                className="flex min-h-11 items-center gap-1.5 rounded-xl border border-border bg-background/60 px-3 text-xs font-semibold"
+                onClick={() => setAdvancedFiltersOpen((v) => !v)}
+                data-testid="toggle-advanced-filters"
+                aria-expanded={advancedFiltersOpen}
+                aria-controls="advanced-filters-panel"
               >
                 <SlidersHorizontal className="h-3.5 w-3.5" />
-                {mobileFiltersOpen ? "Hide filters" : "Show filters"}
+                {advancedFiltersOpen ? "Hide advanced filters" : "Advanced filters"}
               </button>
-              <StatPill label="Min off" value={`${applied.minPercentOff}%`} tone="primary" data-testid="pill-minoff" />
-              {applied.maxPrice > 0 && <StatPill label="Max price" value={`$${applied.maxPrice}`} tone="primary" data-testid="pill-maxprice" />}
-              <StatPill label="Condition" value={applied.condition} tone="neutral" data-testid="pill-condition" />
             </div>
           </div>
-          <div className={cn(mobileFiltersOpen ? "block" : "hidden md:block")}>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_0.8fr_1fr_auto] xl:items-end" data-testid="primary-filters">
+            <div className="grid gap-1.5">
+              <Label>Sport</Label>
+              <Select value={pending.sportId} onValueChange={(value) => setPending((current) => ({ ...current, sportId: value, equipmentTypeId: "all", subFilterId: "all", brand: "all" }))}>
+                <SelectTrigger className="ring-focus min-h-11 rounded-xl" data-testid="sport-primary">
+                  <SelectValue placeholder="All sports" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All sports</SelectItem>
+                  {shopperSports.map((sport: any) => <SelectItem key={sport.id} value={sport.id}>{sport.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-1.5">
+              <Label>Equipment</Label>
+              <Select
+                value={pending.equipmentTypeId}
+                disabled={pending.sportId === "all"}
+                onValueChange={(value) => setPending((current) => ({ ...current, equipmentTypeId: value, subFilterId: "all" }))}
+              >
+                <SelectTrigger className="ring-focus min-h-11 rounded-xl" data-testid="equipmentType-primary">
+                  <SelectValue placeholder="All equipment" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All equipment</SelectItem>
+                  {groupedEqTypes.map((type: any) => <SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-1.5">
+              <Label>Condition</Label>
+              <Select value={pending.condition} onValueChange={(value) => setPending((current) => ({ ...current, condition: value as FilterState["condition"] }))}>
+                <SelectTrigger className="ring-focus min-h-11 rounded-xl" data-testid="condition-primary"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="new">New</SelectItem>
+                  <SelectItem value="preowned">Preowned</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-1.5">
+              <Label>Brand</Label>
+              <Select value={pending.brand} onValueChange={(value) => setPending((current) => ({ ...current, brand: value }))}>
+                <SelectTrigger className="ring-focus min-h-11 rounded-xl" data-testid="brand-primary">
+                  <Tag className="mr-2 h-4 w-4 text-muted-foreground" />
+                  <SelectValue placeholder="All brands" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All brands</SelectItem>
+                  {(brandsQuery.data ?? []).map((brand) => <SelectItem key={brand} value={brand}>{brand}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              type="button"
+              onClick={() => runSearch()}
+              disabled={!hasUnapplied}
+              className={cn("ring-focus min-h-11 rounded-xl px-5", hasUnapplied && "ring-2 ring-primary/25")}
+              data-testid="apply-primary-filters"
+            >
+              {hasUnapplied ? "Show results" : "Up to date"}
+            </Button>
+          </div>
 
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+          {categoryRefinements.length > 0 && (
+            <div className="space-y-3 rounded-2xl border border-primary/15 bg-primary/[0.035] p-3 sm:p-4" data-testid="category-refinements">
+              {categoryRefinements.map((group) => (
+                <div key={group.id} className="grid gap-2 sm:grid-cols-[120px_1fr] sm:items-center">
+                  <div className="text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">{group.label}</div>
+                  <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+                    {group.items.map((item) => {
+                      const selected = pending.subFilterId === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          aria-pressed={selected}
+                          onClick={() => setPending((current) => ({ ...current, subFilterId: selected ? "all" : item.id }))}
+                          className={cn(
+                            "ring-focus min-h-10 shrink-0 rounded-full border px-3 text-xs font-bold transition-colors",
+                            selected ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background hover:border-primary/35",
+                          )}
+                          data-testid={`refinement-${item.id}`}
+                        >
+                          {item.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div
+            className={cn("rounded-2xl bg-muted/35 p-3 sm:p-4", advancedFiltersOpen ? "block" : "hidden")}
+            id="advanced-filters-panel"
+            data-testid="advanced-filters-panel"
+          >
+
+          <div className="hidden" aria-hidden="true">
             <div className="grid gap-2">
               <Label htmlFor="q">Search</Label>
               <div className="relative">
@@ -725,7 +892,7 @@ export default function DealsPage() {
           </div>
 
           {activeEqTypeId && (subFilters.data ?? []).length > 0 && (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="hidden" aria-hidden="true">
               <div className="grid gap-2">
                 <Label>Sub-filter</Label>
                 <Select value={pending.subFilterId} onValueChange={(v) => { setPending((p) => ({ ...p, subFilterId: v })); }}>
@@ -765,7 +932,7 @@ export default function DealsPage() {
               </Select>
             </div>
 
-            <div className="grid gap-2">
+            <div className="hidden" aria-hidden="true">
               <Label>Condition</Label>
               <Select value={pending.condition} onValueChange={(v) => { setPending((p) => ({ ...p, condition: v as any })); }}>
                 <SelectTrigger className="ring-focus rounded-xl" data-testid="condition">
@@ -811,7 +978,7 @@ export default function DealsPage() {
               </Select>
             </div>
 
-            <div className="grid gap-2">
+            <div className="hidden" aria-hidden="true">
               <Label>Brand</Label>
               <Select value={pending.brand} onValueChange={(v) => { setPending((p) => ({ ...p, brand: v })); }}>
                 <SelectTrigger className="ring-focus rounded-xl" data-testid="brand">
@@ -930,19 +1097,19 @@ export default function DealsPage() {
               Reset
             </Button>
             <Button
-              onClick={() => setApplied(pending)}
+              onClick={() => runSearch()}
               disabled={!hasUnapplied}
               className={cn("ring-focus rounded-xl gap-2", hasUnapplied && "ring-2 ring-primary/40")}
               data-testid="apply-filters"
             >
-              {hasUnapplied ? "Apply Filters" : "Filters Applied"}
+              {hasUnapplied ? "Apply advanced filters" : "Filters applied"}
             </Button>
           </div>
           </div>
         </div>
       </section>
 
-      <p className="text-xs text-muted-foreground/70 text-center" data-testid="text-affiliate-disclosure">
+      <p ref={resultsRef} className="scroll-mt-4 text-center text-xs text-muted-foreground/70" data-testid="text-affiliate-disclosure">
         As an affiliate, TSSDeals may earn a commission on purchases made through links on this site at no extra cost to you.
       </p>
 
@@ -1269,6 +1436,30 @@ export default function DealsPage() {
           </div>
         )}
       </section>
+      )}
+
+      {isDefaultView && popularProductsData && popularProductsData.length > 0 && (
+        <section className="card-elevated p-4 sm:p-5" data-testid="popular-products-bar">
+          <div className="mb-3 flex items-center gap-2">
+            <ShoppingBag className="h-4 w-4 text-accent" />
+            <div>
+              <h2 className="text-base font-bold">More gear to explore</h2>
+              <p className="text-xs text-muted-foreground">Curated starter links from TwinSeam—not live popularity tracking.</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {popularProductsData.slice(0, 12).map((product: any) => (
+              <Link
+                key={product.slug}
+                href={`/deals/${product.slug}`}
+                className="ring-focus min-h-10 rounded-full border border-border bg-background px-3 py-2 text-xs font-bold transition-colors hover:border-accent/35 hover:bg-accent/5"
+                data-testid={`browse-product-${product.slug}`}
+              >
+                {product.name}
+              </Link>
+            ))}
+          </div>
+        </section>
       )}
 
       {(bonusDealsQuery.data ?? []).length > 0 && (

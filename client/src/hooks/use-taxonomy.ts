@@ -74,7 +74,7 @@ export function useSources() {
   });
 }
 
-export function useEbaySellers() {
+export function useEbaySellers(enabled = true) {
   return useQuery({
     queryKey: [api.ebaySellers.list.path],
     queryFn: async () => {
@@ -86,5 +86,6 @@ export function useEbaySellers() {
         "ebaySellers.list"
       );
     },
+    enabled,
   });
 }
