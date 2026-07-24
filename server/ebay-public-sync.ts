@@ -1,6 +1,7 @@
 import type { InsertDeal } from "@shared/schema";
 
 export const EBAY_PUBLIC_SYNC_STATUS_KEY = "ebay_public_sync_status";
+export const EBAY_PUBLIC_SYNC_RUNNING_LEASE_MS = 5 * 60 * 1000;
 
 export type EbayPublicSyncState = "never_run" | "running" | "success" | "failed";
 
@@ -22,6 +23,7 @@ export interface EbayPublicCollection {
   requestsAttempted: number;
   requestsSucceeded: number;
   stopped?: boolean;
+  failureKind?: "rate_limited" | "interrupted";
 }
 
 export interface EbayPublicSyncResult {
@@ -36,6 +38,31 @@ export interface EbayPublicSnapshotDependencies {
   collect(): Promise<EbayPublicCollection>;
   publish(deals: InsertDeal[]): Promise<{ created: number; updated: number }>;
   now?: () => Date;
+}
+
+export interface SingleFlightStart<T> {
+  started: boolean;
+  completion: Promise<T>;
+}
+
+export function createSingleFlightTask<T>() {
+  let active: Promise<T> | null = null;
+
+  return {
+    start(task: () => Promise<T>): SingleFlightStart<T> {
+      if (active) return { started: false, completion: active };
+      const completion = Promise.resolve().then(task);
+      active = completion;
+      const clear = () => {
+        if (active === completion) active = null;
+      };
+      void completion.then(clear, clear);
+      return { started: true, completion };
+    },
+    isRunning(): boolean {
+      return active !== null;
+    },
+  };
 }
 
 export function defaultEbayPublicSyncStatus(): EbayPublicSyncStatus {
@@ -66,6 +93,37 @@ export function parseEbayPublicSyncStatus(value: string | null | undefined): Eba
   }
 }
 
+export function recoverStaleEbayPublicSyncStatus(
+  status: EbayPublicSyncStatus,
+  options: {
+    hasActiveTask: boolean;
+    now?: Date;
+    leaseMs?: number;
+  },
+): EbayPublicSyncStatus {
+  if (status.state !== "running" || options.hasActiveTask) return status;
+
+  const now = options.now ?? new Date();
+  const leaseMs = options.leaseMs ?? EBAY_PUBLIC_SYNC_RUNNING_LEASE_MS;
+  const startedAtMs = status.lastAttemptStartedAt
+    ? Date.parse(status.lastAttemptStartedAt)
+    : Number.NaN;
+  const leaseExpired =
+    !Number.isFinite(startedAtMs) ||
+    now.getTime() - startedAtMs >= leaseMs;
+
+  if (!leaseExpired) return status;
+
+  return {
+    ...status,
+    state: "failed",
+    lastAttemptCompletedAt: now.toISOString(),
+    lastAttemptErrorCount: Math.max(1, status.lastAttemptErrorCount),
+    message: "The previous eBay public refresh was interrupted or the server restarted. Its running lease expired; the last known-good snapshot was preserved and a new refresh can now be started.",
+    preserveLastKnownGood: true,
+  };
+}
+
 function uniqueDealsByUrl(deals: InsertDeal[]): InsertDeal[] {
   const byUrl = new Map<string, InsertDeal>();
   for (const deal of deals) {
@@ -94,6 +152,12 @@ function failedStatus(
   };
 }
 
+function isRateLimitedFailure(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { code?: unknown; upstreamStatus?: unknown };
+  return candidate.code === "rate_limited" || candidate.upstreamStatus === 429;
+}
+
 export async function runEbayPublicSnapshotSync(
   dependencies: EbayPublicSnapshotDependencies,
 ): Promise<EbayPublicSyncResult> {
@@ -116,14 +180,16 @@ export async function runEbayPublicSnapshotSync(
   let collection: EbayPublicCollection;
   try {
     collection = await dependencies.collect();
-  } catch {
+  } catch (error) {
     await dependencies.saveStatus(failedStatus(
       previous,
       startedAt,
       now().toISOString(),
       0,
       1,
-      "eBay public Browse retrieval failed. The last known-good snapshot was preserved.",
+      isRateLimitedFailure(error)
+        ? "eBay Browse quota is exhausted. No further requests were attempted; the last known-good snapshot was preserved."
+        : "eBay public Browse retrieval failed. The last known-good snapshot was preserved.",
     ));
     return { created: 0, updated: 0, errors: 1 };
   }
@@ -136,8 +202,10 @@ export async function runEbayPublicSnapshotSync(
     collection.requestsSucceeded !== collection.requestsAttempted;
 
   if (incomplete || candidates.length === 0) {
-    const reason = collection.stopped
-      ? "eBay public Browse retrieval was interrupted. The last known-good snapshot was preserved."
+    const reason = collection.failureKind === "rate_limited"
+      ? "eBay Browse quota is exhausted. No further requests were attempted; the last known-good snapshot was preserved."
+      : collection.stopped
+        ? "eBay public Browse retrieval was interrupted. The last known-good snapshot was preserved."
       : candidates.length === 0
         ? "eBay public Browse retrieval returned zero publishable items. The last known-good snapshot was preserved."
         : "eBay public Browse retrieval was incomplete. The last known-good snapshot was preserved.";

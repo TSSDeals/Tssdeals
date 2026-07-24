@@ -32,7 +32,7 @@ test("Browse 429 respects Retry-After and retries only once", async () => {
   const data = await fetchEbayBrowseJson<{ total: number }>(URL, {
     token: "token",
     operation: "public deal search",
-    purpose: "public_feed",
+    purpose: "other",
     budget: createEbayBrowseBudget("test public feed", 2),
     maxRetries: 1,
     fetchImpl,
@@ -46,6 +46,73 @@ test("Browse 429 respects Retry-After and retries only once", async () => {
   assert.equal(data.total, 1);
   assert.equal(calls, 2);
   assert.deepEqual(sleeps, [2_000]);
+});
+
+test("public feed Browse 429 never retries even when a retry was requested", async () => {
+  resetEbayBrowseClientForTests();
+  let calls = 0;
+  const sleeps: number[] = [];
+
+  await assert.rejects(
+    fetchEbayBrowseJson(URL, {
+      token: "token",
+      operation: "public deal search",
+      purpose: "public_feed",
+      maxRetries: 1,
+      fetchImpl: async () => {
+        calls++;
+        return new Response(JSON.stringify({
+          errors: [{
+            errorId: 2001,
+            domain: "ACCESS",
+            category: "REQUEST",
+            message: "Too many requests.",
+          }],
+        }), {
+          status: 429,
+          headers: { "Retry-After": "30" },
+        });
+      },
+      sleep: async (ms) => { sleeps.push(ms); },
+    }),
+    (error: unknown) =>
+      error instanceof EbayIntegrationError &&
+      error.code === "rate_limited" &&
+      error.upstreamStatus === 429,
+  );
+
+  assert.equal(calls, 1);
+  assert.deepEqual(sleeps, []);
+});
+
+test("a known rate-limit window short-circuits the next public call without sleeping", async () => {
+  resetEbayBrowseClientForTests();
+  let calls = 0;
+  const sleeps: number[] = [];
+  const fetchImpl: typeof fetch = async () => {
+    calls++;
+    return new Response(JSON.stringify({ errors: [{ errorId: 2001 }] }), {
+      status: 429,
+      headers: { "Retry-After": "30" },
+    });
+  };
+
+  await assert.rejects(fetchEbayBrowseJson(URL, {
+    token: "token",
+    operation: "public deal search",
+    purpose: "public_feed",
+    fetchImpl,
+  }));
+  await assert.rejects(fetchEbayBrowseJson(`${URL}&offset=200`, {
+    token: "token",
+    operation: "public deal search",
+    purpose: "public_feed",
+    fetchImpl,
+    sleep: async (ms) => { sleeps.push(ms); },
+  }));
+
+  assert.equal(calls, 1);
+  assert.deepEqual(sleeps, []);
 });
 
 test("repeated Browse 429 stops after the bounded retry", async () => {
@@ -63,8 +130,8 @@ test("repeated Browse 429 stops after the bounded retry", async () => {
   await assert.rejects(
     fetchEbayBrowseJson(URL, {
       token: "token",
-      operation: "public deal search",
-      purpose: "public_feed",
+      operation: "generic Browse search",
+      purpose: "other",
       maxRetries: 1,
       fetchImpl,
       now: () => nowMs,
@@ -86,8 +153,8 @@ test("Retry-After beyond the safe window fails without an early retry", async ()
   await assert.rejects(
     fetchEbayBrowseJson(URL, {
       token: "token",
-      operation: "public deal search",
-      purpose: "public_feed",
+      operation: "generic Browse search",
+      purpose: "other",
       maxRetries: 1,
       maxRetryDelayMs: 60_000,
       fetchImpl: async () => {

@@ -744,6 +744,24 @@ export default function AdminPage() {
     setEbayLog([]);
     setEbayStats(null);
     try {
+      const targetedSync =
+        Boolean(ebaySportId && ebaySportId !== "all") ||
+        Boolean(ebayKeywords.trim()) ||
+        ebayCondition !== "all" ||
+        Boolean(ebaySellerFilter && ebaySellerFilter !== "all") ||
+        ebayMaxResults !== "50";
+
+      if (!targetedSync) {
+        const res = await apiRequest("POST", "/api/ebay/public-sync", {});
+        const data = await res.json();
+        toast({
+          title: data.started ? "eBay refresh started" : "eBay refresh already running",
+          description: data.message,
+        });
+        await syncStatus.refetch();
+        return;
+      }
+
       const body: any = {};
       if (ebayMaxResults !== "all") body.maxResults = parseInt(ebayMaxResults);
       if (ebaySportId && ebaySportId !== "all") body.sportId = ebaySportId;
@@ -1165,6 +1183,7 @@ export default function AdminPage() {
   });
   const syncRunning = syncStatus.data?.running ?? false;
   const ebaySnapshot = syncStatus.data?.ebayPublicSnapshot;
+  const ebayPublicSyncing = ebaySyncing || ebaySnapshot?.state === "running";
 
   const schedule = useMemo(() => meta.data?.scheduled?.times?.join(" · ") ?? "—", [meta.data]);
 
@@ -3345,14 +3364,14 @@ export default function AdminPage() {
                 </div>
                 <Button
                   onClick={onEbaySync}
-                  disabled={ebaySyncing}
+                  disabled={ebayPublicSyncing}
                   className="w-full ring-focus rounded-xl"
                   data-testid="ebay-sync-button"
                 >
-                  {ebaySyncing ? (
+                  {ebayPublicSyncing ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Searching eBay...
+                      Refreshing public eBay feed...
                     </>
                   ) : (
                     <>
@@ -3361,6 +3380,24 @@ export default function AdminPage() {
                     </>
                   )}
                 </Button>
+                {ebaySnapshot && (
+                  <div
+                    className={cn(
+                      "rounded-lg border px-3 py-2 text-xs",
+                      ebaySnapshot.state === "failed"
+                        ? "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300"
+                        : "border-border bg-background/60 text-muted-foreground",
+                    )}
+                    data-testid="ebay-sync-snapshot-status"
+                  >
+                    {ebaySnapshot.message ?? "No public eBay snapshot status is available."}
+                    {ebaySnapshot.preserveLastKnownGood && (
+                      <span className="mt-1 block font-medium">
+                        Customer search is still using the last known-good snapshot.
+                      </span>
+                    )}
+                  </div>
+                )}
 
                 <Button
                   onClick={handleEbayDealItemsSync}

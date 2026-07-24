@@ -1,9 +1,44 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
+const HTML_RESPONSE_PATTERN = /<(?:!doctype|html|head|body)\b/i;
+
+export async function readSafeErrorMessage(res: Response): Promise<string> {
+  const contentType = res.headers.get("content-type")?.toLowerCase() ?? "";
+  const fallback = res.statusText || "Request failed";
+
+  if (contentType.includes("application/json")) {
+    try {
+      const body = await res.clone().json() as { message?: unknown; error?: unknown };
+      const candidate = typeof body.message === "string"
+        ? body.message
+        : typeof body.error === "string"
+          ? body.error
+          : null;
+      if (candidate?.trim()) return candidate.trim().slice(0, 300);
+    } catch {
+      // Fall through to the bounded text/proxy-safe handling below.
+    }
+  }
+
+  const text = (await res.text()).replace(/\s+/g, " ").trim();
+  if (
+    res.status === 524 ||
+    res.status === 502 ||
+    res.status === 503 ||
+    res.status === 504 ||
+    HTML_RESPONSE_PATTERN.test(text)
+  ) {
+    return "The server could not complete the request in time. The operation may still be running; check its status before trying again.";
+  }
+  if (res.status === 429) {
+    return "The service is temporarily rate-limited. No additional requests were attempted; try again later.";
+  }
+  return (text || fallback).slice(0, 300);
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
-    const text = (await res.text()) || res.statusText;
-    throw new Error(`${res.status}: ${text}`);
+    throw new Error(await readSafeErrorMessage(res));
   }
 }
 
