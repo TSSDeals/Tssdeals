@@ -18,6 +18,7 @@ import {
   SHOPPER_MEMORABILIA_GLOVE_PATTERN,
   SHOPPER_MEMORABILIA_JERSEY_PATTERN,
   SHOPPER_MEMORABILIA_PHOTO_PATTERN,
+  SHOPPER_MEMORABILIA_SIGNED_CARD_FORM_PATTERN,
   SHOPPER_MEMORABILIA_SIGNED_PATTERN,
   SHOPPER_MEMORABILIA_SPORT_ID,
   expandEquipmentTypeIds,
@@ -390,16 +391,47 @@ export class DatabaseStorage implements IStorage {
       cardMemorabilia,
       displayMemorabilia,
     )!;
+    const signedBallForm = dsql`${memorabiliaContext} ~* ${SHOPPER_MEMORABILIA_BALL_PATTERN}`;
+    const signedBatForm = dsql`${memorabiliaContext} ~* ${SHOPPER_MEMORABILIA_BAT_PATTERN}`;
+    const signedCardForm = dsql`${memorabiliaContext} ~* ${SHOPPER_MEMORABILIA_SIGNED_CARD_FORM_PATTERN}`;
+    const signedGloveForm = dsql`${memorabiliaContext} ~* ${SHOPPER_MEMORABILIA_GLOVE_PATTERN}`;
+    const signedJerseyForm = dsql`${memorabiliaContext} ~* ${SHOPPER_MEMORABILIA_JERSEY_PATTERN}`;
+    const signedPhotoForm = dsql`${memorabiliaContext} ~* ${SHOPPER_MEMORABILIA_PHOTO_PATTERN}`;
+    // These predicates intentionally mirror shopperMemorabiliaEquipmentId's
+    // precedence and are mutually exclusive. "Baseball" alone is a ball form,
+    // but never wins over a named card, bat, glove, jersey, or photo.
     const signedForms: Record<string, any> = {
       "memorabilia-signed-balls": and(
-        dsql`${memorabiliaContext} ~* ${SHOPPER_MEMORABILIA_BALL_PATTERN}`,
-        not(cardMemorabilia),
+        signedBallForm,
+        not(signedCardForm),
+        not(signedBatForm),
+        not(signedGloveForm),
+        not(signedJerseyForm),
+        not(signedPhotoForm),
       ),
-      "memorabilia-signed-bats": dsql`${memorabiliaContext} ~* ${SHOPPER_MEMORABILIA_BAT_PATTERN}`,
-      "memorabilia-signed-gloves": dsql`${memorabiliaContext} ~* ${SHOPPER_MEMORABILIA_GLOVE_PATTERN}`,
-      "memorabilia-signed-jerseys": dsql`${memorabiliaContext} ~* ${SHOPPER_MEMORABILIA_JERSEY_PATTERN}`,
-      "memorabilia-signed-photos": dsql`${memorabiliaContext} ~* ${SHOPPER_MEMORABILIA_PHOTO_PATTERN}`,
-      "memorabilia-signed-cards": dsql`${memorabiliaContext} ~* ${SHOPPER_MEMORABILIA_CARD_PATTERN}`,
+      "memorabilia-signed-bats": and(
+        signedBatForm,
+        not(signedCardForm),
+      ),
+      "memorabilia-signed-gloves": and(
+        signedGloveForm,
+        not(signedCardForm),
+        not(signedBatForm),
+      ),
+      "memorabilia-signed-jerseys": and(
+        signedJerseyForm,
+        not(signedCardForm),
+        not(signedBatForm),
+        not(signedGloveForm),
+      ),
+      "memorabilia-signed-photos": and(
+        signedPhotoForm,
+        not(signedCardForm),
+        not(signedBatForm),
+        not(signedGloveForm),
+        not(signedJerseyForm),
+      ),
+      "memorabilia-signed-cards": signedCardForm,
       "memorabilia-signed-other": dsql`${memorabiliaContext} !~* ${SHOPPER_MEMORABILIA_ANY_SIGNED_FORM_PATTERN}`,
     };
     let memorabiliaEquipmentCondition: any = null;

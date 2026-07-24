@@ -128,12 +128,14 @@ test("Memorabilia menu adapts Signed nesting into concise flat paths", () => {
 });
 
 test("signed baseball, bat, and A2000 glove project into Memorabilia instead of playable equipment", () => {
-  const signedBall = { title: "Aaron Judge Autographed Official MLB Baseball with PSA/DNA COA", sportId: "baseball", equipmentTypeId: "bb-balls" };
-  const signedBat = { title: "Shohei Ohtani Hand-Signed Louisville Slugger Bat", sportId: "baseball", equipmentTypeId: "bb-bats" };
-  const signedGlove = { title: "Wilson A2000 Glove signed by Mookie Betts - JSA authenticated", sportId: "baseball", equipmentTypeId: "bb-gloves" };
+  const signedBall = { title: "Aaron Judge Signed Baseball", sportId: "baseball", equipmentTypeId: "bb-balls" };
+  const signedBat = { title: "Shohei Ohtani Signed Baseball Bat", sportId: "baseball", equipmentTypeId: "bb-bats" };
+  const signedGlove = { title: "Mookie Betts Signed Baseball Glove", sportId: "baseball", equipmentTypeId: "bb-gloves" };
+  const signedCard = { title: "Aaron Judge Signed Baseball Card", sportId: "baseball", equipmentTypeId: "other" };
   assert.equal(shopperMemorabiliaEquipmentId(signedBall), "memorabilia-signed-balls");
   assert.equal(shopperMemorabiliaEquipmentId(signedBat), "memorabilia-signed-bats");
   assert.equal(shopperMemorabiliaEquipmentId(signedGlove), "memorabilia-signed-gloves");
+  assert.equal(shopperMemorabiliaEquipmentId(signedCard), "memorabilia-signed-cards");
   assert.equal(shopperResultEquipmentTypeId(signedGlove), "memorabilia-signed-gloves");
 });
 

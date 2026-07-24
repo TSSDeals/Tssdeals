@@ -68,6 +68,7 @@ export const SHOPPER_MEMORABILIA_GAME_USED_PATTERN =
   String.raw`\b(?:game[ -]?(?:used|worn|issued)|team[ -]issued)\b`;
 export const SHOPPER_MEMORABILIA_CARD_PATTERN =
   String.raw`\b(?:trading|baseball|sports?)\s+cards?\b|\b(?:topps|panini|upper\s+deck|bowman)\b.{0,28}\bcards?\b`;
+export const SHOPPER_MEMORABILIA_SIGNED_CARD_FORM_PATTERN = String.raw`\bcards?\b`;
 export const SHOPPER_MEMORABILIA_DISPLAY_PATTERN =
   String.raw`\b(?:display|shadow)\s+(?:case|stand|mount|box)|\bwall\s+mount\b`;
 export const SHOPPER_MEMORABILIA_BALL_PATTERN = String.raw`\b(?:baseballs?|baseball\s+balls?|balls?)\b`;
@@ -146,12 +147,14 @@ export function shopperMemorabiliaEquipmentId(deal: ShopperDealLike): ShopperMem
   const text = memorabiliaEvidenceText(deal);
   const signed = testPattern(SHOPPER_MEMORABILIA_SIGNED_PATTERN, text);
   if (signed) {
-    if (testPattern(SHOPPER_MEMORABILIA_CARD_PATTERN, text) || /\bcards?\b/i.test(text)) return "memorabilia-signed-cards";
-    if (testPattern(SHOPPER_MEMORABILIA_BALL_PATTERN, text)) return "memorabilia-signed-balls";
+    // Specific product forms must win before the broad "baseball" ball form.
+    // Keep this order aligned with the mutually exclusive SQL signedForms map.
+    if (testPattern(SHOPPER_MEMORABILIA_SIGNED_CARD_FORM_PATTERN, text)) return "memorabilia-signed-cards";
     if (testPattern(SHOPPER_MEMORABILIA_BAT_PATTERN, text)) return "memorabilia-signed-bats";
     if (testPattern(SHOPPER_MEMORABILIA_GLOVE_PATTERN, text)) return "memorabilia-signed-gloves";
     if (testPattern(SHOPPER_MEMORABILIA_JERSEY_PATTERN, text)) return "memorabilia-signed-jerseys";
     if (testPattern(SHOPPER_MEMORABILIA_PHOTO_PATTERN, text)) return "memorabilia-signed-photos";
+    if (testPattern(SHOPPER_MEMORABILIA_BALL_PATTERN, text)) return "memorabilia-signed-balls";
     return "memorabilia-signed-other";
   }
   if (testPattern(SHOPPER_MEMORABILIA_GAME_USED_PATTERN, text)) return "memorabilia-game-used";
