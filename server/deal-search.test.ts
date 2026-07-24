@@ -4,6 +4,7 @@ import {
   batSizeMatchSpecificity,
   hasBaseballGloveEvidence,
   hasStrongBaseballGloveSearchIntent,
+  matchesBaseballGloveThrowHand,
   matchesGloveSize,
   matchesDealClassificationFilters,
   matchesNormalizedDealSearch,
@@ -134,6 +135,85 @@ test("baseball evidence does not bypass a different explicit equipment filter", 
 test("short aliases are boundary matched", () => {
   const unrelated = { title: "Wilson Supra-style Bat Drop -10", brand: "Wilson", dropWeight: 10 };
   assert.equal(matchesNormalizedDealSearch(normalizeDealSearch("LS Supra -10"), unrelated), false);
+});
+
+const a1000LeftHanded: SearchableDeal = {
+  title: "2026 Wilson A1000 1786 11.5in Baseball Glove - Left Hand Throw",
+  brand: "Wilson",
+  sportId: "baseball",
+  equipmentTypeId: "bb-gloves",
+};
+const a1000RightHanded: SearchableDeal = {
+  title: "Wilson A1000 1786 11.5 Baseball Glove RHT",
+  brand: "Wilson",
+  sportId: "baseball",
+  equipmentTypeId: "bb-gloves",
+};
+
+test("Wilson A1000 baseline remains hand-neutral", () => {
+  const search = normalizeDealSearch("Wilson A1000");
+  assert.equal(matchesNormalizedDealSearch(search, a1000LeftHanded), true);
+  assert.equal(matchesNormalizedDealSearch(search, a1000RightHanded), true);
+  assert.equal(search.rankQuery, "wilson a1000");
+});
+
+for (const query of ["Lefty Wilson A1000", "Left Hand Throw Wilson A1000", "LHT Wilson A1000"]) {
+  test(`${query} finds equivalent left-hand-throw baseball gloves`, () => {
+    const search = normalizeDealSearch(query);
+    assert.equal(search.rankQuery, "wilson a1000");
+    assert.equal(matchesNormalizedDealSearch(search, a1000LeftHanded), true);
+    assert.equal(matchesNormalizedDealSearch(search, {
+      ...a1000LeftHanded,
+      title: "Wilson A1000 1786 Baseball Glove LHT",
+    }), true);
+    assert.equal(matchesNormalizedDealSearch(search, a1000RightHanded), false);
+  });
+}
+
+for (const query of ["Right Hand Throw Wilson A1000", "RHT Wilson A1000", "RH Throw Wilson A1000"]) {
+  test(`${query} finds equivalent right-hand-throw baseball gloves`, () => {
+    const search = normalizeDealSearch(query);
+    assert.equal(search.rankQuery, "wilson a1000");
+    assert.equal(matchesNormalizedDealSearch(search, a1000RightHanded), true);
+    assert.equal(matchesNormalizedDealSearch(search, {
+      ...a1000RightHanded,
+      title: "Wilson A1000 1786 Baseball Glove Right Hand Thrower",
+    }), true);
+    assert.equal(matchesNormalizedDealSearch(search, a1000LeftHanded), false);
+  });
+}
+
+test("explicit contradictory glove-hand evidence is rejected", () => {
+  const contradictory = {
+    ...a1000LeftHanded,
+    title: "Wilson A1000 Baseball Glove LHT / RHT",
+  };
+  assert.equal(matchesBaseballGloveThrowHand(contradictory, "left"), false);
+  assert.equal(matchesBaseballGloveThrowHand(contradictory, "right"), false);
+});
+
+test("throw-hand aliases do not broaden non-glove searches", () => {
+  const leftyHelmet = {
+    title: "Manhurst Baseball Batting Helmet Lefty Batter",
+    sportId: "baseball",
+    equipmentTypeId: "bb-protective",
+  };
+  const hockeyStick = {
+    title: "LHT Senior Hockey Stick",
+    sportId: "hockey",
+    equipmentTypeId: "hockey-sticks",
+  };
+  assert.equal(matchesNormalizedDealSearch(normalizeDealSearch("Lefty"), leftyHelmet), false);
+  assert.equal(matchesNormalizedDealSearch(normalizeDealSearch("LHT"), hockeyStick), false);
+});
+
+test("ordinary left and right words remain literal text rather than throw-hand filters", () => {
+  const leftField = normalizeDealSearch("left field Wilson A1000");
+  const rightField = normalizeDealSearch("right field Wilson A1000");
+  assert.equal(leftField.concepts.some((concept) => concept.kind === "glove-hand"), false);
+  assert.equal(rightField.concepts.some((concept) => concept.kind === "glove-hand"), false);
+  assert.equal(leftField.rankQuery, "left field wilson a1000");
+  assert.equal(rightField.rankQuery, "right field wilson a1000");
 });
 
 const gloveQuery = "Wilson A2000 1786 11.5";

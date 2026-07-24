@@ -5,7 +5,10 @@ export type DealSearchConcept =
   | { kind: "alias"; canonical: string; values: string[] }
   | { kind: "bat-size"; length: number; weight: number; drop: number }
   | { kind: "glove-size"; size: string }
+  | { kind: "glove-hand"; hand: GloveThrowHand }
   | { kind: "drop"; drop: number };
+
+export type GloveThrowHand = "left" | "right";
 
 export interface NormalizedDealSearch {
   concepts: DealSearchConcept[];
@@ -44,6 +47,21 @@ const BAT_SIZE_RES = [
 ];
 const DROP_RE = /\bdrop\s*-?\s*(\d{1,2})\b|(?:^|\s)-\s*(\d{1,2})\b/i;
 const GLOVE_SIZE_QUERY_RE = /(?:^|\s)(\d{1,2}\.\d{1,2})[\s-]*(?:["″]|in(?:ch(?:es)?)?\.?)?(?=\s|$)/i;
+const GLOVE_HAND_QUERY_RES: Array<{ hand: GloveThrowHand; pattern: RegExp }> = [
+  {
+    hand: "left",
+    pattern: /(?:^|[^a-z0-9])(?:lht|lh[\s-]*throw(?:er|ing)?|lefty|left[\s-]*hand(?:ed)?[\s-]*throw(?:er|ing)?)(?=[^a-z0-9]|$)/i,
+  },
+  {
+    hand: "right",
+    pattern: /(?:^|[^a-z0-9])(?:rht|rh[\s-]*throw(?:er|ing)?|right[\s-]*hand(?:ed)?[\s-]*throw(?:er|ing)?)(?=[^a-z0-9]|$)/i,
+  },
+];
+
+export const BASEBALL_GLOVE_THROW_HAND_PATTERNS: Record<GloveThrowHand, string> = {
+  left: "(^|[^a-z0-9])(lht|lh[\\s-]*throw(?:er|ing)?|lefty|left[\\s-]*hand(?:ed)?[\\s-]*throw(?:er|ing)?)([^a-z0-9]|$)",
+  right: "(^|[^a-z0-9])(rht|rh[\\s-]*throw(?:er|ing)?|right[\\s-]*hand(?:ed)?[\\s-]*throw(?:er|ing)?)([^a-z0-9]|$)",
+};
 
 export const BASEBALL_BAT_EVIDENCE_PATTERN =
   "(^|[^a-z0-9])(bbcor|usssa|usa\\s+baseball|baseball\\s+bat|youth\\s+(?:baseball\\s+)?bat|tee[ -]?ball\\s+bat|cat\\s*x|hype[ -]?fire|(?:louisville(?:\\s+slugger)?|ls)\\s+supra|supra\\s+(?:louisville(?:\\s+slugger)?|ls))([^a-z0-9]|$)";
@@ -86,6 +104,13 @@ export function normalizeDealSearch(query: string): NormalizedDealSearch {
   let remaining = query.toLowerCase();
   const concepts: DealSearchConcept[] = [];
 
+  for (const { hand, pattern } of GLOVE_HAND_QUERY_RES) {
+    const match = remaining.match(pattern);
+    if (!match) continue;
+    concepts.push({ kind: "glove-hand", hand });
+    remaining = remaining.replace(match[0], " ");
+  }
+
   const size = BAT_SIZE_RES.map((pattern) => remaining.match(pattern)).find(Boolean);
   if (size) {
     const length = Number(size[1]);
@@ -123,6 +148,7 @@ export function normalizeDealSearch(query: string): NormalizedDealSearch {
       if (concept.kind === "alias") return concept.canonical.split(" ");
       if (concept.kind === "bat-size") return [`${concept.length}`, `${concept.weight}`];
       if (concept.kind === "glove-size") return [concept.size];
+      if (concept.kind === "glove-hand") return [];
       return [`drop ${concept.drop}`];
     })
     .join(" ");
@@ -136,6 +162,7 @@ export function matchesNormalizedDealSearch(search: NormalizedDealSearch, deal: 
     if (concept.kind === "text") return haystack.includes(concept.value);
     if (concept.kind === "alias") return new RegExp(searchAliasPattern(concept.values), "i").test(haystack);
     if (concept.kind === "glove-size") return matchesGloveSize(deal, concept.size);
+    if (concept.kind === "glove-hand") return matchesBaseballGloveThrowHand(deal, concept.hand);
     const dropMatch = deal.dropWeight === concept.drop || new RegExp(`(^|[^a-z0-9])(?:drop\\s*-?\\s*|-)${concept.drop}([^a-z0-9]|$)`, "i").test(haystack);
     if (concept.kind === "drop") return dropMatch;
     const sizeMatch = new RegExp(
@@ -144,6 +171,19 @@ export function matchesNormalizedDealSearch(search: NormalizedDealSearch, deal: 
     ).test(haystack);
     return sizeMatch || dropMatch;
   });
+}
+
+export function matchesBaseballGloveThrowHand(
+  deal: SearchableDeal,
+  requested: GloveThrowHand,
+): boolean {
+  const storedBaseballGlove =
+    deal.sportId === "baseball" && isBaseballGloveGroupId(deal.equipmentTypeId ?? "");
+  if (!storedBaseballGlove && !hasBaseballGloveEvidence(deal)) return false;
+
+  const opposite: GloveThrowHand = requested === "left" ? "right" : "left";
+  return new RegExp(BASEBALL_GLOVE_THROW_HAND_PATTERNS[requested], "i").test(deal.title)
+    && !new RegExp(BASEBALL_GLOVE_THROW_HAND_PATTERNS[opposite], "i").test(deal.title);
 }
 
 export function normalizeGloveSize(value: string | null | undefined): string | null {

@@ -93,6 +93,12 @@ export function parseEbayPublicSyncStatus(value: string | null | undefined): Eba
   }
 }
 
+export function preservedEbayInventoryDescription(status: EbayPublicSyncStatus): string {
+  return status.lastSuccessfulAt
+    ? "The last recorded successful eBay snapshot was preserved."
+    : "Existing eBay inventory was preserved; no successful eBay snapshot has been recorded.";
+}
+
 export function recoverStaleEbayPublicSyncStatus(
   status: EbayPublicSyncStatus,
   options: {
@@ -119,7 +125,7 @@ export function recoverStaleEbayPublicSyncStatus(
     state: "failed",
     lastAttemptCompletedAt: now.toISOString(),
     lastAttemptErrorCount: Math.max(1, status.lastAttemptErrorCount),
-    message: "The previous eBay public refresh was interrupted or the server restarted. Its running lease expired; the last known-good snapshot was preserved and a new refresh can now be started.",
+    message: `The previous eBay public refresh was interrupted or the server restarted. Its running lease expired. ${preservedEbayInventoryDescription(status)} A new refresh can now be started.`,
     preserveLastKnownGood: true,
   };
 }
@@ -188,8 +194,8 @@ export async function runEbayPublicSnapshotSync(
       0,
       1,
       isRateLimitedFailure(error)
-        ? "eBay Browse quota is exhausted. No further requests were attempted; the last known-good snapshot was preserved."
-        : "eBay public Browse retrieval failed. The last known-good snapshot was preserved.",
+        ? `eBay Browse quota is exhausted. No further requests were attempted. ${preservedEbayInventoryDescription(previous)}`
+        : `eBay public Browse retrieval failed. ${preservedEbayInventoryDescription(previous)}`,
     ));
     return { created: 0, updated: 0, errors: 1 };
   }
@@ -203,12 +209,12 @@ export async function runEbayPublicSnapshotSync(
 
   if (incomplete || candidates.length === 0) {
     const reason = collection.failureKind === "rate_limited"
-      ? "eBay Browse quota is exhausted. No further requests were attempted; the last known-good snapshot was preserved."
+      ? `eBay Browse quota is exhausted. No further requests were attempted. ${preservedEbayInventoryDescription(previous)}`
       : collection.stopped
-        ? "eBay public Browse retrieval was interrupted. The last known-good snapshot was preserved."
+        ? `eBay public Browse retrieval was interrupted. ${preservedEbayInventoryDescription(previous)}`
       : candidates.length === 0
-        ? "eBay public Browse retrieval returned zero publishable items. The last known-good snapshot was preserved."
-        : "eBay public Browse retrieval was incomplete. The last known-good snapshot was preserved.";
+        ? `eBay public Browse retrieval returned zero publishable items. ${preservedEbayInventoryDescription(previous)}`
+        : `eBay public Browse retrieval was incomplete. ${preservedEbayInventoryDescription(previous)}`;
     await dependencies.saveStatus(failedStatus(
       previous,
       startedAt,
@@ -242,7 +248,7 @@ export async function runEbayPublicSnapshotSync(
       now().toISOString(),
       candidates.length,
       1,
-      "eBay public snapshot publishing failed. The previously published snapshot remains authoritative.",
+      `eBay public snapshot publishing failed. ${preservedEbayInventoryDescription(previous)}`,
     ));
     return { created: 0, updated: 0, errors: 1 };
   }

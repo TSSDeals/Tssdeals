@@ -6,6 +6,7 @@ import {
   createSingleFlightTask,
   defaultEbayPublicSyncStatus,
   isCustomerMarketplaceDealVisible,
+  preservedEbayInventoryDescription,
   recoverStaleEbayPublicSyncStatus,
   runEbayPublicSnapshotSync,
   type EbayPublicSyncStatus,
@@ -34,6 +35,23 @@ function previousSuccess(): EbayPublicSyncStatus {
     lastAttemptCompletedAt: "2026-07-22T12:00:00.000Z",
   };
 }
+
+test("snapshot preservation wording distinguishes recorded success from legacy inventory", () => {
+  assert.match(preservedEbayInventoryDescription(previousSuccess()), /last recorded successful/i);
+  assert.match(
+    preservedEbayInventoryDescription({
+      ...defaultEbayPublicSyncStatus(),
+      preserveLastKnownGood: true,
+    }),
+    /existing eBay inventory was preserved; no successful eBay snapshot has been recorded/i,
+  );
+
+  const adminSource = readFileSync(
+    new URL("../client/src/pages/Admin.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(adminSource, /ebaySnapshot\.lastSuccessfulAt[\s\S]{0,300}Existing eBay inventory remains visible, but no successful public eBay snapshot has been recorded/);
+});
 
 test("partial Browse retrieval does not publish and preserves the last successful snapshot", async () => {
   const saved: EbayPublicSyncStatus[] = [];
