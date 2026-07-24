@@ -13,6 +13,8 @@ const BASEBALL_BAT_GROUP = new Set<string>(BASEBALL_BAT_GROUP_IDS);
 const BASEBALL_GLOVE_GROUP = new Set<string>(BASEBALL_GLOVE_GROUP_IDS);
 
 export const SHOPPER_MEMORABILIA_SPORT_ID = "memorabilia";
+export const LEGACY_SHOPPER_MEMORABILIA_SPORT_IDS = ["baseball-memorabilia"] as const;
+const LEGACY_SHOPPER_MEMORABILIA_SPORT_ID_SET = new Set<string>(LEGACY_SHOPPER_MEMORABILIA_SPORT_IDS);
 export const SHOPPER_BASEBALL_CATCHERS_GEAR_ID = "shopper-bb-catchers-gear";
 export const SHOPPER_BASEBALL_BATTING_HELMETS_ID = "shopper-bb-batting-helmets";
 export const SHOPPER_BASEBALL_APPAREL_ID = "shopper-bb-apparel";
@@ -106,6 +108,20 @@ export interface ShopperDealLike {
   equipmentTypeId?: string | null;
 }
 
+export function isLegacyShopperMemorabiliaSportId(id: string | null | undefined): boolean {
+  return !!id && LEGACY_SHOPPER_MEMORABILIA_SPORT_ID_SET.has(id);
+}
+
+export function isShopperMemorabiliaSportId(id: string | null | undefined): boolean {
+  return id === SHOPPER_MEMORABILIA_SPORT_ID || isLegacyShopperMemorabiliaSportId(id);
+}
+
+export function normalizeShopperSportId<T extends string | null | undefined>(
+  id: T,
+): T | typeof SHOPPER_MEMORABILIA_SPORT_ID {
+  return isLegacyShopperMemorabiliaSportId(id) ? SHOPPER_MEMORABILIA_SPORT_ID : id;
+}
+
 export function isBaseballBatGroupId(id: string | null | undefined): boolean {
   return !!id && BASEBALL_BAT_GROUP.has(id);
 }
@@ -137,7 +153,8 @@ function memorabiliaEvidenceText(deal: ShopperDealLike): string {
 
 export function isShopperMemorabiliaDeal(deal: ShopperDealLike): boolean {
   const text = memorabiliaEvidenceText(deal);
-  return testPattern(SHOPPER_MEMORABILIA_EVIDENCE_PATTERN, text)
+  return isShopperMemorabiliaSportId(deal.sportId)
+    || testPattern(SHOPPER_MEMORABILIA_EVIDENCE_PATTERN, text)
     || testPattern(SHOPPER_MEMORABILIA_GAME_USED_PATTERN, text)
     || testPattern(SHOPPER_MEMORABILIA_CARD_PATTERN, text)
     || testPattern(SHOPPER_MEMORABILIA_DISPLAY_PATTERN, text);
@@ -187,9 +204,10 @@ export function canonicalEquipmentTypeLabel(equipmentTypeId: string, fallback: s
 }
 
 export function expandEquipmentTypeIds(sportId: string | undefined, ids: string[]): string[] {
-  if (sportId === SHOPPER_MEMORABILIA_SPORT_ID) return [];
+  const normalizedSportId = normalizeShopperSportId(sportId);
+  if (normalizedSportId === SHOPPER_MEMORABILIA_SPORT_ID) return [];
   const shopperExpanded = ids.flatMap((id) => SHOPPER_BASEBALL_BY_ID.get(id) ?? [id]);
-  if (sportId !== "baseball") return Array.from(new Set(shopperExpanded));
+  if (normalizedSportId !== "baseball") return Array.from(new Set(shopperExpanded));
   return Array.from(new Set(shopperExpanded.flatMap((id) => {
     const shopperBackingIds = SHOPPER_BASEBALL_BY_ID.get(id);
     if (shopperBackingIds) return shopperBackingIds;
@@ -200,22 +218,31 @@ export function expandEquipmentTypeIds(sportId: string | undefined, ids: string[
 }
 
 export function curateShopperSports<T extends SportLike>(sports: T[]): Array<T | SportLike> {
-  if (sports.some(({ id }) => id === SHOPPER_MEMORABILIA_SPORT_ID)) return sports;
-  return [...sports, { id: SHOPPER_MEMORABILIA_SPORT_ID, name: "Memorabilia", virtual: true }];
+  const withoutStoredMemorabiliaAliases = sports.filter(({ id, name }) => {
+    const normalizedName = name.trim().toLowerCase();
+    return !isShopperMemorabiliaSportId(id)
+      && normalizedName !== "baseball memorabilia"
+      && normalizedName !== "memorabilia";
+  });
+  return [
+    ...withoutStoredMemorabiliaAliases,
+    { id: SHOPPER_MEMORABILIA_SPORT_ID, name: "Memorabilia", virtual: true },
+  ];
 }
 
 /** Curates only the shopper-facing list; admin/audit reads retain every raw taxonomy row. */
 export function curateShopperEquipmentTypes<T extends EquipmentTypeLike>(types: T[], sportId?: string): T[] {
-  if (!sportId) return [];
-  if (sportId === SHOPPER_MEMORABILIA_SPORT_ID) {
+  const normalizedSportId = normalizeShopperSportId(sportId);
+  if (!normalizedSportId) return [];
+  if (normalizedSportId === SHOPPER_MEMORABILIA_SPORT_ID) {
     return SHOPPER_MEMORABILIA_EQUIPMENT.map(({ id, name }) => ({
       id,
       name,
-      sportId,
+      sportId: normalizedSportId,
       virtual: true,
     })) as unknown as T[];
   }
-  if (sportId !== "baseball") return types;
+  if (normalizedSportId !== "baseball") return types;
 
   const fallback = types[0] ?? { id: "", name: "", sportId: "baseball" };
   return SHOPPER_BASEBALL_EQUIPMENT.map(({ id, name, backingIds }) => {

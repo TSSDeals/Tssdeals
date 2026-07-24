@@ -1,6 +1,7 @@
 import { eq, and, asc, desc, gte, ilike, inArray, isNull, isNotNull, not, or, sql as dsql } from "drizzle-orm";
 import { normalizeBrand } from "./brand-normalizer";
 import {
+  LEGACY_SHOPPER_MEMORABILIA_SPORT_IDS,
   SHOPPER_BASEBALL_APPAREL_ID,
   SHOPPER_BASEBALL_APPAREL_PATTERN,
   SHOPPER_BASEBALL_BATTING_HELMETS_ID,
@@ -20,10 +21,10 @@ import {
   SHOPPER_MEMORABILIA_PHOTO_PATTERN,
   SHOPPER_MEMORABILIA_SIGNED_CARD_FORM_PATTERN,
   SHOPPER_MEMORABILIA_SIGNED_PATTERN,
-  SHOPPER_MEMORABILIA_SPORT_ID,
   expandEquipmentTypeIds,
   isBaseballBatGroupId,
   isBaseballGloveGroupId,
+  isShopperMemorabiliaSportId,
 } from "../shared/equipment-groups";
 import {
   collectValidDealSubFilterCandidates,
@@ -385,12 +386,14 @@ export class DatabaseStorage implements IStorage {
     const gameUsedMemorabilia = dsql`${memorabiliaContext} ~* ${SHOPPER_MEMORABILIA_GAME_USED_PATTERN}`;
     const cardMemorabilia = dsql`${memorabiliaContext} ~* ${SHOPPER_MEMORABILIA_CARD_PATTERN}`;
     const displayMemorabilia = dsql`${memorabiliaContext} ~* ${SHOPPER_MEMORABILIA_DISPLAY_PATTERN}`;
-    const memorabiliaEvidence = or(
+    const legacyStoredMemorabilia = inArray(deals.sportId, [...LEGACY_SHOPPER_MEMORABILIA_SPORT_IDS]);
+    const memorabiliaTitleEvidence = or(
       dsql`${memorabiliaContext} ~* ${SHOPPER_MEMORABILIA_EVIDENCE_PATTERN}`,
       gameUsedMemorabilia,
       cardMemorabilia,
       displayMemorabilia,
     )!;
+    const shopperMemorabilia = or(memorabiliaTitleEvidence, legacyStoredMemorabilia)!;
     const signedBallForm = dsql`${memorabiliaContext} ~* ${SHOPPER_MEMORABILIA_BALL_PATTERN}`;
     const signedBatForm = dsql`${memorabiliaContext} ~* ${SHOPPER_MEMORABILIA_BAT_PATTERN}`;
     const signedCardForm = dsql`${memorabiliaContext} ~* ${SHOPPER_MEMORABILIA_SIGNED_CARD_FORM_PATTERN}`;
@@ -453,7 +456,7 @@ export class DatabaseStorage implements IStorage {
       );
     } else if (requestedShopperEquipmentId === "memorabilia-other-collectibles") {
       memorabiliaEquipmentCondition = and(
-        memorabiliaEvidence,
+        shopperMemorabilia,
         not(signedMemorabilia),
         not(gameUsedMemorabilia),
         not(cardMemorabilia),
@@ -593,8 +596,8 @@ export class DatabaseStorage implements IStorage {
       ? and(eq(deals.sourceId, params.source), isNull(deals.equipmentTypeId))
       : null;
 
-    if (params.sportId === SHOPPER_MEMORABILIA_SPORT_ID) {
-      whereParts.push(memorabiliaEvidence);
+    if (isShopperMemorabiliaSportId(params.sportId)) {
+      whereParts.push(shopperMemorabilia);
       if (memorabiliaEquipmentCondition) whereParts.push(memorabiliaEquipmentCondition);
     } else if (params.sportId) {
       const conditions: any[] = [eq(deals.sportId, params.sportId), amzNoSport];
@@ -603,7 +606,7 @@ export class DatabaseStorage implements IStorage {
       whereParts.push(or(...conditions));
       // Strong collectible evidence takes precedence over stored playable
       // Baseball IDs. This is a read-time safeguard and never mutates a row.
-      if (params.sportId === "baseball") whereParts.push(not(memorabiliaEvidence));
+      if (params.sportId === "baseball") whereParts.push(not(shopperMemorabilia));
     }
 
     if (requestedEquipmentIds.length > 0) {

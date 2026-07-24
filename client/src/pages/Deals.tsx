@@ -32,10 +32,12 @@ import {
   BASEBALL_BAT_GROUP_IDS,
   CANONICAL_BASEBALL_BAT_ID,
   CANONICAL_BASEBALL_GLOVE_ID,
+  SHOPPER_MEMORABILIA_SPORT_ID,
   canonicalEquipmentTypeLabel,
   curateShopperEquipmentTypes,
   curateShopperSports,
   isVirtualShopperEquipmentId,
+  normalizeShopperSportId,
   shopperResultEquipmentTypeId,
 } from "@shared/equipment-groups";
 
@@ -215,7 +217,7 @@ export default function DealsPage() {
     const updates: Partial<FilterState> = {};
     if (p.condition && p.condition !== "all") updates.condition = p.condition;
     if (p.minPercentOff != null) updates.minPercentOff = Number(p.minPercentOff);
-    if (p.sportId) updates.sportId = p.sportId;
+    if (p.sportId) updates.sportId = normalizeShopperSportId(p.sportId);
     if (Object.keys(updates).length > 0) {
       setPending((prev) => ({ ...prev, ...updates }));
       setApplied((prev) => ({ ...prev, ...updates }));
@@ -481,7 +483,7 @@ export default function DealsPage() {
             type="button"
             onClick={() => {
               const updates = {
-                sportId: "memorabilia",
+                sportId: SHOPPER_MEMORABILIA_SPORT_ID,
                 equipmentTypeId: "all",
                 subFilterId: "all",
                 brand: "all",

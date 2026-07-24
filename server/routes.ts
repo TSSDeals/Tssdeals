@@ -39,6 +39,13 @@ import { registerSmsAuthRoutes } from "./sms-auth";
 import { registerTeamStatsRoutes } from "./team-stats";
 import { registerInvoiceRoutes } from "./invoices";
 import { projectDealSearchClassification } from "./deal-search";
+import {
+  LEGACY_SHOPPER_MEMORABILIA_SPORT_IDS,
+  SHOPPER_MEMORABILIA_EQUIPMENT,
+  SHOPPER_MEMORABILIA_SPORT_ID,
+  curateShopperSports,
+  normalizeShopperSportId,
+} from "../shared/equipment-groups";
 
 const SCHEDULED_TIMES_ET = ["08:00", "12:00", "16:00", "20:00"];
 const FEATURED_RULES = {
@@ -206,9 +213,11 @@ export async function registerRoutes(
       storage.listEquipmentTypes(),
       storage.listBrands({}),
     ]);
-    const usedSlugs = new Set<string>();
+    // Legacy shopper aliases resolve to the unified sport route and must not
+    // reappear later as a category or brand browse entry.
+    const usedSlugs = new Set<string>(LEGACY_SHOPPER_MEMORABILIA_SPORT_IDS);
     const slugs: { slug: string; type: string; name: string }[] = [];
-    for (const s of allSports) {
+    for (const s of curateShopperSports(allSports)) {
       const sl = toSlug(s.name);
       usedSlugs.add(sl);
       slugs.push({ slug: sl, type: "sport", name: s.name });
@@ -244,11 +253,50 @@ export async function registerRoutes(
 
   app.get("/api/seo/page/:slug", async (req, res) => {
     try {
-      const slug = req.params.slug;
+      const slug = normalizeShopperSportId(req.params.slug);
       const [allSports, allEquipTypes] = await Promise.all([
         storage.listSports(),
         storage.listEquipmentTypes(),
       ]);
+
+      if (slug === SHOPPER_MEMORABILIA_SPORT_ID) {
+        const sportDeals = await storage.listDeals({
+          sportId: SHOPPER_MEMORABILIA_SPORT_ID,
+          minPercentOff: 40,
+          limit: 50,
+        });
+        return res.json({
+          type: "sport",
+          name: "Memorabilia",
+          id: SHOPPER_MEMORABILIA_SPORT_ID,
+          slug: SHOPPER_MEMORABILIA_SPORT_ID,
+          deals: sportDeals,
+          categories: SHOPPER_MEMORABILIA_EQUIPMENT.map(({ id, name }) => ({
+            id,
+            name,
+            slug: id,
+          })),
+        });
+      }
+
+      const memorabiliaEquipment = SHOPPER_MEMORABILIA_EQUIPMENT.find(({ id }) => id === slug);
+      if (memorabiliaEquipment) {
+        const equipmentDeals = await storage.listDeals({
+          sportId: SHOPPER_MEMORABILIA_SPORT_ID,
+          equipmentTypeId: memorabiliaEquipment.id,
+          minPercentOff: 40,
+          limit: 50,
+        });
+        return res.json({
+          type: "category",
+          name: memorabiliaEquipment.name,
+          id: memorabiliaEquipment.id,
+          slug: memorabiliaEquipment.id,
+          sportName: "Memorabilia",
+          sportSlug: SHOPPER_MEMORABILIA_SPORT_ID,
+          deals: equipmentDeals,
+        });
+      }
 
       const sportMatch = allSports.find((s) => toSlug(s.name) === slug);
       if (sportMatch) {
