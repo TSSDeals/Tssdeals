@@ -16,6 +16,7 @@ import {
   BASEBALL_GLOVE_KNOWN_MODEL_PATTERN,
   BASEBALL_GLOVE_NEGATIVE_EVIDENCE_PATTERN,
   BASEBALL_GLOVE_STRUCTURED_CONTEXT_PATTERN,
+  BASEBALL_GLOVE_THROW_HAND_PATTERNS,
   gloveSizeTitlePattern,
   hasStrongBaseballGloveSearchIntent,
   normalizeDealSearch,
@@ -336,6 +337,11 @@ export class DatabaseStorage implements IStorage {
     const whereParts: any[] = [];
     const amzBypass = eq(deals.sourceId, "amazon-manual");
     const normalizedSearch = params.q?.trim() ? normalizeDealSearch(params.q) : null;
+    const requestedEquipmentIds = expandEquipmentTypeIds(params.sportId, params.equipmentTypeIds?.length
+      ? params.equipmentTypeIds
+      : (params.equipmentTypeId ? [params.equipmentTypeId] : []));
+    const baseballGloveGroupRequest =
+      params.sportId === "baseball" && requestedEquipmentIds.some(isBaseballGloveGroupId);
 
     if (normalizedSearch?.concepts.length) {
       const conceptConditions = normalizedSearch.concepts.map((concept) => {
@@ -355,6 +361,18 @@ export class DatabaseStorage implements IStorage {
           return or(
             dsql`${deals.title} ~* ${sizePattern}`,
             dsql`TRIM(REGEXP_REPLACE(COALESCE(${deals.sizeNumber}, ''), '[^0-9.]', '', 'g')) = ${concept.size}`,
+          )!;
+        }
+        if (concept.kind === "glove-hand") {
+          if (!baseballGloveGroupRequest) return dsql`FALSE`;
+          const opposite = concept.hand === "left" ? "right" : "left";
+          return and(
+            dsql`${deals.title} ~* ${BASEBALL_GLOVE_THROW_HAND_PATTERNS[concept.hand]}`,
+            dsql`${deals.title} !~* ${BASEBALL_GLOVE_THROW_HAND_PATTERNS[opposite]}`,
+            or(
+              inArray(deals.equipmentTypeId, requestedEquipmentIds),
+              dsql`(COALESCE(${deals.title}, '') || ' ' || COALESCE(${deals.brand}, '')) ~* ${BASEBALL_GLOVE_EVIDENCE_PATTERN}`,
+            ),
           )!;
         }
         const dropPattern = `(^|[^a-z0-9])(drop\\s*-?\\s*|-)${concept.drop}([^a-z0-9]|$)`;
@@ -390,9 +408,6 @@ export class DatabaseStorage implements IStorage {
     // (null sport/equipment). If they ARE tagged, they must match the selected filter.
     const amzNoSport = and(amzBypass, isNull(deals.sportId));
     const amzNoEquip = and(amzBypass, isNull(deals.equipmentTypeId));
-    const requestedEquipmentIds = expandEquipmentTypeIds(params.sportId, params.equipmentTypeIds?.length
-      ? params.equipmentTypeIds
-      : (params.equipmentTypeId ? [params.equipmentTypeId] : []));
     const baseballBatEvidence = params.sportId === "baseball" && requestedEquipmentIds.some(isBaseballBatGroupId)
       ? and(
           dsql`(COALESCE(${deals.title}, '') || ' ' || COALESCE(${deals.brand}, '') || ' ' || COALESCE(${deals.raw}::text, '')) ~* ${BASEBALL_BAT_EVIDENCE_PATTERN}`,
@@ -401,7 +416,6 @@ export class DatabaseStorage implements IStorage {
           dsql`(${deals.equipmentTypeId} IS NULL OR (${deals.equipmentTypeId} NOT LIKE 'fp-%' AND ${deals.equipmentTypeId} NOT LIKE 'sp-%'))`,
         )
       : null;
-    const baseballGloveGroupRequest = requestedEquipmentIds.some(isBaseballGloveGroupId);
     const baseballGloveSportSearchRecovery = params.sportId === "baseball"
       && requestedEquipmentIds.length === 0
       && hasStrongBaseballGloveSearchIntent(params.q);

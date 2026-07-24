@@ -1429,7 +1429,9 @@ export default function AdminPage() {
               </div>
               {ebaySnapshot?.preserveLastKnownGood && (
                 <div className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-400">
-                  Customer search is using the last known-good eBay snapshot; this failed attempt did not replace or deactivate it.
+                  {ebaySnapshot.lastSuccessfulAt
+                    ? "Customer search is using the last recorded successful eBay snapshot; this failed attempt did not replace or deactivate it."
+                    : "Existing eBay inventory remains visible, but no successful public eBay snapshot has been recorded."}
                 </div>
               )}
             </div>
@@ -3393,7 +3395,9 @@ export default function AdminPage() {
                     {ebaySnapshot.message ?? "No public eBay snapshot status is available."}
                     {ebaySnapshot.preserveLastKnownGood && (
                       <span className="mt-1 block font-medium">
-                        Customer search is still using the last known-good snapshot.
+                        {ebaySnapshot.lastSuccessfulAt
+                          ? "Customer search is still using the last recorded successful eBay snapshot."
+                          : "Existing eBay inventory remains visible, but no successful public eBay snapshot has been recorded."}
                       </span>
                     )}
                   </div>
