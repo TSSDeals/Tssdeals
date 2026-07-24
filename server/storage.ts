@@ -1,6 +1,30 @@
 import { eq, and, asc, desc, gte, ilike, inArray, isNull, isNotNull, not, or, sql as dsql } from "drizzle-orm";
 import { normalizeBrand } from "./brand-normalizer";
-import { expandEquipmentTypeIds, isBaseballBatGroupId, isBaseballGloveGroupId } from "../shared/equipment-groups";
+import {
+  SHOPPER_BASEBALL_APPAREL_ID,
+  SHOPPER_BASEBALL_APPAREL_PATTERN,
+  SHOPPER_BASEBALL_BATTING_HELMETS_ID,
+  SHOPPER_BASEBALL_BATTING_HELMET_PATTERN,
+  SHOPPER_BASEBALL_CATCHERS_GEAR_ID,
+  SHOPPER_BASEBALL_CATCHERS_GEAR_PATTERN,
+  SHOPPER_MEMORABILIA_ANY_SIGNED_FORM_PATTERN,
+  SHOPPER_MEMORABILIA_BALL_PATTERN,
+  SHOPPER_MEMORABILIA_BAT_PATTERN,
+  SHOPPER_MEMORABILIA_BRANDING_EXCEPTION_PATTERN,
+  SHOPPER_MEMORABILIA_CARD_PATTERN,
+  SHOPPER_MEMORABILIA_DISPLAY_PATTERN,
+  SHOPPER_MEMORABILIA_EVIDENCE_PATTERN,
+  SHOPPER_MEMORABILIA_GAME_USED_PATTERN,
+  SHOPPER_MEMORABILIA_GLOVE_PATTERN,
+  SHOPPER_MEMORABILIA_JERSEY_PATTERN,
+  SHOPPER_MEMORABILIA_PHOTO_PATTERN,
+  SHOPPER_MEMORABILIA_SIGNED_CARD_FORM_PATTERN,
+  SHOPPER_MEMORABILIA_SIGNED_PATTERN,
+  SHOPPER_MEMORABILIA_SPORT_ID,
+  expandEquipmentTypeIds,
+  isBaseballBatGroupId,
+  isBaseballGloveGroupId,
+} from "../shared/equipment-groups";
 import {
   collectValidDealSubFilterCandidates,
   validPrimarySubFilterId,
@@ -337,11 +361,105 @@ export class DatabaseStorage implements IStorage {
     const whereParts: any[] = [];
     const amzBypass = eq(deals.sourceId, "amazon-manual");
     const normalizedSearch = params.q?.trim() ? normalizeDealSearch(params.q) : null;
-    const requestedEquipmentIds = expandEquipmentTypeIds(params.sportId, params.equipmentTypeIds?.length
+    const requestedShopperEquipmentIds = params.equipmentTypeIds?.length
       ? params.equipmentTypeIds
-      : (params.equipmentTypeId ? [params.equipmentTypeId] : []));
+      : (params.equipmentTypeId ? [params.equipmentTypeId] : []);
+    const requestedShopperEquipmentId = requestedShopperEquipmentIds.length === 1
+      ? requestedShopperEquipmentIds[0]
+      : undefined;
+    const requestedEquipmentIds = expandEquipmentTypeIds(params.sportId, requestedShopperEquipmentIds);
     const baseballGloveGroupRequest =
       params.sportId === "baseball" && requestedEquipmentIds.some(isBaseballGloveGroupId);
+
+    // Memorabilia is a shopper-only projection over existing rows. Strip known
+    // product-line branding before testing title/brand evidence so
+    // "Signature Series" and "Autograph Model" remain playable equipment.
+    const memorabiliaContext = dsql`REGEXP_REPLACE(
+      COALESCE(${deals.title}, '') || ' ' ||
+      COALESCE(${deals.brand}, ''),
+      ${SHOPPER_MEMORABILIA_BRANDING_EXCEPTION_PATTERN},
+      ' ',
+      'gi'
+    )`;
+    const signedMemorabilia = dsql`${memorabiliaContext} ~* ${SHOPPER_MEMORABILIA_SIGNED_PATTERN}`;
+    const gameUsedMemorabilia = dsql`${memorabiliaContext} ~* ${SHOPPER_MEMORABILIA_GAME_USED_PATTERN}`;
+    const cardMemorabilia = dsql`${memorabiliaContext} ~* ${SHOPPER_MEMORABILIA_CARD_PATTERN}`;
+    const displayMemorabilia = dsql`${memorabiliaContext} ~* ${SHOPPER_MEMORABILIA_DISPLAY_PATTERN}`;
+    const memorabiliaEvidence = or(
+      dsql`${memorabiliaContext} ~* ${SHOPPER_MEMORABILIA_EVIDENCE_PATTERN}`,
+      gameUsedMemorabilia,
+      cardMemorabilia,
+      displayMemorabilia,
+    )!;
+    const signedBallForm = dsql`${memorabiliaContext} ~* ${SHOPPER_MEMORABILIA_BALL_PATTERN}`;
+    const signedBatForm = dsql`${memorabiliaContext} ~* ${SHOPPER_MEMORABILIA_BAT_PATTERN}`;
+    const signedCardForm = dsql`${memorabiliaContext} ~* ${SHOPPER_MEMORABILIA_SIGNED_CARD_FORM_PATTERN}`;
+    const signedGloveForm = dsql`${memorabiliaContext} ~* ${SHOPPER_MEMORABILIA_GLOVE_PATTERN}`;
+    const signedJerseyForm = dsql`${memorabiliaContext} ~* ${SHOPPER_MEMORABILIA_JERSEY_PATTERN}`;
+    const signedPhotoForm = dsql`${memorabiliaContext} ~* ${SHOPPER_MEMORABILIA_PHOTO_PATTERN}`;
+    // These predicates intentionally mirror shopperMemorabiliaEquipmentId's
+    // precedence and are mutually exclusive. "Baseball" alone is a ball form,
+    // but never wins over a named card, bat, glove, jersey, or photo.
+    const signedForms: Record<string, any> = {
+      "memorabilia-signed-balls": and(
+        signedBallForm,
+        not(signedCardForm),
+        not(signedBatForm),
+        not(signedGloveForm),
+        not(signedJerseyForm),
+        not(signedPhotoForm),
+      ),
+      "memorabilia-signed-bats": and(
+        signedBatForm,
+        not(signedCardForm),
+      ),
+      "memorabilia-signed-gloves": and(
+        signedGloveForm,
+        not(signedCardForm),
+        not(signedBatForm),
+      ),
+      "memorabilia-signed-jerseys": and(
+        signedJerseyForm,
+        not(signedCardForm),
+        not(signedBatForm),
+        not(signedGloveForm),
+      ),
+      "memorabilia-signed-photos": and(
+        signedPhotoForm,
+        not(signedCardForm),
+        not(signedBatForm),
+        not(signedGloveForm),
+        not(signedJerseyForm),
+      ),
+      "memorabilia-signed-cards": signedCardForm,
+      "memorabilia-signed-other": dsql`${memorabiliaContext} !~* ${SHOPPER_MEMORABILIA_ANY_SIGNED_FORM_PATTERN}`,
+    };
+    let memorabiliaEquipmentCondition: any = null;
+    if (requestedShopperEquipmentId?.startsWith("memorabilia-signed-")) {
+      memorabiliaEquipmentCondition = and(
+        signedMemorabilia,
+        signedForms[requestedShopperEquipmentId] ?? dsql`FALSE`,
+      );
+    } else if (requestedShopperEquipmentId === "memorabilia-game-used") {
+      memorabiliaEquipmentCondition = and(gameUsedMemorabilia, not(signedMemorabilia));
+    } else if (requestedShopperEquipmentId === "memorabilia-trading-cards") {
+      memorabiliaEquipmentCondition = and(cardMemorabilia, not(signedMemorabilia), not(gameUsedMemorabilia));
+    } else if (requestedShopperEquipmentId === "memorabilia-display-cases") {
+      memorabiliaEquipmentCondition = and(
+        displayMemorabilia,
+        not(signedMemorabilia),
+        not(gameUsedMemorabilia),
+        not(cardMemorabilia),
+      );
+    } else if (requestedShopperEquipmentId === "memorabilia-other-collectibles") {
+      memorabiliaEquipmentCondition = and(
+        memorabiliaEvidence,
+        not(signedMemorabilia),
+        not(gameUsedMemorabilia),
+        not(cardMemorabilia),
+        not(displayMemorabilia),
+      );
+    }
 
     if (normalizedSearch?.concepts.length) {
       const conceptConditions = normalizedSearch.concepts.map((concept) => {
@@ -475,11 +593,17 @@ export class DatabaseStorage implements IStorage {
       ? and(eq(deals.sourceId, params.source), isNull(deals.equipmentTypeId))
       : null;
 
-    if (params.sportId) {
+    if (params.sportId === SHOPPER_MEMORABILIA_SPORT_ID) {
+      whereParts.push(memorabiliaEvidence);
+      if (memorabiliaEquipmentCondition) whereParts.push(memorabiliaEquipmentCondition);
+    } else if (params.sportId) {
       const conditions: any[] = [eq(deals.sportId, params.sportId), amzNoSport];
       if (baseballBatEvidence) conditions.push(baseballBatEvidence);
       if (baseballGloveEvidence) conditions.push(baseballGloveEvidence);
       whereParts.push(or(...conditions));
+      // Strong collectible evidence takes precedence over stored playable
+      // Baseball IDs. This is a read-time safeguard and never mutates a row.
+      if (params.sportId === "baseball") whereParts.push(not(memorabiliaEvidence));
     }
 
     if (requestedEquipmentIds.length > 0) {
@@ -488,6 +612,16 @@ export class DatabaseStorage implements IStorage {
       if (baseballBatEvidence) conditions.push(baseballBatEvidence);
       if (baseballGloveEvidence) conditions.push(baseballGloveEvidence);
       whereParts.push(or(...conditions));
+    }
+
+    if (params.sportId === "baseball" && requestedShopperEquipmentId === SHOPPER_BASEBALL_CATCHERS_GEAR_ID) {
+      whereParts.push(dsql`${deals.title} ~* ${SHOPPER_BASEBALL_CATCHERS_GEAR_PATTERN}`);
+    }
+    if (params.sportId === "baseball" && requestedShopperEquipmentId === SHOPPER_BASEBALL_BATTING_HELMETS_ID) {
+      whereParts.push(dsql`${deals.title} ~* ${SHOPPER_BASEBALL_BATTING_HELMET_PATTERN}`);
+    }
+    if (params.sportId === "baseball" && requestedShopperEquipmentId === SHOPPER_BASEBALL_APPAREL_ID) {
+      whereParts.push(dsql`${deals.title} ~* ${SHOPPER_BASEBALL_APPAREL_PATTERN}`);
     }
 
     if (params.sportId === "baseball" && baseballGloveGroupRequest) {

@@ -28,7 +28,16 @@ import { Link } from "wouter";
 import { RetailerBanner } from "@/components/RetailerBanner";
 import { BrandStoreStrip } from "@/components/BrandStoreStrip";
 import { DealCarousel } from "@/components/DealCarousel";
-import { BASEBALL_BAT_GROUP_IDS, CANONICAL_BASEBALL_BAT_ID, CANONICAL_BASEBALL_GLOVE_ID, canonicalEquipmentTypeLabel, canonicalResultEquipmentTypeId, curateShopperEquipmentTypes } from "@shared/equipment-groups";
+import {
+  BASEBALL_BAT_GROUP_IDS,
+  CANONICAL_BASEBALL_BAT_ID,
+  CANONICAL_BASEBALL_GLOVE_ID,
+  canonicalEquipmentTypeLabel,
+  curateShopperEquipmentTypes,
+  curateShopperSports,
+  isVirtualShopperEquipmentId,
+  shopperResultEquipmentTypeId,
+} from "@shared/equipment-groups";
 
 type SortOption = "newest" | "oldest" | "price-low" | "price-high" | "discount-high" | "a-z" | "z-a";
 
@@ -95,6 +104,10 @@ export default function DealsPage() {
   const sports = useSports();
   const sources = useSources();
   const prefs = usePreferences();
+  const shopperSports = useMemo(
+    () => curateShopperSports((sports.data ?? []) as any[]),
+    [sports.data],
+  );
 
   const [pending, setPending] = useState<FilterState>(DEFAULT_FILTERS);
   const [applied, setApplied] = useState<FilterState>(DEFAULT_FILTERS);
@@ -121,7 +134,7 @@ export default function DealsPage() {
       }
 
       const matchedSport = data.sport
-        ? (sports.data ?? []).find((s: any) =>
+        ? shopperSports.find((s: any) =>
             s.id.toLowerCase().includes(data.sport.toLowerCase()) ||
             s.name.toLowerCase().includes(data.sport.toLowerCase())
           )
@@ -151,6 +164,7 @@ export default function DealsPage() {
 
   const activeEqTypeId = useMemo(() => {
     if (pending.sportId === "all" || pending.equipmentTypeId === "all") return undefined;
+    if (isVirtualShopperEquipmentId(pending.equipmentTypeId)) return undefined;
     return pending.equipmentTypeId;
   }, [pending.sportId, pending.equipmentTypeId]);
   const subFilters = useSubFilters(activeEqTypeId);
@@ -211,22 +225,8 @@ export default function DealsPage() {
 
   const groupedEqTypes = useMemo(() => {
     const fetched = (eqTypes.data ?? []) as any[];
-    const raw = pending.sportId === "all"
-      ? [
-          ...fetched.filter((type) => type.sportId !== "baseball"),
-          ...curateShopperEquipmentTypes(fetched.filter((type) => type.sportId === "baseball"), "baseball"),
-        ]
-      : fetched;
-    if (pending.sportId !== "all") return curateShopperEquipmentTypes(raw, pending.sportId);
-    const groups = new Map<string, { name: string; ids: string[] }>();
-    for (const t of raw) {
-      const name = String(t.name);
-      if (!groups.has(name)) {
-        groups.set(name, { name, ids: [] });
-      }
-      groups.get(name)!.ids.push(...((t as any).equivalentIds ?? [String(t.id)]));
-    }
-    return Array.from(groups.values()).sort((a, b) => a.name.localeCompare(b.name));
+    if (pending.sportId === "all") return [];
+    return curateShopperEquipmentTypes(fetched, pending.sportId);
   }, [eqTypes.data, pending.sportId]);
 
   const selectedEqTypeIds = useMemo(() => {
@@ -234,11 +234,8 @@ export default function DealsPage() {
     if (applied.sportId === "baseball" && applied.equipmentTypeId === CANONICAL_BASEBALL_BAT_ID) {
       return BASEBALL_BAT_GROUP_IDS.join(",");
     }
-    if (applied.sportId !== "all") return undefined;
-    const group = groupedEqTypes.find((g: any) => g.name === applied.equipmentTypeId);
-    if (group && (group as any).ids) return (group as any).ids.join(",");
     return undefined;
-  }, [applied.equipmentTypeId, applied.sportId, groupedEqTypes]);
+  }, [applied.equipmentTypeId, applied.sportId]);
 
   const brandsQueryParams = useMemo(() => {
     const params = new URLSearchParams();
@@ -354,9 +351,12 @@ export default function DealsPage() {
     for (const t of (eqTypes.data ?? []) as any[]) {
       m.set(t.id, t.name);
     }
+    for (const t of groupedEqTypes as any[]) {
+      m.set(t.id, t.name);
+    }
     m.set(CANONICAL_BASEBALL_GLOVE_ID, "Baseball Gloves");
     return m;
-  }, [eqTypes.data]);
+  }, [eqTypes.data, groupedEqTypes]);
 
   const aiSuggestionParams = useMemo(() => {
     const sport = applied.sportId !== "all" ? applied.sportId : "";
@@ -386,14 +386,18 @@ export default function DealsPage() {
     if (!restDeals.length) return [];
     const groups = new Map<string, { name: string; deals: any[] }>();
     for (const d of restDeals) {
-      const key = canonicalResultEquipmentTypeId(d.sportId, d.equipmentTypeId);
+      const selectedVirtualGroupId = applied.equipmentTypeId !== "all"
+        && isVirtualShopperEquipmentId(applied.equipmentTypeId)
+        ? applied.equipmentTypeId
+        : null;
+      const key = selectedVirtualGroupId ?? shopperResultEquipmentTypeId(d);
       if (!groups.has(key)) {
         groups.set(key, { name: canonicalEquipmentTypeLabel(key, eqTypeMap.get(key) ?? key), deals: [] });
       }
       groups.get(key)!.deals.push(d);
     }
     return Array.from(groups.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [restDeals, eqTypeMap]);
+  }, [restDeals, eqTypeMap, applied.equipmentTypeId]);
 
   const loading = (isDefaultView ? defaultFeed.isLoading : deals.isLoading) || twinSeamQuery.isLoading || sports.isLoading || sources.isLoading || meta.isLoading;
 
@@ -473,6 +477,24 @@ export default function DealsPage() {
               {sport.name}
             </Link>
           ))}
+          <button
+            type="button"
+            onClick={() => {
+              const updates = {
+                sportId: "memorabilia",
+                equipmentTypeId: "all",
+                subFilterId: "all",
+                brand: "all",
+                minPercentOff: 0,
+              };
+              setPending((current) => ({ ...current, ...updates }));
+              setApplied((current) => ({ ...current, ...updates }));
+            }}
+            className="rounded-lg border border-border bg-background/60 px-2.5 py-1 text-xs font-medium hover:bg-primary/5 hover:border-primary/30 transition-all"
+            data-testid="browse-sport-memorabilia"
+          >
+            Memorabilia
+          </button>
         </div>
       </div>
 
@@ -633,7 +655,7 @@ export default function DealsPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All sports</SelectItem>
-                    {(sports.data ?? []).map((s: any) => (
+                    {shopperSports.map((s: any) => (
                       <SelectItem key={s.id} value={s.id}>
                         {s.name}
                       </SelectItem>
@@ -644,23 +666,21 @@ export default function DealsPage() {
 
               <div className="grid gap-2">
                 <Label>Equipment type</Label>
-                <Select value={pending.equipmentTypeId} onValueChange={(v) => { setPending((p) => ({ ...p, equipmentTypeId: v, subFilterId: "all" })); }}>
+                <Select
+                  value={pending.equipmentTypeId}
+                  disabled={pending.sportId === "all"}
+                  onValueChange={(v) => { setPending((p) => ({ ...p, equipmentTypeId: v, subFilterId: "all" })); }}
+                >
                   <SelectTrigger className="ring-focus rounded-xl" data-testid="equipmentType">
                     <SelectValue placeholder="All equipment" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All equipment</SelectItem>
-                    {pending.sportId === "all"
-                      ? groupedEqTypes.map((g: any) => (
-                          <SelectItem key={g.name} value={g.name} data-testid={`eqtype-${g.name}`}>
-                            {g.name}
-                          </SelectItem>
-                        ))
-                      : groupedEqTypes.map((t: any) => (
-                          <SelectItem key={t.id} value={t.id} data-testid={`eqtype-${t.id}`}>
-                            {t.name}
-                          </SelectItem>
-                        ))}
+                    {groupedEqTypes.map((t: any) => (
+                      <SelectItem key={t.id} value={t.id} data-testid={`eqtype-${t.id}`}>
+                        {t.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
