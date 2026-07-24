@@ -40,6 +40,10 @@ import {
   normalizeShopperSportId,
   shopperResultEquipmentTypeId,
 } from "@shared/equipment-groups";
+import {
+  buildZeroResultRecovery,
+  type SearchRecoveryAction,
+} from "@shared/search-language";
 
 type SortOption = "newest" | "oldest" | "price-low" | "price-high" | "discount-high" | "a-z" | "z-a";
 
@@ -125,7 +129,7 @@ export default function DealsPage() {
       const formData = new FormData();
       formData.append("photo", file);
       const res = await fetch("/api/deals/search-by-photo", { method: "POST", body: formData });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw new Error("Photo search is temporarily unavailable. Please try again.");
       const data: { q: string; sport: string; brand: string; identified: string } = await res.json();
 
       setPhotoIdentified(data.identified || null);
@@ -347,6 +351,37 @@ export default function DealsPage() {
       !featuredIds.has(d.id) && !excludeSourceIds.has(d.sourceId)
     );
   }, [deals.data, featured, ourStoreId]);
+
+  const zeroResultRecovery = useMemo(
+    () => buildZeroResultRecovery(applied),
+    [applied],
+  );
+
+  const applyZeroResultRecovery = (action: SearchRecoveryAction) => {
+    if (action.kind === "query") {
+      setPending((current) => ({ ...current, q: action.query, minPercentOff: 0 }));
+      setApplied((current) => ({ ...current, q: action.query, minPercentOff: 0 }));
+      return;
+    }
+
+    const updates: Partial<FilterState> = {};
+    if (action.constraint === "sportId") {
+      updates.sportId = "all";
+      updates.equipmentTypeId = "all";
+      updates.subFilterId = "all";
+    } else if (action.constraint === "equipmentTypeId") {
+      updates.equipmentTypeId = "all";
+      updates.subFilterId = "all";
+    } else if (action.constraint === "subFilterId") updates.subFilterId = "all";
+    else if (action.constraint === "brand") updates.brand = "all";
+    else if (action.constraint === "source") updates.source = "all";
+    else if (action.constraint === "condition") updates.condition = "all";
+    else if (action.constraint === "minPercentOff") updates.minPercentOff = 0;
+    else if (action.constraint === "maxPrice") updates.maxPrice = 0;
+    else if (action.constraint === "priceDropOnly") updates.priceDropOnly = false;
+    setPending((current) => ({ ...current, ...updates }));
+    setApplied((current) => ({ ...current, ...updates }));
+  };
 
   const eqTypeMap = useMemo(() => {
     const m = new Map<string, string>();
@@ -1135,7 +1170,24 @@ export default function DealsPage() {
             <div className="rounded-2xl border border-dashed border-muted-foreground/25 bg-muted/20 px-6 py-8 text-center">
               <TicketX className="mx-auto mb-3 h-8 w-8 text-muted-foreground/50" />
               <div className="font-semibold text-base mb-1">No exact matches for these filters</div>
-              <div className="text-sm text-muted-foreground mb-4">Try loosening your filters, or see AI-suggested deals below.</div>
+              <div className="text-sm text-muted-foreground mb-4">
+                Try a normalized search or remove one constraint. These options rerun the search and never invent inventory.
+              </div>
+              {zeroResultRecovery.length > 0 && (
+                <div className="mb-4 flex flex-wrap justify-center gap-2" data-testid="zero-result-recovery">
+                  {zeroResultRecovery.map((action) => (
+                    <Button
+                      key={action.kind === "query" ? `query-${action.query}` : `constraint-${action.constraint}`}
+                      variant="outline"
+                      size="sm"
+                      onClick={() => applyZeroResultRecovery(action)}
+                      className="ring-focus rounded-xl"
+                    >
+                      {action.label}
+                    </Button>
+                  ))}
+                </div>
+              )}
               <Button
                 variant="secondary"
                 size="sm"

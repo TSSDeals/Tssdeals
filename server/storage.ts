@@ -1,6 +1,7 @@
 import { eq, and, asc, desc, gte, ilike, inArray, isNull, isNotNull, not, or, sql as dsql } from "drizzle-orm";
 import { normalizeBrand } from "./brand-normalizer";
 import {
+  BASEBALL_GLOVE_GROUP_IDS,
   LEGACY_SHOPPER_MEMORABILIA_SPORT_IDS,
   SHOPPER_BASEBALL_APPAREL_ID,
   SHOPPER_BASEBALL_APPAREL_PATTERN,
@@ -26,6 +27,7 @@ import {
   isBaseballGloveGroupId,
   isShopperMemorabiliaSportId,
 } from "../shared/equipment-groups";
+import { batSizeTitlePattern } from "../shared/search-language";
 import {
   collectValidDealSubFilterCandidates,
   validPrimarySubFilterId,
@@ -485,15 +487,18 @@ export class DatabaseStorage implements IStorage {
           )!;
         }
         if (concept.kind === "glove-hand") {
-          if (!baseballGloveGroupRequest) return dsql`FALSE`;
           const opposite = concept.hand === "left" ? "right" : "left";
           return and(
             dsql`${deals.title} ~* ${BASEBALL_GLOVE_THROW_HAND_PATTERNS[concept.hand]}`,
             dsql`${deals.title} !~* ${BASEBALL_GLOVE_THROW_HAND_PATTERNS[opposite]}`,
             or(
-              inArray(deals.equipmentTypeId, requestedEquipmentIds),
+              and(
+                eq(deals.sportId, "baseball"),
+                inArray(deals.equipmentTypeId, [...BASEBALL_GLOVE_GROUP_IDS]),
+              ),
               dsql`(COALESCE(${deals.title}, '') || ' ' || COALESCE(${deals.brand}, '')) ~* ${BASEBALL_GLOVE_EVIDENCE_PATTERN}`,
             ),
+            dsql`COALESCE(${deals.title}, '') !~* ${BASEBALL_GLOVE_NEGATIVE_EVIDENCE_PATTERN}`,
           )!;
         }
         const dropPattern = `(^|[^a-z0-9])(drop\\s*-?\\s*|-)${concept.drop}([^a-z0-9]|$)`;
@@ -503,7 +508,7 @@ export class DatabaseStorage implements IStorage {
           dsql`COALESCE(${deals.brand}, '') ~* ${dropPattern}`,
         )!;
         if (concept.kind === "drop") return dropCondition;
-        const sizePattern = `(^|[^0-9])${concept.length}\\s*(/|x|by)\\s*${concept.weight}([^0-9]|$)`;
+        const sizePattern = batSizeTitlePattern(concept.length, concept.weight);
         return or(dsql`${deals.title} ~* ${sizePattern}`, dropCondition)!;
       });
       whereParts.push(and(...conceptConditions));
@@ -811,9 +816,44 @@ export class DatabaseStorage implements IStorage {
     if (params.q) {
       const searchTerms = (normalizedSearch?.rankQuery || params.q).split(/\s+/).filter(Boolean);
       const qEsc = (normalizedSearch?.rankQuery || params.q.trim()).replace(/'/g, "''");
+      const qualityScoreParts = (normalizedSearch?.concepts ?? []).map((concept) => {
+        if (concept.kind === "text") {
+          const boundaryPattern = searchAliasPattern([concept.value]);
+          return dsql`CASE
+            WHEN ${deals.title} ~* ${boundaryPattern} OR COALESCE(${deals.brand}, '') ~* ${boundaryPattern} THEN 4
+            WHEN ${deals.title} ILIKE ${`%${concept.value}%`} OR COALESCE(${deals.brand}, '') ILIKE ${`%${concept.value}%`} THEN 1
+            ELSE 0 END`;
+        }
+        if (concept.kind === "alias") {
+          const pattern = searchAliasPattern(concept.values);
+          return dsql`CASE WHEN ${deals.title} ~* ${pattern} OR COALESCE(${deals.brand}, '') ~* ${pattern} THEN 10 ELSE 0 END`;
+        }
+        if (concept.kind === "glove-size") {
+          const pattern = gloveSizeTitlePattern(concept.size);
+          return dsql`CASE WHEN ${deals.title} ~* ${pattern}
+            OR TRIM(REGEXP_REPLACE(COALESCE(${deals.sizeNumber}, ''), '[^0-9.]', '', 'g')) = ${concept.size}
+            THEN 16 ELSE 0 END`;
+        }
+        if (concept.kind === "glove-hand") {
+          return dsql`CASE WHEN ${deals.title} ~* ${BASEBALL_GLOVE_THROW_HAND_PATTERNS[concept.hand]} THEN 24 ELSE 0 END`;
+        }
+        const dropPattern = `(^|[^a-z0-9])(drop\\s*-?\\s*|-)${concept.drop}([^a-z0-9]|$)`;
+        if (concept.kind === "drop") {
+          return dsql`CASE WHEN ${deals.dropWeight} = ${concept.drop} OR ${deals.title} ~* ${dropPattern} THEN 12 ELSE 0 END`;
+        }
+        const exactSizePattern = batSizeTitlePattern(concept.length, concept.weight);
+        return dsql`CASE
+          WHEN ${deals.title} ~* ${exactSizePattern} THEN 30
+          WHEN ${deals.dropWeight} = ${concept.drop} OR ${deals.title} ~* ${dropPattern} THEN 15
+          ELSE 0 END`;
+      });
+      const matchQuality = qualityScoreParts.length > 0
+        ? dsql`(${dsql.join(qualityScoreParts, dsql` + `)})`
+        : dsql`0`;
 
-      // When the user explicitly picks a non-default sort, respect it as the primary
-      // ordering. Relevance scoring only applies when using the default sort.
+      // When the user explicitly picks a non-default sort, use it inside the
+      // same semantic match tier. Exact model/size/hand evidence stays ahead
+      // of looser equivalents for every search sort.
       const hasExplicitSort = params.sortBy && params.sortBy !== "discount-high";
 
       if (hasExplicitSort) {
@@ -823,26 +863,26 @@ export class DatabaseStorage implements IStorage {
         );
         switch (params.sortBy) {
           case "price-low":
-            orderClause = [asc(deals.priceCents), desc(ftsRank), desc(deals.foundAt)];
+            orderClause = [desc(matchQuality), asc(deals.priceCents), desc(ftsRank), desc(deals.foundAt)];
             break;
           case "price-high":
-            orderClause = [desc(deals.priceCents), desc(ftsRank), desc(deals.foundAt)];
+            orderClause = [desc(matchQuality), desc(deals.priceCents), desc(ftsRank), desc(deals.foundAt)];
             break;
           case "oldest":
-            orderClause = [asc(deals.foundAt), desc(ftsRank)];
+            orderClause = [desc(matchQuality), asc(deals.foundAt), desc(ftsRank)];
             break;
           case "newest":
-            orderClause = [desc(deals.foundAt), desc(ftsRank)];
+            orderClause = [desc(matchQuality), desc(deals.foundAt), desc(ftsRank)];
             break;
           case "a-z":
-            orderClause = [asc(deals.title), desc(ftsRank)];
+            orderClause = [desc(matchQuality), asc(deals.title), desc(ftsRank)];
             break;
           case "z-a":
-            orderClause = [desc(deals.title), desc(ftsRank)];
+            orderClause = [desc(matchQuality), desc(deals.title), desc(ftsRank)];
             break;
           case "discount-high":
           default:
-            orderClause = [desc(deals.percentOff), desc(ftsRank), desc(deals.foundAt)];
+            orderClause = [desc(matchQuality), desc(deals.percentOff), desc(ftsRank), desc(deals.foundAt)];
         }
       } else {
         // Default: rank by relevance first
@@ -860,14 +900,14 @@ export class DatabaseStorage implements IStorage {
         // Tertiary: bonus for exact phrase match in title
         const phraseBonus = dsql.raw(`CASE WHEN title ILIKE '%${qEsc}%' THEN 1 ELSE 0 END`);
 
-        const batSize = normalizedSearch?.concepts.find((concept) => concept.kind === "bat-size");
-        const relevanceOrder = [desc(ftsRank), desc(matchCountExpr), desc(phraseBonus), desc(deals.percentOff), desc(deals.foundAt)];
-        orderClause = batSize && batSize.kind === "bat-size"
-          ? [
-              desc(dsql`CASE WHEN ${deals.title} ~* ${`(^|[^0-9])${batSize.length}\\s*(/|x|by)\\s*${batSize.weight}([^0-9]|$)`} THEN 1 ELSE 0 END`),
-              ...relevanceOrder,
-            ]
-          : relevanceOrder;
+        orderClause = [
+          desc(matchQuality),
+          desc(ftsRank),
+          desc(matchCountExpr),
+          desc(phraseBonus),
+          desc(deals.percentOff),
+          desc(deals.foundAt),
+        ];
       }
     } else {
       switch (params.sortBy) {

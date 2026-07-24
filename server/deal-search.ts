@@ -7,6 +7,10 @@ import {
   normalizeShopperSportId,
   shopperMemorabiliaEquipmentId,
 } from "../shared/equipment-groups";
+import {
+  batSizeTitlePattern,
+  extractBatSizeIntent,
+} from "../shared/search-language";
 
 export type DealSearchConcept =
   | { kind: "text"; value: string }
@@ -49,10 +53,6 @@ const ALIAS_GROUPS: AliasGroup[] = [
   { canonical: "hype fire", values: ["hypefire", "hype fire", "hype-fire"] },
 ];
 
-const BAT_SIZE_RES = [
-  /\b(\d{2})\s*(?:\/|x|by)\s*(\d{2})\b/i,
-  /\b(\d{2})\s*(?:inches?|inch|in|["″])\s*(?:\/|x|-|by)?\s*(\d{2})\s*(?:ounces?|ounce|oz)\b/i,
-];
 const DROP_RE = /\bdrop\s*-?\s*(\d{1,2})\b|(?:^|\s)-\s*(\d{1,2})\b/i;
 const GLOVE_SIZE_QUERY_RE = /(?:^|\s)(\d{1,2}\.\d{1,2})[\s-]*(?:["″]|in(?:ch(?:es)?)?\.?)?(?=\s|$)/i;
 const GLOVE_HAND_QUERY_RES: Array<{ hand: GloveThrowHand; pattern: RegExp }> = [
@@ -119,12 +119,15 @@ export function normalizeDealSearch(query: string): NormalizedDealSearch {
     remaining = remaining.replace(match[0], " ");
   }
 
-  const size = BAT_SIZE_RES.map((pattern) => remaining.match(pattern)).find(Boolean);
+  const size = extractBatSizeIntent(remaining);
   if (size) {
-    const length = Number(size[1]);
-    const weight = Number(size[2]);
-    concepts.push({ kind: "bat-size", length, weight, drop: Math.abs(length - weight) });
-    remaining = remaining.replace(size[0], " ");
+    concepts.push({
+      kind: "bat-size",
+      length: size.length,
+      weight: size.weight,
+      drop: size.drop,
+    });
+    remaining = `${remaining.slice(0, size.index)} ${remaining.slice(size.index + size.matched.length)}`;
   }
 
   const drop = remaining.match(DROP_RE);
@@ -173,10 +176,7 @@ export function matchesNormalizedDealSearch(search: NormalizedDealSearch, deal: 
     if (concept.kind === "glove-hand") return matchesBaseballGloveThrowHand(deal, concept.hand);
     const dropMatch = deal.dropWeight === concept.drop || new RegExp(`(^|[^a-z0-9])(?:drop\\s*-?\\s*|-)${concept.drop}([^a-z0-9]|$)`, "i").test(haystack);
     if (concept.kind === "drop") return dropMatch;
-    const sizeMatch = new RegExp(
-      `(^|[^0-9])${concept.length}\\s*(?:(?:/|x|by)\\s*${concept.weight}|(?:inches?|inch|in|["″])\\s*(?:/|x|-|by)?\\s*${concept.weight}\\s*(?:ounces?|ounce|oz))([^0-9]|$)`,
-      "i",
-    ).test(haystack);
+    const sizeMatch = new RegExp(batSizeTitlePattern(concept.length, concept.weight), "i").test(haystack);
     return sizeMatch || dropMatch;
   });
 }
@@ -271,14 +271,36 @@ export function batSizeMatchSpecificity(search: NormalizedDealSearch, deal: Sear
   const size = search.concepts.find((concept) => concept.kind === "bat-size");
   if (!size || size.kind !== "bat-size") return 0;
   const haystack = `${deal.title} ${deal.brand ?? ""}`;
-  const exact = new RegExp(
-    `(^|[^0-9])${size.length}\\s*(?:(?:/|x|by)\\s*${size.weight}|(?:inches?|inch|in|[\"″])\\s*(?:/|x|-|by)?\\s*${size.weight}\\s*(?:ounces?|ounce|oz))([^0-9]|$)`,
-    "i",
-  ).test(haystack);
+  const exact = new RegExp(batSizeTitlePattern(size.length, size.weight), "i").test(haystack);
   if (exact) return 2;
   const drop = deal.dropWeight === size.drop
     || new RegExp(`(^|[^a-z0-9])(?:drop\\s*-?\\s*|-)${size.drop}([^a-z0-9]|$)`, "i").test(haystack);
   return drop ? 1 : 0;
+}
+
+/** Shared ranking model: exact structured shopping evidence outranks loose text. */
+export function dealSearchMatchSpecificity(
+  search: NormalizedDealSearch,
+  deal: SearchableDeal,
+): number {
+  const haystack = `${deal.title} ${deal.brand ?? ""}`.toLowerCase();
+  return search.concepts.reduce((score, concept) => {
+    if (concept.kind === "bat-size") return score + (batSizeMatchSpecificity(search, deal) * 15);
+    if (concept.kind === "glove-hand") {
+      return score + (matchesBaseballGloveThrowHand(deal, concept.hand) ? 24 : 0);
+    }
+    if (concept.kind === "glove-size") return score + (matchesGloveSize(deal, concept.size) ? 16 : 0);
+    if (concept.kind === "drop") {
+      const exactDrop = deal.dropWeight === concept.drop
+        || new RegExp(`(^|[^a-z0-9])(?:drop\\s*-?\\s*|-)${concept.drop}([^a-z0-9]|$)`, "i").test(haystack);
+      return score + (exactDrop ? 12 : 0);
+    }
+    if (concept.kind === "alias") {
+      return score + (new RegExp(searchAliasPattern(concept.values), "i").test(haystack) ? 10 : 0);
+    }
+    const exactText = new RegExp(searchAliasPattern([concept.value]), "i").test(haystack);
+    return score + (exactText ? 4 : (haystack.includes(concept.value) ? 1 : 0));
+  }, 0);
 }
 
 export function matchesDealClassificationFilters(

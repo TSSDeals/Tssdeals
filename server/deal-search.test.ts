@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   batSizeMatchSpecificity,
+  dealSearchMatchSpecificity,
   hasBaseballGloveEvidence,
   hasStrongBaseballGloveSearchIntent,
   matchesBaseballGloveThrowHand,
@@ -17,6 +18,7 @@ import {
   SHOPPER_MEMORABILIA_SPORT_ID,
   canonicalResultEquipmentTypeId,
 } from "../shared/equipment-groups";
+import { extractBatSizeIntent } from "../shared/search-language";
 
 for (const equipmentTypeId of ["baseball-bat", "bat", "bb-bats"]) {
   test(`canonical Baseball Bats filter includes ${equipmentTypeId}`, () => {
@@ -33,6 +35,96 @@ test("exact 27/17 outranks a generic drop-10 fallback", () => {
   const fallback = { title: "Louisville Supra USSSA Bat Drop -10", dropWeight: 10 };
   assert.equal(matchesNormalizedDealSearch(search, fallback), true);
   assert.ok(batSizeMatchSpecificity(search, exact) > batSizeMatchSpecificity(search, fallback));
+  assert.ok(dealSearchMatchSpecificity(search, exact) > dealSearchMatchSpecificity(search, fallback));
+});
+
+test("exact model boundaries outrank loose model-number continuations", () => {
+  const search = normalizeDealSearch("A2000 1786");
+  const exact = { title: 'Wilson A2000 1786 11.5" Baseball Glove' };
+  const loose = { title: 'Wilson A2000 1786SS 11.5" Baseball Glove' };
+  assert.equal(matchesNormalizedDealSearch(search, exact), true);
+  assert.equal(matchesNormalizedDealSearch(search, loose), true);
+  assert.ok(dealSearchMatchSpecificity(search, exact) > dealSearchMatchSpecificity(search, loose));
+});
+
+test("Search Quality acceptance phrases match the intended baseball inventory", () => {
+  const supra = {
+    title: "2027 Louisville Slugger Supra 27/17 USSSA Baseball Bat",
+    brand: "Louisville Slugger",
+    dropWeight: 10,
+    sportId: "baseball",
+    equipmentTypeId: "bb-bats",
+  };
+  const hypeFire = {
+    title: "2026 Easton Hype Fire 29/21 USSSA Baseball Bat",
+    brand: "Easton",
+    dropWeight: 8,
+    sportId: "baseball",
+    equipmentTypeId: "bb-bats",
+  };
+  const a2000 = {
+    title: 'Wilson A2000 1786 11.5" Baseball Glove RHT',
+    brand: "Wilson",
+    sportId: "baseball",
+    equipmentTypeId: "bb-gloves",
+  };
+  const a1000Left = {
+    title: "Wilson A1000 1786 Baseball Glove Left Hand Throw",
+    brand: "Wilson",
+    sportId: "baseball",
+    equipmentTypeId: "bb-gloves",
+  };
+  const a1000Right = {
+    title: "Wilson A1000 1786 Baseball Glove RHT",
+    brand: "Wilson",
+    sportId: "baseball",
+    equipmentTypeId: "bb-gloves",
+  };
+
+  for (const query of ["27/17 Louisville Supra", "Louisville Supra 27/17", "Supra -10"]) {
+    assert.equal(matchesNormalizedDealSearch(normalizeDealSearch(query), supra), true, query);
+    assert.equal(matchesDealClassificationFilters(supra, {
+      q: query,
+      sportId: "baseball",
+      equipmentTypeId: "bb-bats",
+    }), true, `${query} with Baseball/Bats`);
+  }
+  assert.equal(matchesNormalizedDealSearch(normalizeDealSearch("Hype Fire 29/21"), hypeFire), true);
+  assert.equal(matchesNormalizedDealSearch(normalizeDealSearch("A2000 1786"), a2000), true);
+  assert.equal(matchesNormalizedDealSearch(normalizeDealSearch("Lefty Wilson A1000"), a1000Left), true);
+  assert.equal(matchesNormalizedDealSearch(normalizeDealSearch("LHT Wilson A1000"), a1000Left), true);
+  assert.equal(matchesNormalizedDealSearch(normalizeDealSearch("Wilson A1000 RHT"), a1000Right), true);
+  assert.equal(matchesNormalizedDealSearch(normalizeDealSearch("Wilson A1000 RHT"), a1000Left), false);
+});
+
+for (const query of [
+  "27/17 Louisville Supra",
+  "  27 / 17   Louisville   Supra  ",
+  "27-17 Louisville Supra",
+  "27 17 Louisville Supra",
+  '27" 17oz Louisville Supra',
+  "27 inch 17 ounce Louisville Supra",
+]) {
+  test(`normalizes equivalent bat-size shopping notation: ${query}`, () => {
+    const size = extractBatSizeIntent(query);
+    assert.deepEqual(size && { length: size.length, weight: size.weight, drop: size.drop }, {
+      length: 27,
+      weight: 17,
+      drop: 10,
+    });
+    const search = normalizeDealSearch(query);
+    assert.equal(matchesNormalizedDealSearch(search, {
+      title: "Louisville Slugger Supra USSSA Baseball Bat Drop -10",
+      brand: "Louisville Slugger",
+      dropWeight: 10,
+    }), true);
+  });
+}
+
+test("ambiguous or implausible number pairs do not infer a bat drop", () => {
+  for (const query of ["Wilson A2000 17 27", "2027 Wilson A1000", "17-27 Louisville Supra", "40/10 Louisville Supra"]) {
+    assert.equal(extractBatSizeIntent(query), null, query);
+  }
 });
 
 const searchCases: Array<{ name: string; queries: string[]; deal: SearchableDeal }> = [
