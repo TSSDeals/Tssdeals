@@ -14,7 +14,7 @@ import {
   ExternalLink,
   Newspaper,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, outboundRetailerUrl } from "@/lib/utils";
 
 interface BlogArticle {
   slug: string;
@@ -205,7 +205,7 @@ function ArticleDetail() {
       subtitle={a.publishedAt ? `Published ${a.publishedAt}` : undefined}
       rightSlot={
         <Button asChild variant="outline" className="rounded-xl" data-testid="link-article-original">
-          <a href={a.url} target="_blank" rel="noopener noreferrer">
+          <a href={outboundRetailerUrl(a.url)} target="_blank" rel="noopener noreferrer">
             Read on Twin Seam Sports
             <ExternalLink className="ml-2 h-3.5 w-3.5" />
           </a>
@@ -290,7 +290,7 @@ function ArticleDetail() {
             </div>
             <div className="flex gap-2 flex-wrap">
               <Button asChild variant="outline" className="rounded-xl" data-testid="link-article-read-original">
-                <a href={a.url} target="_blank" rel="noopener noreferrer">
+                <a href={outboundRetailerUrl(a.url)} target="_blank" rel="noopener noreferrer">
                   Read Original
                   <ExternalLink className="ml-2 h-3.5 w-3.5" />
                 </a>

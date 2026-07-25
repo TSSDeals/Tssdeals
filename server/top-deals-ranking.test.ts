@@ -322,6 +322,15 @@ test("equivalent variants collapse to the best representative", () => {
   assert.deepEqual(ranked.map((item) => item.id), ["best"]);
 });
 
+test("equal-quality retailer tie-break keeps Twin Seam first and Baseline second", () => {
+  const ranked = rankTopDeals([
+    deal({ id: "other", sourceId: "other", title: "Rawlings Heart of the Hide 200 Baseball Glove" }),
+    deal({ id: "baseline", sourceId: "baseline-sports", title: "Wilson A2000 1786 Baseball Glove" }),
+    deal({ id: "twin", sourceId: "twin-seam-sports", title: "Mizuno Pro Select 11 Baseball Glove" }),
+  ], { now });
+  assert.deepEqual(ranked.map((item) => item.id), ["twin", "baseline", "other"]);
+});
+
 test("diversity prevents one retailer from dominating and engagement is bounded", () => {
   const oneSource = Array.from({ length: 8 }, (_, index) =>
     deal({

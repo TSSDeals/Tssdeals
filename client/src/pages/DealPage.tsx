@@ -9,6 +9,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { outboundRetailerUrl } from "@/lib/utils";
+import { preferredRetailerRank } from "@shared/retailer-programs";
 
 interface DealItem {
   id: string;
@@ -46,6 +48,7 @@ function getSourceLabel(sourceId: string): string {
   const labels: Record<string, string> = {
     "ebay": "eBay",
     "twin-seam-sports": "Twin Seam Sports",
+    "baseline-sports": "Baseline Sports",
     "dicks-sporting-goods": "Dick's Sporting Goods",
     "golf-galaxy": "Golf Galaxy",
     "sidelineswap": "SidelineSwap",
@@ -124,7 +127,7 @@ function SmsSignupCta({ productName }: { productName: string }) {
 function DealCard({ deal }: { deal: DealItem }) {
   return (
     <a
-      href={deal.url}
+      href={outboundRetailerUrl(deal.url)}
       target="_blank"
       rel="noopener noreferrer"
       className="group flex gap-3 rounded-xl border border-border bg-card p-3 hover:shadow-md transition-shadow"
@@ -168,7 +171,10 @@ function PriceComparisonTable({ deals }: { deals: DealItem[] }) {
       grouped.set(key, deal);
     }
   }
-  const sorted = Array.from(grouped.values()).sort((a, b) => a.priceCents - b.priceCents);
+  const sorted = Array.from(grouped.values()).sort((a, b) =>
+    a.priceCents - b.priceCents ||
+    preferredRetailerRank(a.sourceId) - preferredRetailerRank(b.sourceId)
+  );
   if (sorted.length === 0) return null;
 
   return (
@@ -183,7 +189,7 @@ function PriceComparisonTable({ deals }: { deals: DealItem[] }) {
         {sorted.map((deal, i) => (
           <a
             key={deal.id}
-            href={deal.url}
+            href={outboundRetailerUrl(deal.url)}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center justify-between px-4 py-3 hover:bg-muted/20 transition-colors"

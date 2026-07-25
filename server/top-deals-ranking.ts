@@ -1,4 +1,5 @@
 import type { Deal, DealCategory } from "@shared/schema";
+import { preferredRetailerRank } from "@shared/retailer-programs";
 
 const DAY_MS = 86_400_000;
 const NOISE_PATTERN =
@@ -443,7 +444,19 @@ export function rankTopDeals(pool: Deal[], context: TopDealsContext = {}): Ranke
     if (key.endsWith("::")) continue;
     const scored = scoreDeal(deal, context, now);
     const previous = representatives.get(key);
-    if (!previous || scored.topDealScore > previous.topDealScore) representatives.set(key, scored);
+    if (
+      !previous ||
+      scored.topDealScore > previous.topDealScore ||
+      (
+        scored.topDealScore === previous.topDealScore &&
+        Number(scored.priceCents) < Number(previous.priceCents)
+      ) ||
+      (
+        scored.topDealScore === previous.topDealScore &&
+        Number(scored.priceCents) === Number(previous.priceCents) &&
+        preferredRetailerRank(scored.sourceId) < preferredRetailerRank(previous.sourceId)
+      )
+    ) representatives.set(key, scored);
   }
 
   const deduped = [...representatives.values()]
@@ -459,7 +472,11 @@ export function rankTopDeals(pool: Deal[], context: TopDealsContext = {}): Ranke
         const bUsd = (b.currency ?? "USD").toUpperCase() === "USD" ? 1 : 0;
         if (aUsd !== bUsd) return bUsd - aUsd;
       }
-      return b.topDealScore - a.topDealScore || Number(b.priceCents) - Number(a.priceCents);
+      return (
+        b.topDealScore - a.topDealScore ||
+        preferredRetailerRank(a.sourceId) - preferredRetailerRank(b.sourceId) ||
+        Number(b.priceCents) - Number(a.priceCents)
+      );
     });
 
   const result: RankedTopDeal[] = [];

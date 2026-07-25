@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { BarChart3, Download, Pencil, Search } from "lucide-react";
+import { outboundRetailerUrl } from "@/lib/utils";
 
 type Filters = {
   sportId: string;
@@ -301,7 +302,7 @@ export function DataReportingPanel() {
               {list.data?.rows.map((d) => (
                 <tr key={d.id} className="border-b last:border-0 hover:bg-muted/30">
                   <td className="px-3 py-2 max-w-[280px]">
-                    <a href={d.url} target="_blank" rel="noopener" className="font-medium hover:underline line-clamp-1">{d.title}</a>
+                    <a href={outboundRetailerUrl(d.url)} target="_blank" rel="noopener" className="font-medium hover:underline line-clamp-1">{d.title}</a>
                     {d.brand && <div className="text-[10px] text-muted-foreground">{d.brand}</div>}
                   </td>
                   <td className="px-3 py-2">{d.sport_id ?? "—"}</td>
