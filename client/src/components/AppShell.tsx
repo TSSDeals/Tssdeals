@@ -116,11 +116,13 @@ export function AppShell({
   title,
   subtitle,
   rightSlot,
+  hidePageHeader = false,
   children,
 }: {
   title: string;
   subtitle?: string;
   rightSlot?: ReactNode;
+  hidePageHeader?: boolean;
   children: ReactNode;
 }) {
   const [location] = useLocation();
@@ -179,9 +181,37 @@ export function AppShell({
     <div className="relative min-h-screen bg-mesh grain">
       <div className="relative z-10">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 gap-6 py-6 lg:grid-cols-[280px_1fr] lg:gap-8">
+          <div className="sticky top-0 z-40 -mx-4 border-b border-border bg-background/95 px-4 py-2 backdrop-blur sm:-mx-6 sm:px-6 lg:hidden" data-testid="mobile-app-header">
+            <div className="flex items-center justify-between gap-3">
+              <Link href="/" className="ring-focus flex min-h-11 items-center gap-2 rounded-xl" data-testid="mobile-logo-home">
+                <img src="/images/tss-logo.jpeg" alt="" className="h-10 w-10 rounded-xl object-cover shadow-sm" />
+                <span className="text-sm font-extrabold tracking-tight">TwinSeam Deals</span>
+              </Link>
+              {rightSlot && !hidePageHeader ? <div className="flex shrink-0 items-center gap-1">{rightSlot}</div> : null}
+            </div>
+            <nav className="mt-2 flex gap-1 overflow-x-auto pb-1 scrollbar-hide" aria-label="Primary navigation">
+              {nav.map((item) => {
+                const active = location === item.href || (item.href !== "/app/deals" && location.startsWith(item.href));
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={cn(
+                      "ring-focus flex min-h-10 shrink-0 items-center gap-1.5 rounded-xl px-3 text-xs font-bold",
+                      active ? "bg-primary text-primary-foreground" : "bg-card text-foreground/75",
+                    )}
+                  >
+                    <Icon className="h-3.5 w-3.5" />
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </nav>
+          </div>
+          <div className="grid grid-cols-1 gap-4 py-4 lg:grid-cols-[280px_1fr] lg:gap-8 lg:py-6">
             {/* Sidebar */}
-            <aside className="lg:sticky lg:top-6 lg:self-start">
+            <aside className="hidden lg:sticky lg:top-6 lg:block lg:self-start">
               <div className="card-elevated overflow-hidden">
                 <div className="relative p-5">
                   <div className="pointer-events-none absolute inset-0 opacity-80 [background:radial-gradient(680px_240px_at_20%_0%,hsl(var(--primary)/0.16),transparent_60%),radial-gradient(540px_220px_at_100%_0%,hsl(var(--accent)/0.14),transparent_55%)]" />
@@ -323,6 +353,7 @@ export function AppShell({
 
             {/* Content */}
             <main className="min-w-0">
+              {!hidePageHeader && (
               <header className="card-elevated mb-6 overflow-hidden">
                 <div className="relative p-5 md:p-6">
                   <div className="pointer-events-none absolute inset-0 opacity-70 [background:radial-gradient(900px_320px_at_10%_-10%,hsl(var(--primary)/0.18),transparent_60%),radial-gradient(700px_260px_at_90%_-20%,hsl(var(--accent)/0.14),transparent_55%)]" />
@@ -341,6 +372,11 @@ export function AppShell({
                   </div>
                 </div>
               </header>
+              )}
+
+              {hidePageHeader && rightSlot ? (
+                <div className="mb-3 hidden justify-end gap-2 lg:flex">{rightSlot}</div>
+              ) : null}
 
               <div className="space-y-6">{children}</div>
             </main>

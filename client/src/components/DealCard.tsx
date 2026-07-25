@@ -16,6 +16,7 @@ import { useMagicLink } from "./MagicLinkDialog";
 import { PriceHistoryDialog } from "./PriceHistoryDialog";
 import { SourceLogo } from "./SourceLogo";
 import { deriveDealCardPricing } from "@/lib/deal-card-pricing";
+import { formatKnownShipping } from "@shared/deal-display";
 
 function PromoCodeBadge({ code, description }: { code: string; description?: string | null }) {
   const [copied, setCopied] = useState(false);
@@ -101,7 +102,10 @@ export function DealCard({
     }
   };
 
-  const derived = useMemo(() => deriveDealCardPricing(deal), [deal]);
+  const derived = useMemo(
+    () => ({ ...deriveDealCardPricing(deal), shipping: formatKnownShipping(deal) }),
+    [deal],
+  );
 
   const [form, setForm] = useState(() => ({
     title: String(deal?.title ?? ""),
@@ -158,13 +162,13 @@ export function DealCard({
     >
       <div className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100 [background:radial-gradient(800px_240px_at_15%_0%,hsl(var(--primary)/0.10),transparent_55%),radial-gradient(700px_220px_at_90%_0%,hsl(var(--accent)/0.09),transparent_60%)]" />
 
-      <div className="relative flex gap-4 p-4 sm:p-5">
-        <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-2xl border border-border bg-muted shadow-sm sm:h-28 sm:w-28">
+      <div className="relative flex flex-col gap-3 p-3 sm:flex-row sm:gap-4 sm:p-5">
+        <div className="relative h-36 w-full shrink-0 overflow-hidden rounded-2xl border border-border bg-white shadow-sm sm:h-28 sm:w-28">
           {deal?.imageUrl ? (
             <img
               src={deal.imageUrl}
               alt={deal?.title ?? "Deal"}
-              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+              className="h-full w-full object-contain p-1 transition-transform duration-300 group-hover:scale-[1.03]"
               data-testid="deal-image"
               loading="lazy"
             />
@@ -186,7 +190,7 @@ export function DealCard({
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h3
-                  className="line-clamp-2 font-display text-lg font-bold leading-snug"
+                  className="line-clamp-2 font-display text-base font-bold leading-snug sm:text-lg"
                   data-testid="deal-title"
                   title={deal?.title}
                 >
@@ -262,10 +266,16 @@ export function DealCard({
                     <span data-testid="deal-brand">{deal.brand}</span>
                   </>
                 ) : null}
+                {derived.shipping ? (
+                  <>
+                    <span className="opacity-50">·</span>
+                    <span data-testid="deal-shipping">{derived.shipping}</span>
+                  </>
+                ) : null}
               </div>
             </div>
 
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="flex w-full shrink-0 items-center justify-end gap-1 border-t border-border/60 pt-2 sm:w-auto sm:gap-2 sm:border-0 sm:pt-0">
               <Button
                 variant="secondary"
                 size="icon"
@@ -326,7 +336,7 @@ export function DealCard({
             </div>
           </div>
 
-          <div className="mt-3 flex flex-wrap items-end gap-3">
+          <div className="mt-3 flex flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-end">
             <div className="flex flex-col gap-0.5">
               <div className="flex items-baseline gap-2">
                 <div className="text-xl font-extrabold tracking-tight" data-testid="deal-price">
@@ -418,7 +428,7 @@ export function DealCard({
               )}
             </div>
 
-            <div className="ml-auto">
+            <div className="w-full sm:ml-auto sm:w-auto">
               <Button
                 onClick={() => {
                   fetch(`/api/deals/${deal?.id}/click`, { method: 'POST' }).catch(() => {});
@@ -431,7 +441,7 @@ export function DealCard({
                   }
                 }}
                 className={cn(
-                  "ring-focus rounded-xl px-4",
+                  "ring-focus min-h-11 w-full rounded-xl px-4 sm:w-auto",
                   "bg-gradient-to-r from-primary to-primary/80 text-primary-foreground",
                   "shadow-lg shadow-primary/20 hover:shadow-xl hover:shadow-primary/25 hover:-translate-y-0.5",
                   "active:translate-y-0 active:shadow-md transition-all duration-200 ease-out",

@@ -40,7 +40,6 @@ export function deriveDealCardPricing(deal: any) {
     hasMfrMsrp &&
     hasMsrp &&
     deal?.manufacturerMsrpCents !== deal?.msrpCents;
-
   return {
     percent,
     price,
