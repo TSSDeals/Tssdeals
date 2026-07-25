@@ -10,6 +10,7 @@
     "check": "tsc",
     "test:search": "tsx --test server/deal-search.test.ts shared/equipment-groups.test.ts shared/search-language.test.ts",
     "test:top-deals": "tsx --test server/top-deals-ranking.test.ts client/src/lib/deal-card-pricing.test.ts",
+    "test:ball-glove-blueprint": "tsx --test server/ball-glove-blueprint-sync.test.ts",
     "test:ebay-integration": "tsx --test server/ebay-integration.test.ts",
     "test:ebay-public-sync": "tsx --test server/ebay-public-sync.test.ts",
     "test:ebay-browse": "tsx --test server/ebay-browse-client.test.ts",
