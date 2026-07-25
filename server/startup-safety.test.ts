@@ -76,7 +76,7 @@ test("ordinary application startup contains no deal reclassification or dynamic 
 test("importers cannot create an unapproved live category", () => {
   const importerFiles = [
     "baseball-resale-sync.ts", "cj-affiliate.ts", "ebay-api.ts", "fanatics-sync.ts",
-    "shopify-sync.ts", "shopify-multi-store-sync.ts", "baseline-sports-sync.ts", "sidelineswap.ts", "woocommerce-sync.ts",
+    "shopify-sync.ts", "shopify-multi-store-sync.ts", "shopify-collective-sync.ts", "baseline-sports-sync.ts", "sidelineswap.ts", "woocommerce-sync.ts",
   ];
   for (const file of importerFiles) {
     const source = readFileSync(join(process.cwd(), "server", file), "utf8");
@@ -93,6 +93,15 @@ test("Baseline Sports collector is explicit opt-in and dry-run capable", () => {
   assert.match(adapterSource, /ENABLE_BASELINE_SPORTS_SYNC/);
   assert.match(adapterSource, /if \(options\.dryRun\)/);
   assert.doesNotMatch(adapterSource, /process\.env\.ENABLE_BASELINE_SPORTS_SYNC\s*=\s*/);
+});
+
+test("Shopify Collective collector is explicit opt-in and dry-run capable", () => {
+  const schedulerSource = readFileSync(join(process.cwd(), "server", "deal-sync-scheduler.ts"), "utf8");
+  const adapterSource = readFileSync(join(process.cwd(), "server", "shopify-collective-sync.ts"), "utf8");
+  assert.match(schedulerSource, /if \(!collectiveSyncEnabled\(\)\) return/);
+  assert.match(adapterSource, /ENABLE_SHOPIFY_COLLECTIVE_SYNC/);
+  assert.match(adapterSource, /if \(options\.dryRun\)/);
+  assert.doesNotMatch(adapterSource, /process\.env\.ENABLE_SHOPIFY_COLLECTIVE_SYNC\s*=\s*/);
 });
 
 test("maintenance defaults to dry-run and execution requires exact confirmation and identity", () => {

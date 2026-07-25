@@ -1,4 +1,5 @@
 export const TWIN_SEAM_SOURCE_ID = "twin-seam-sports";
+export const SHOPIFY_COLLECTIVE_SOURCE_ID = "shopify-collective";
 export const BASELINE_SPORTS_SOURCE_ID = "baseline-sports";
 export const BASELINE_SPORTS_NAME = "Baseline Sports";
 export const BASELINE_SPORTS_URL = "https://www.baselinesports.us";
@@ -52,8 +53,9 @@ export const BASELINE_SPORTS_PROGRAM: RetailerProgram = {
 
 export function preferredRetailerRank(sourceId: string | null | undefined): number {
   if (sourceId === TWIN_SEAM_SOURCE_ID) return 0;
-  if (sourceId === BASELINE_SPORTS_SOURCE_ID) return 1;
-  return 2;
+  if (sourceId === SHOPIFY_COLLECTIVE_SOURCE_ID) return 1;
+  if (sourceId === BASELINE_SPORTS_SOURCE_ID) return 2;
+  return 3;
 }
 
 export function applyOutboundAffiliateUrl(rawUrl: string | null | undefined): string {

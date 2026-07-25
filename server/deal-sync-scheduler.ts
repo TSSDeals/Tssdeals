@@ -15,6 +15,7 @@ import { syncFanaticsDeals } from "./fanatics-sync";
 import { syncMultipleShopifyStores } from "./shopify-multi-store-sync";
 import { syncBallGloveBlueprint } from "./ball-glove-blueprint-sync";
 import { baselineSyncEnabled, syncBaselineSports } from "./baseline-sports-sync";
+import { collectiveSyncEnabled, syncShopifyCollective } from "./shopify-collective-sync";
 import { syncPlayItAgain } from "./playitagain-sync";
 import { isPushConfigured, sendPushToUser } from "./push-notifications";
 import { isSmsConfigured, sendPriceAlertSms, sendWelcomeSms } from "./sms-notifications";
@@ -825,6 +826,21 @@ async function syncBaselineSportsDeals(storage: IStorage): Promise<{ created: nu
   }
 }
 
+async function syncShopifyCollectiveDeals(storage: IStorage): Promise<{ created: number; updated: number; errors: number }> {
+  if (!collectiveSyncEnabled()) return { created: 0, updated: 0, errors: 0 };
+  try {
+    const result = await syncShopifyCollective({
+      dryRun: false,
+      bulkUpsertDeals: (deals) => storage.bulkUpsertDeals(deals),
+      ensureSource: async (id, name, url) => { await storage.ensureSource(id, name, url); },
+    });
+    return { created: result.created, updated: result.updated, errors: 0 };
+  } catch (err: any) {
+    log(`Shopify Collective sync error: ${err.message}`, "deal-sync");
+    return { created: 0, updated: 0, errors: 1 };
+  }
+}
+
 async function syncAmazonDeals(storage: IStorage): Promise<{ created: number; updated: number; errors: number }> {
   const clientId = process.env.AMAZON_CLIENT_ID;
   const clientSecret = process.env.AMAZON_CLIENT_SECRET;
@@ -1114,7 +1130,7 @@ export async function runFullSync(storage: IStorage): Promise<FullSyncResult | n
   const startTime = Date.now();
 
   try {
-    const [ebay, cj, shopify, sidelineswap, shareasale, impact, rakuten, amazon, notg, baseballResale, fanatics, multiShopify, playItAgain, ballGloveBlueprint, baselineSports] = await Promise.allSettled([
+    const [ebay, cj, shopify, sidelineswap, shareasale, impact, rakuten, amazon, notg, baseballResale, fanatics, multiShopify, playItAgain, ballGloveBlueprint, baselineSports, shopifyCollective] = await Promise.allSettled([
       runEbayPublicSync(storage),
       syncCJDeals(storage),
       syncShopifyDeals(storage),
@@ -1130,6 +1146,7 @@ export async function runFullSync(storage: IStorage): Promise<FullSyncResult | n
       syncPlayItAgainDeals(storage),
       syncBallGloveBlueprintDeals(storage),
       syncBaselineSportsDeals(storage),
+      syncShopifyCollectiveDeals(storage),
     ]);
 
     const fallback = { created: 0, updated: 0, errors: 1 };
@@ -1149,6 +1166,7 @@ export async function runFullSync(storage: IStorage): Promise<FullSyncResult | n
       playItAgain: playItAgain.status === "fulfilled" ? playItAgain.value : fallback,
       ballGloveBlueprint: ballGloveBlueprint.status === "fulfilled" ? ballGloveBlueprint.value : fallback,
       baselineSports: baselineSports.status === "fulfilled" ? baselineSports.value : fallback,
+      shopifyCollective: shopifyCollective.status === "fulfilled" ? shopifyCollective.value : fallback,
     };
 
     const totalCreated = Object.values(results).reduce((s, r) => s + r.created, 0);
