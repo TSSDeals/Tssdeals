@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation, useRoute } from "wouter";
 import { AppShell } from "@/components/AppShell";
@@ -10,6 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { useSources } from "@/hooks/use-taxonomy";
 import { cn } from "@/lib/utils";
+import { resolveTopDealsCategory, resolveTopDealsRouteSlug } from "@/lib/top-deals-page";
 import {
   Trophy,
   ChevronRight,
@@ -116,7 +117,15 @@ function CategoryCard({
   );
 }
 
-function CategoryDetail({ slug, onBack }: { slug: string; onBack: () => void }) {
+function CategoryDetail({
+  slug,
+  categories,
+  onBack,
+}: {
+  slug: string;
+  categories: any[];
+  onBack: () => void;
+}) {
   const { data, isLoading } = useCategoryDeals(slug);
   const sources = useSources();
 
@@ -127,7 +136,7 @@ function CategoryDetail({ slug, onBack }: { slug: string; onBack: () => void }) 
     return m;
   }, [sources.data]);
 
-  const category = data?.category;
+  const category = resolveTopDealsCategory(data?.category, categories, slug);
   const deals = data?.deals ?? [];
 
   if (isLoading) {
@@ -214,15 +223,7 @@ export default function TopDealsPage() {
   const [, setLocation] = useLocation();
   const [matchRoute, params] = useRoute("/app/top-deals/:slug");
 
-  const [selectedSlug, setSelectedSlug] = useState<string | null>(
-    matchRoute ? (params as any)?.slug : null
-  );
-
-  useEffect(() => {
-    if (matchRoute && (params as any)?.slug) {
-      setSelectedSlug((params as any).slug);
-    }
-  }, [matchRoute, params]);
+  const selectedSlug = resolveTopDealsRouteSlug(matchRoute, params as any);
 
   const categories = useCategories();
   const popularSearches = usePopularSearches();
@@ -237,12 +238,10 @@ export default function TopDealsPage() {
   );
 
   const handleSelectCategory = (slug: string) => {
-    setSelectedSlug(slug);
     setLocation(`/app/top-deals/${slug}`);
   };
 
   const handleBack = () => {
-    setSelectedSlug(null);
     setLocation("/app/top-deals");
   };
 
@@ -252,7 +251,11 @@ export default function TopDealsPage() {
       subtitle="Curated lists of the best deals updated throughout the day"
     >
       {selectedSlug ? (
-        <CategoryDetail slug={selectedSlug} onBack={handleBack} />
+        <CategoryDetail
+          slug={selectedSlug}
+          categories={(categories.data ?? []) as any[]}
+          onBack={handleBack}
+        />
       ) : (
         <div className="space-y-8">
           <section data-testid="curated-categories">
@@ -263,7 +266,7 @@ export default function TopDealsPage() {
               <div>
                 <h2 className="font-display text-xl font-bold">Curated Categories</h2>
                 <p className="text-xs text-muted-foreground">
-                  Always-on top 20 deal lists across key equipment categories
+                  Always-on verified deal lists across key equipment categories
                 </p>
               </div>
             </div>

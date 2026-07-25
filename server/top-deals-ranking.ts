@@ -306,7 +306,40 @@ function categoryKey(deal: Deal): string {
   return deal.equipmentTypeId ?? deal.sportId ?? "unclassified";
 }
 
+function fastpitchFamilyTitle(deal: Deal): string {
+  const raw = (deal.raw ?? {}) as Record<string, unknown>;
+  const structuredFamily = [raw.productFamily, raw.modelName, raw.model]
+    .find((value) =>
+      typeof value === "string"
+      && value.trim()
+      && !/^[a-z]{2,}\d+[a-z0-9-]*$/i.test(value.trim()),
+    ) as string | undefined;
+  const structuredColorway = [raw.colorway, raw.color, raw.colour]
+    .find((value) => typeof value === "string" && value.trim()) as string | undefined;
+  const evidence = structuredFamily
+    ? `${deal.brand ?? ""} ${structuredFamily} ${structuredColorway ?? ""}`
+    : deal.title ?? "";
+  return evidence
+    .toLowerCase()
+    .replace(/\b(?:new|used|preowned|open box|demo|sale|clearance)\b/g, " ")
+    .replace(/\b20\d{2}\b/g, " ")
+    .replace(/\b\d{2}\s*(?:in(?:ch(?:es)?)?|["″])?\s*[/x-]\s*\d{1,2}\s*(?:oz|ounces?)?\b/g, " ")
+    .replace(/\b\d{2}(?:\.\d+)?\s*(?:in(?:ch(?:es)?)?|["″]|oz|ounces?)\b/g, " ")
+    .replace(/\(\s*-?\s*(?:8|9|10|11|12|13)\s*\)/g, " ")
+    .replace(/\bdrop\s*-?\s*(?:8|9|10|11|12|13)\b/g, " ")
+    .replace(/(^|\s)-\s*(?:8|9|10|11|12|13)(?:\s*oz)?\b/g, " ")
+    .replace(/\b(?:length|weight|size)\s*:?\s*\d+(?:\.\d+)?\b/g, " ")
+    .replace(/\b(?:fast[\s-]?pitch|softball|bat|bats|usssa|asa|usa|approved|certified|composite)\b/g, " ")
+    .replace(/\b[a-z]{2,}\d+[a-z0-9-]*\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function productKey(deal: Deal, context: TopDealsContext): string {
+  if (isFastpitchBatCategory(context)) {
+    return `${(deal.brand ?? "").toLowerCase()}::${fastpitchFamilyTitle(deal)}`;
+  }
   let title = (deal.title ?? "")
     .toLowerCase()
     .replace(/\b(?:new|used|preowned|open box|demo|sale|clearance)\b/g, " ")
@@ -316,12 +349,6 @@ function productKey(deal: Deal, context: TopDealsContext): string {
     .replace(/\(\s*-\d{1,2}\s*\)/g, " ")
     .replace(/\b(?:black|white|red|blue|green|pink|purple|orange|yellow|grey|gray)\b/g, " ")
     .trim();
-  if (isFastpitchBatCategory(context)) {
-    title = title
-      .replace(/(^|\s)-\s*(?:8|9|10|11|12|13)\b/g, " ")
-      .replace(/\bdrop\s*-?\s*(?:8|9|10|11|12|13)\b/g, " ")
-      .replace(/\b(?:8|9|10|11|12|13)\s*(?:drop)?\b/g, " ");
-  }
   title = title
     .replace(/[^a-z0-9]+/g, " ")
     .replace(/\s+/g, " ")

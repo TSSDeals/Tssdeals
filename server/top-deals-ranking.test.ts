@@ -211,21 +211,40 @@ test("baseball bat gate rejects production racquet and apparel leaks", () => {
 
 test("fastpitch bat variants collapse by model family before counting", () => {
   const context = { now, category: { slug: "fastpitch-softball-bats", name: "Top Fastpitch Softball Bat Deals", searchQuery: "fastpitch bat", sportId: "fastpitch-softball" } };
-  const variants = [-11, -10, -9, -8].map((drop, index) =>
+  const titles = [
+    "2025 Marucci ASURA (-11) Fastpitch Softball Bat 30in/19oz MFPA11",
+    "2025 Marucci ASURA -10 Fastpitch Softball Bat 31 inch 21 oz MFPA10",
+    "2025 Marucci ASURA Fastpitch Bat Drop 8 32in x 24oz MFPA8",
+    "2025 Marucci ASURA Fastpitch Softball Bat (-9) 33in/24oz MFPA9",
+    "2025 Marucci ASURA Glow Citrus (-11) Fastpitch Bat 30in/19oz",
+    "2025 Marucci ASURA Glow Citrus Drop -10 Fastpitch Softball Bat 31in/21oz",
+    "Louisville Slugger LXT Fastpitch Softball Bat -10",
+    "Marucci Whisper Fastpitch Softball Bat -10",
+    "Mizuno CRBN Pro Fastpitch Softball Bat -10",
+  ];
+  const variants = titles.map((title, index) =>
     deal({
-      id: `astura-${drop}`,
+      id: `fastpitch-${index}`,
       sourceId: `source-${index}`,
-      title: `2025 Marucci Astura Fastpitch Softball Bat ${drop}`,
-      brand: "Marucci",
+      title,
+      brand: title.startsWith("Louisville") ? "Louisville Slugger" : title.startsWith("Mizuno") ? "Mizuno" : "Marucci",
       equipmentTypeId: "fp-bats",
       sportId: "fastpitch-softball",
-      url: `https://example.com/astura-${drop}`,
+      url: `https://example.com/fastpitch-${index}`,
       priceDropPercent: String(20 + index),
+      raw: {
+        sellerUsername: `seller-${index}`,
+        ...(index === 0 ? { model: "MFPA11" } : {}),
+      },
     }),
   );
-  const ranked = rankTopDeals(variants, context);
-  assert.equal(ranked.length, 1);
-  assert.match(ranked[0].title, /Marucci Astura/);
+  const ranked = rankTopDeals(variants, { ...context, limit: 20 });
+  assert.equal(ranked.length, 5);
+  assert.equal(ranked.filter((item) => /\bASURA\b/i.test(item.title) && !/Glow Citrus/i.test(item.title)).length, 1);
+  assert.equal(ranked.filter((item) => /Glow Citrus/i.test(item.title)).length, 1);
+  assert.ok(ranked.some((item) => /\bLXT\b/i.test(item.title)));
+  assert.ok(ranked.some((item) => /\bWhisper\b/i.test(item.title)));
+  assert.ok(ranked.some((item) => /\bCRBN Pro\b/i.test(item.title)));
 });
 
 test("running shoes and cleats require footwear form and reject apparel mentions", () => {

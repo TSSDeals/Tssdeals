@@ -113,4 +113,7 @@ test("shopper UI uses honest sparse and empty-state copy", () => {
   assert.match(clientSource, /No verified deals currently meet this category/);
   assert.match(clientSource, /Showing \{deals\.length\} verified/);
   assert.doesNotMatch(clientSource, /Showing[^\\n]*of \d+|Top\s+\d+/);
+  assert.match(clientSource, /resolveTopDealsRouteSlug\(matchRoute,\s*params as any\)/);
+  assert.match(clientSource, /resolveTopDealsCategory\(data\?\.category,\s*categories,\s*slug\)/);
+  assert.doesNotMatch(clientSource, /Always-on top 20/i);
 });
