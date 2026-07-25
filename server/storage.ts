@@ -105,6 +105,7 @@ import {
 import { db } from "./db";
 import { assertTaxonomyApproval, type TaxonomyApprovalContext } from "./taxonomy-approval";
 import { rankTopDeals } from "./top-deals-ranking";
+import { attachBaselineCouponRecommendations } from "@shared/retailer-programs";
 
 const defaultSeedDatabase = db;
 
@@ -945,9 +946,10 @@ export class DatabaseStorage implements IStorage {
       .orderBy(...orderClause)
       .limit(limit);
 
-    return normalizedSearch && params.q
+    const orderedResults = normalizedSearch && params.q
       ? orderDealsBySearchSpecificity(params.q, results)
       : results;
+    return attachBaselineCouponRecommendations(orderedResults);
   }
 
   async hideDeal(userId: string, dealId: string): Promise<void> {
@@ -2151,6 +2153,9 @@ export class DatabaseStorage implements IStorage {
     await db.insert(sources).values([
       // Our Store
       { id: "twin-seam-sports", name: "Twin Seam Sports", baseUrl: "https://www.twinseamsports.com", isOurStore: true, priorityBoost: 50, category: "baseball" },
+      // Preferred affiliate partner. Live catalog ingestion remains separately
+      // disabled until ENABLE_BASELINE_SPORTS_SYNC is explicitly approved.
+      { id: "baseline-sports", name: "Baseline Sports", baseUrl: "https://www.baselinesports.us", priorityBoost: 40, category: "baseball" },
 
       // Multi-Sport General Retailers
       { id: "ebay", name: "eBay", baseUrl: "https://www.ebay.com", category: "multi-sport" },

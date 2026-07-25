@@ -22,7 +22,7 @@ export const useMagicLink = () => useContext(MagicLinkContext);
 type Step = "input" | "code" | "success";
 type LoginMethod = "email" | "phone";
 
-const SMS_LOGIN_ENABLED = import.meta.env.VITE_ENABLE_SMS_LOGIN === "true";
+const SMS_LOGIN_ENABLED = import.meta.env?.VITE_ENABLE_SMS_LOGIN === "true";
 
 function MagicLinkForm({ onSuccess, initialMethod = "email" }: { onSuccess: () => void; initialMethod?: LoginMethod }) {
   const { toast } = useToast();

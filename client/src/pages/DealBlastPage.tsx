@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ExternalLink, Tag } from "lucide-react";
+import { outboundRetailerUrl } from "@/lib/utils";
 
 interface CampaignData {
   slug: string;
@@ -107,7 +108,7 @@ export default function DealBlastPage() {
       )}
 
       <Button asChild size="lg" className="w-full" data-testid="button-shop-deal">
-        <a href={data.retailerUrl} target="_blank" rel="noopener noreferrer nofollow">
+        <a href={outboundRetailerUrl(data.retailerUrl)} target="_blank" rel="noopener noreferrer nofollow">
           Shop This Deal
           <ExternalLink className="ml-2 h-4 w-4" />
         </a>

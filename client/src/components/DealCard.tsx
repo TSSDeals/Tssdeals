@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { cn, applyEbayReferral } from "@/lib/utils";
+import { cn, outboundRetailerUrl } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ExternalLink, Pencil, Trash2, ShieldCheck, Store, Zap, TrendingDown, BarChart3, Tag, Copy, Check, EyeOff, Share2 } from "lucide-react";
@@ -17,6 +17,7 @@ import { PriceHistoryDialog } from "./PriceHistoryDialog";
 import { SourceLogo } from "./SourceLogo";
 import { deriveDealCardPricing } from "@/lib/deal-card-pricing";
 import { formatKnownShipping } from "@shared/deal-display";
+import { baselineCouponDisplay } from "@/lib/baseline-coupon-display";
 
 function PromoCodeBadge({ code, description }: { code: string; description?: string | null }) {
   const [copied, setCopied] = useState(false);
@@ -70,6 +71,7 @@ export function DealCard({
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [hidden, setHidden] = useState(false);
+  const baselineCoupon = baselineCouponDisplay(deal);
 
   const hideMutation = useMutation({
     mutationFn: () => apiRequest("POST", `/api/deals/${deal.id}/hide`),
@@ -81,7 +83,7 @@ export function DealCard({
   });
 
   const handleShare = async () => {
-    const dealUrl = applyEbayReferral(deal?.url);
+    const dealUrl = outboundRetailerUrl(deal?.url);
     const price = derived.price;
     const discount = derived.percent;
     const title = deal?.title ?? "Great deal";
@@ -428,12 +430,26 @@ export function DealCard({
               )}
             </div>
 
+            {baselineCoupon ? (
+              <div
+                className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-xs"
+                data-testid="baseline-coupon-recommendation"
+              >
+                <div className="font-bold text-foreground">
+                  With {baselineCoupon.code}: {baselineCoupon.checkoutPrice}
+                </div>
+                <div className="text-muted-foreground">
+                  Estimated checkout price{baselineCoupon.shippingComplete ? " including known shipping" : " from known price components"} · Use at checkout
+                </div>
+              </div>
+            ) : null}
+
             <div className="w-full sm:ml-auto sm:w-auto">
               <Button
                 onClick={() => {
                   fetch(`/api/deals/${deal?.id}/click`, { method: 'POST' }).catch(() => {});
                   try { sessionStorage.setItem('tssdeals_last_click', JSON.stringify({ dealId: deal?.id, clickedAt: new Date().toISOString() })); } catch {}
-                  const dealUrl = applyEbayReferral(deal?.url);
+                  const dealUrl = outboundRetailerUrl(deal?.url);
                   if (!isAuthenticated) {
                     openDealPrompt(dealUrl, deal?.id);
                   } else {

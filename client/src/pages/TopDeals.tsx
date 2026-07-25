@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useLocation, useRoute } from "wouter";
+import { Link, useLocation } from "wouter";
 import { AppShell } from "@/components/AppShell";
 import { DealCard } from "@/components/DealCard";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { useSources } from "@/hooks/use-taxonomy";
 import { cn } from "@/lib/utils";
-import { resolveTopDealsCategory, resolveTopDealsRouteSlug } from "@/lib/top-deals-page";
+import { resolveTopDealsCategory, resolveTopDealsSlugFromLocation } from "@/lib/top-deals-page";
 import {
   Trophy,
   ChevronRight,
@@ -220,10 +220,11 @@ function CategoryDetail({
 
 export default function TopDealsPage() {
   const { toast } = useToast();
-  const [, setLocation] = useLocation();
-  const [matchRoute, params] = useRoute("/app/top-deals/:slug");
-
-  const selectedSlug = resolveTopDealsRouteSlug(matchRoute, params as any);
+  const [location, setLocation] = useLocation();
+  // Read the concrete location instead of rematching the already-selected
+  // parent route. This remains reliable with Replit's production router/base
+  // handling and with direct/deep links.
+  const selectedSlug = resolveTopDealsSlugFromLocation(location);
 
   const categories = useCategories();
   const popularSearches = usePopularSearches();

@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
+import { applyOutboundAffiliateUrl } from "@shared/retailer-programs"
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -21,4 +22,8 @@ export function applyEbayReferral(url?: string | null): string {
   } catch {
     return url;
   }
+}
+
+export function outboundRetailerUrl(url?: string | null): string {
+  return applyOutboundAffiliateUrl(applyEbayReferral(url));
 }

@@ -20,7 +20,7 @@ import { usePreferences } from "@/hooks/use-preferences";
 import { useMetaConfig } from "@/hooks/use-meta";
 import { useEquipmentTypes, useSubFilters, useEbaySellers, useSources, useSports } from "@/hooks/use-taxonomy";
 import { useToast } from "@/hooks/use-toast";
-import { cn } from "@/lib/utils";
+import { cn, outboundRetailerUrl } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowUpDown, Camera, CheckCircle2, ChevronDown, ChevronRight, ChevronUp, ExternalLink, Flame, Gift, RefreshCcw, Search, ShoppingBag, Sparkles, SlidersHorizontal, Store, Tag, TicketX, TrendingDown, X, XCircle } from "lucide-react";
 import { Link } from "wouter";
@@ -38,6 +38,11 @@ import {
   normalizeShopperSportId,
   shopperResultEquipmentTypeId,
 } from "@shared/equipment-groups";
+import {
+  BASELINE_SPORTS_NAME,
+  BASELINE_SPORTS_URL,
+  TWIN_SEAM_SOURCE_ID,
+} from "@shared/retailer-programs";
 import {
   buildZeroResultRecovery,
   type SearchRecoveryAction,
@@ -980,7 +985,7 @@ export default function DealsPage() {
                 </SelectTrigger>
                 <SelectContent>
                   {(() => {
-                    const priorityOrder = ["twin-seam-sports", "ebay", "dicks-sporting-goods", "golf-galaxy", "name-of-the-game", "baseball-resale"];
+                    const priorityOrder = ["twin-seam-sports", "baseline-sports", "ebay", "dicks-sporting-goods", "golf-galaxy", "name-of-the-game", "baseball-resale"];
                     const all = sources.data ?? [];
                     const priority = priorityOrder
                       .map((id) => all.find((s: any) => s.id === id))
@@ -1220,6 +1225,49 @@ export default function DealsPage() {
           )}
         </section>
       )}
+
+      {isDefaultView && <section
+        className="animate-float-in stagger-3 rounded-2xl border border-border bg-card/60 p-4"
+        data-testid="preferred-retailers"
+      >
+        <div className="mb-3">
+          <div className="font-display text-base font-bold">Preferred retailers</div>
+          <div className="text-xs text-muted-foreground">
+            Preferred placement never overrides the actual price comparison.
+          </div>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {[
+            {
+              sourceId: TWIN_SEAM_SOURCE_ID,
+              name: "Twin Seam Sports",
+              href: "https://www.twinseamsports.com",
+              label: "Our store · first preference",
+            },
+            {
+              sourceId: "baseline-sports",
+              name: BASELINE_SPORTS_NAME,
+              href: outboundRetailerUrl(BASELINE_SPORTS_URL),
+              label: "Affiliate partner · second preference",
+            },
+          ].map((retailer) => (
+            <a
+              key={retailer.sourceId}
+              href={retailer.href}
+              target="_blank"
+              rel={retailer.sourceId === "baseline-sports" ? "noopener noreferrer sponsored" : "noopener noreferrer"}
+              className="ring-focus flex min-h-16 items-center justify-between rounded-xl border border-border bg-background px-4 py-3 hover:border-primary/40 hover:shadow-sm"
+              data-testid={`preferred-retailer-${retailer.sourceId}`}
+            >
+              <div>
+                <div className="text-sm font-bold">{retailer.name}</div>
+                <div className="text-xs text-muted-foreground">{retailer.label}</div>
+              </div>
+              <ExternalLink className="h-4 w-4 text-primary" />
+            </a>
+          ))}
+        </div>
+      </section>}
 
 
       {isDefaultView ? (
@@ -1512,7 +1560,7 @@ export default function DealsPage() {
               {(bonusDealsQuery.data ?? []).map((deal: any) => (
                 <a
                   key={deal.id}
-                  href={deal.url}
+                  href={outboundRetailerUrl(deal.url)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="group card-elevated animate-float-in overflow-visible rounded-xl p-4 hover-elevate"

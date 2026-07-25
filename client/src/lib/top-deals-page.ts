@@ -13,6 +13,17 @@ export function resolveTopDealsRouteSlug(
   return slug || null;
 }
 
+export function resolveTopDealsSlugFromLocation(location: string): string | null {
+  const pathname = location.split(/[?#]/, 1)[0].replace(/\/+$/, "");
+  const match = pathname.match(/^\/app\/top-deals\/([^/]+)$/);
+  if (!match) return null;
+  try {
+    return decodeURIComponent(match[1]).trim() || null;
+  } catch {
+    return match[1].trim() || null;
+  }
+}
+
 export function resolveTopDealsCategory(
   responseCategory: TopDealsCategorySummary | null | undefined,
   categories: TopDealsCategorySummary[],

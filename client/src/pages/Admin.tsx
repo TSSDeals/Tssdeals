@@ -4,7 +4,7 @@ import { AppShell } from "@/components/AppShell";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { redirectToLogin } from "@/lib/auth-utils";
-import { cn, applyEbayReferral } from "@/lib/utils";
+import { cn, outboundRetailerUrl } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
@@ -2074,7 +2074,7 @@ export default function AdminPage() {
                           <Button
                             size="icon"
                             variant="ghost"
-                            onClick={() => window.open(applyEbayReferral(deal.url), "_blank")}
+                            onClick={() => window.open(outboundRetailerUrl(deal.url), "_blank")}
                             data-testid={`feat-open-${deal.id}`}
                           >
                             <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
@@ -2914,7 +2914,7 @@ export default function AdminPage() {
                           <Button
                             size="icon"
                             variant="ghost"
-                            onClick={() => window.open(deal.url, "_blank")}
+                            onClick={() => window.open(outboundRetailerUrl(deal.url), "_blank")}
                             data-testid={`bonus-open-${deal.id}`}
                           >
                             <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
