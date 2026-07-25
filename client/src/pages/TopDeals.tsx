@@ -179,9 +179,9 @@ function CategoryDetail({ slug, onBack }: { slug: string; onBack: () => void }) 
         <div className="card-elevated flex flex-col items-center gap-3 p-10 text-center">
           <Trophy className="h-10 w-10 text-muted-foreground/40" />
           <div>
-            <div className="font-display text-lg font-bold">No deals found</div>
+            <div className="font-display text-lg font-bold">No verified deals right now</div>
             <div className="text-sm text-muted-foreground">
-              Check back soon — deals refresh 4 times daily.
+              No verified deals currently meet this category&apos;s quality standard. Check back after the next refresh.
             </div>
           </div>
         </div>
@@ -203,7 +203,7 @@ function CategoryDetail({ slug, onBack }: { slug: string; onBack: () => void }) 
       )}
 
       <div className="text-center text-xs text-muted-foreground">
-        Showing {deals.length} quality-ranked deals · Unverified savings claims are hidden
+        Showing {deals.length} verified {deals.length === 1 ? "deal" : "deals"} · Unverified savings claims are hidden
       </div>
     </div>
   );
