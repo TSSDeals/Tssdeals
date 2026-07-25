@@ -169,6 +169,9 @@ function CategoryDetail({ slug, onBack }: { slug: string; onBack: () => void }) 
           {category?.description ? (
             <p className="text-sm text-muted-foreground">{category.description}</p>
           ) : null}
+          <p className="mt-1 text-xs text-muted-foreground">
+            Ranked by verified value, product quality, freshness, and shopper interest—not claimed discount alone.
+          </p>
         </div>
       </div>
 
@@ -200,7 +203,7 @@ function CategoryDetail({ slug, onBack }: { slug: string; onBack: () => void }) 
       )}
 
       <div className="text-center text-xs text-muted-foreground">
-        Showing top {deals.length} deals · Updated every sync run
+        Showing {deals.length} quality-ranked deals · Unverified savings claims are hidden
       </div>
     </div>
   );
