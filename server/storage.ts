@@ -103,6 +103,7 @@ import {
 } from "@shared/schema";
 import { db } from "./db";
 import { assertTaxonomyApproval, type TaxonomyApprovalContext } from "./taxonomy-approval";
+import { rankTopDeals } from "./top-deals-ranking";
 
 const defaultSeedDatabase = db;
 
@@ -2416,10 +2417,6 @@ export class DatabaseStorage implements IStorage {
   async getCategoryDeals(category: DealCategory, limit = 20): Promise<Deal[]> {
     const whereParts: any[] = [];
 
-    if (!category.skipDiscount) {
-      whereParts.push(isNotNull(deals.percentOff));
-      whereParts.push(gte(dsql`CAST(${deals.percentOff} AS numeric)`, 20));
-    }
     whereParts.push(gte(deals.priceCents, 100));
 
     if (category.sportId) {
@@ -2491,20 +2488,31 @@ export class DatabaseStorage implements IStorage {
     const effectiveLimit = category.maxResults ?? limit;
     const where = whereParts.length ? and(...whereParts) : undefined;
 
-    const orderClauses = category.sortByPrice
-      ? [desc(deals.priceCents), desc(deals.foundAt)]
-      : [desc(dsql`CAST(${deals.percentOff} AS numeric)`), desc(deals.foundAt)];
-
-    // Fetch a wider pool so cross-source deduplication still yields a full list of
-    // unique products, then collapse same-product duplicates (highest discount wins).
+    // Ranking needs a broad, recent candidate pool. Pre-sorting by claimed percent-off
+    // would discard credible historical lows before the quality scorer can inspect them.
     const pool = await db
       .select()
       .from(deals)
       .where(where)
-      .orderBy(...orderClauses)
-      .limit(effectiveLimit * 5);
+      .orderBy(desc(deals.lastPriceConfirmedAt), desc(deals.lastSeenAt), desc(deals.foundAt))
+      .limit(Math.max(200, effectiveLimit * 20));
 
-    return dedupeDealPool(pool, { crossSource: true }).slice(0, effectiveLimit);
+    const clickCounts = new Map<string, number>();
+    if (pool.length > 0) {
+      const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const rows = await db
+        .select({ dealId: dealClicks.dealId, count: dsql<number>`count(*)::int` })
+        .from(dealClicks)
+        .where(and(inArray(dealClicks.dealId, pool.map((deal) => deal.id)), gte(dealClicks.clickedAt, since)))
+        .groupBy(dealClicks.dealId);
+      for (const row of rows) clickCounts.set(row.dealId, Number(row.count));
+    }
+
+    return rankTopDeals(pool, {
+      category,
+      clickCounts,
+      limit: effectiveLimit,
+    });
   }
 
   async trackSearch(query: string, userId?: string): Promise<void> {

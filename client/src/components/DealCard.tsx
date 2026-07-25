@@ -121,14 +121,15 @@ export function DealCard({
   };
 
   const derived = useMemo(() => {
-    const percent = formatPercent(deal?.percentOff);
+    const suppressUntrustedSavings = deal?.topDealSavingsTrusted === false;
+    const percent = suppressUntrustedSavings ? "â€”" : formatPercent(deal?.percentOff);
     const price = formatMoney(deal?.priceCents, deal?.currency);
     const msrp = formatMoney(deal?.msrpCents, deal?.currency);
-    const hasMsrp = deal?.msrpCents !== null && deal?.msrpCents !== undefined;
+    const hasMsrp = !suppressUntrustedSavings && deal?.msrpCents !== null && deal?.msrpCents !== undefined;
     const msrpVerified = Boolean(deal?.msrpVerified);
     const msrpSource = deal?.msrpSource ?? "retailer";
 
-    const hasMfrMsrp = deal?.manufacturerMsrpCents != null && deal.manufacturerMsrpCents > 0;
+    const hasMfrMsrp = !suppressUntrustedSavings && deal?.manufacturerMsrpCents != null && deal.manufacturerMsrpCents > 0;
     const mfrMsrp = hasMfrMsrp ? formatMoney(deal!.manufacturerMsrpCents, deal?.currency) : null;
     let mfrPercentOff: string | null = null;
     if (hasMfrMsrp && deal?.priceCents) {
@@ -267,6 +268,17 @@ export function DealCard({
                     30d Low
                   </Badge>
                 ) : null}
+                {Array.isArray(deal?.topDealReasons)
+                  ? deal.topDealReasons.slice(0, 2).map((reason: any) => (
+                      <Badge
+                        key={reason.code}
+                        className="border-primary/20 bg-primary/10 text-primary"
+                        data-testid={`top-deal-reason-${reason.code}`}
+                      >
+                        {reason.label}
+                      </Badge>
+                    ))
+                  : null}
               </div>
 
               {deal?.promoCode && (
