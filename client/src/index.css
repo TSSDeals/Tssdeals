@@ -31,7 +31,7 @@
 /* ==========================================================================
    TwinSeam Deals — clean minimal, modern sporting goods, trustable deal-finder
    Typography: fast system stacks with a sturdy slab display fallback
-   Palette: crisp slate base + deep teal primary + safety orange accent
+   Palette: cool blue-grey base + deep blue primary + steel-blue accent
    ========================================================================== */
 
 :root {
@@ -40,54 +40,57 @@
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 
   /* Surfaces */
-  --background: 210 40% 98%;
-  --foreground: 222 38% 12%;
+  --background: 214 33% 98%;
+  --foreground: 218 45% 13%;
 
   --card: 0 0% 100%;
-  --card-foreground: 222 38% 12%;
-  --card-border: 220 22% 90%;
+  --card-foreground: 218 45% 13%;
+  --card-border: 214 24% 89%;
 
   --popover: 0 0% 100%;
-  --popover-foreground: 222 38% 12%;
-  --popover-border: 220 22% 90%;
+  --popover-foreground: 218 45% 13%;
+  --popover-border: 214 24% 89%;
 
   /* UI primitives */
-  --border: 220 18% 88%;
-  --input: 220 18% 84%;
-  --ring: 174 84% 34%;
+  --border: 214 22% 87%;
+  --input: 214 22% 81%;
+  --ring: 213 64% 38%;
 
   /* Brand */
-  --primary: 174 84% 30%;
-  --primary-foreground: 210 40% 98%;
+  --brand-navy: 218 53% 21%;
+  --brand-steel: 210 30% 46%;
+  --brand-surface: 214 45% 96%;
+  --primary: 213 64% 38%;
+  --primary-foreground: 0 0% 100%;
 
-  --secondary: 210 30% 96%;
-  --secondary-foreground: 222 38% 12%;
+  --secondary: 214 38% 95%;
+  --secondary-foreground: 218 45% 18%;
 
-  --muted: 210 25% 96%;
-  --muted-foreground: 215 16% 40%;
+  --muted: 214 28% 95%;
+  --muted-foreground: 215 18% 38%;
 
-  --accent: 22 90% 56%;
-  --accent-foreground: 210 40% 98%;
+  --accent: 210 30% 46%;
+  --accent-foreground: 0 0% 100%;
 
   --destructive: 0 84% 56%;
   --destructive-foreground: 210 40% 98%;
 
   /* Sidebar tokens */
   --sidebar: 0 0% 100%;
-  --sidebar-foreground: 222 38% 12%;
-  --sidebar-border: 220 20% 90%;
-  --sidebar-primary: 174 84% 30%;
-  --sidebar-primary-foreground: 210 40% 98%;
-  --sidebar-accent: 210 30% 96%;
-  --sidebar-accent-foreground: 222 38% 12%;
-  --sidebar-ring: 174 84% 34%;
+  --sidebar-foreground: 218 45% 13%;
+  --sidebar-border: 214 24% 89%;
+  --sidebar-primary: 213 64% 38%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 214 38% 95%;
+  --sidebar-accent-foreground: 218 45% 18%;
+  --sidebar-ring: 213 64% 38%;
 
   /* Charts (unused, but keep coherent) */
-  --chart-1: 174 84% 30%;
-  --chart-2: 22 90% 56%;
-  --chart-3: 200 92% 45%;
-  --chart-4: 270 75% 55%;
-  --chart-5: 140 65% 40%;
+  --chart-1: 213 64% 38%;
+  --chart-2: 210 30% 46%;
+  --chart-3: 218 53% 21%;
+  --chart-4: 202 55% 48%;
+  --chart-5: 145 55% 36%;
 
   --radius: 0.9rem;
 
@@ -107,44 +110,47 @@
 }
 
 .dark {
-  --background: 222 52% 8%;
+  --background: 219 48% 8%;
   --foreground: 210 40% 98%;
 
-  --card: 222 46% 10%;
+  --card: 218 42% 11%;
   --card-foreground: 210 40% 98%;
-  --card-border: 222 28% 18%;
+  --card-border: 215 27% 20%;
 
-  --popover: 222 46% 10%;
+  --popover: 218 42% 11%;
   --popover-foreground: 210 40% 98%;
-  --popover-border: 222 28% 18%;
+  --popover-border: 215 27% 20%;
 
-  --border: 222 26% 18%;
-  --input: 222 26% 24%;
-  --ring: 174 84% 40%;
+  --border: 215 25% 20%;
+  --input: 215 24% 27%;
+  --ring: 211 76% 62%;
 
-  --primary: 174 84% 40%;
-  --primary-foreground: 222 52% 8%;
+  --brand-navy: 214 52% 82%;
+  --brand-steel: 210 40% 64%;
+  --brand-surface: 216 34% 15%;
+  --primary: 211 76% 62%;
+  --primary-foreground: 219 48% 8%;
 
-  --secondary: 222 36% 14%;
+  --secondary: 216 34% 15%;
   --secondary-foreground: 210 40% 98%;
 
-  --muted: 222 36% 14%;
-  --muted-foreground: 215 20% 70%;
+  --muted: 216 30% 15%;
+  --muted-foreground: 214 20% 72%;
 
-  --accent: 22 90% 56%;
-  --accent-foreground: 222 52% 8%;
+  --accent: 210 40% 64%;
+  --accent-foreground: 219 48% 8%;
 
   --destructive: 0 84% 60%;
   --destructive-foreground: 210 40% 98%;
 
-  --sidebar: 222 46% 10%;
+  --sidebar: 218 42% 11%;
   --sidebar-foreground: 210 40% 98%;
-  --sidebar-border: 222 28% 18%;
-  --sidebar-primary: 174 84% 40%;
-  --sidebar-primary-foreground: 222 52% 8%;
-  --sidebar-accent: 222 36% 14%;
+  --sidebar-border: 215 27% 20%;
+  --sidebar-primary: 211 76% 62%;
+  --sidebar-primary-foreground: 219 48% 8%;
+  --sidebar-accent: 216 34% 15%;
   --sidebar-accent-foreground: 210 40% 98%;
-  --sidebar-ring: 174 84% 40%;
+  --sidebar-ring: 211 76% 62%;
 
   --elevate-1: rgba(255, 255, 255, 0.05);
   --elevate-2: rgba(255, 255, 255, 0.10);
@@ -190,8 +196,8 @@
     background:
       radial-gradient(900px 480px at 20% 10%, hsl(var(--primary) / 0.18), transparent 55%),
       radial-gradient(720px 420px at 85% 18%, hsl(var(--accent) / 0.20), transparent 52%),
-      radial-gradient(820px 520px at 60% 95%, hsl(200 92% 45% / 0.15), transparent 58%),
-      linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--background)) 55%, hsl(210 40% 96%) 100%);
+      radial-gradient(820px 520px at 60% 95%, hsl(var(--brand-steel) / 0.13), transparent 58%),
+      linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--background)) 55%, hsl(var(--brand-surface)) 100%);
   }
 
   .grain::before {

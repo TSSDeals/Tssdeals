@@ -222,11 +222,11 @@ export function DealCard({
                     6mo Low
                   </Badge>
                 ) : deal?.isLow90d ? (
-                  <Badge className="border-teal-500/25 bg-teal-500/10 text-teal-600 dark:text-teal-400" data-testid="deal-low-90d">
+                  <Badge className="border-blue-500/25 bg-blue-500/10 text-blue-700 dark:text-blue-300" data-testid="deal-low-90d">
                     90d Low
                   </Badge>
                 ) : deal?.isLow60d ? (
-                  <Badge className="border-teal-500/25 bg-teal-500/10 text-teal-600 dark:text-teal-400" data-testid="deal-low-60d">
+                  <Badge className="border-blue-500/25 bg-blue-500/10 text-blue-700 dark:text-blue-300" data-testid="deal-low-60d">
                     60d Low
                   </Badge>
                 ) : deal?.isLow30d ? (
