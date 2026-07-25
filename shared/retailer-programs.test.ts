@@ -7,6 +7,7 @@ import {
   BASELINE_SPORTS_SOURCE_ID,
   preferredRetailerRank,
   recommendBaselineCoupon,
+  SHOPIFY_COLLECTIVE_SOURCE_ID,
   TWIN_SEAM_SOURCE_ID,
   type ComparableRetailOffer,
 } from "./retailer-programs";
@@ -30,11 +31,11 @@ test("Baseline affiliate URL tagging replaces duplicates and preserves query and
   );
 });
 
-test("preferred source order is Twin Seam, Baseline, then others", () => {
+test("preferred source order is Twin Seam, Collective, Baseline, then others", () => {
   assert.deepEqual(
-    [BASELINE_SPORTS_SOURCE_ID, "ebay", TWIN_SEAM_SOURCE_ID]
+    [BASELINE_SPORTS_SOURCE_ID, "ebay", SHOPIFY_COLLECTIVE_SOURCE_ID, TWIN_SEAM_SOURCE_ID]
       .sort((a, b) => preferredRetailerRank(a) - preferredRetailerRank(b)),
-    [TWIN_SEAM_SOURCE_ID, BASELINE_SPORTS_SOURCE_ID, "ebay"],
+    [TWIN_SEAM_SOURCE_ID, SHOPIFY_COLLECTIVE_SOURCE_ID, BASELINE_SPORTS_SOURCE_ID, "ebay"],
   );
 });
 

@@ -2153,6 +2153,8 @@ export class DatabaseStorage implements IStorage {
     await db.insert(sources).values([
       // Our Store
       { id: "twin-seam-sports", name: "Twin Seam Sports", baseUrl: "https://www.twinseamsports.com", isOurStore: true, priorityBoost: 50, category: "baseball" },
+      // Products sold through Twin Seam via Shopify Collective.
+      { id: "shopify-collective", name: "Twin Seam Collective", baseUrl: "https://www.twinseamsports.com", priorityBoost: 45, category: "multi-sport" },
       // Preferred affiliate partner. Live catalog ingestion remains separately
       // disabled until ENABLE_BASELINE_SPORTS_SYNC is explicitly approved.
       { id: "baseline-sports", name: "Baseline Sports", baseUrl: "https://www.baselinesports.us", priorityBoost: 40, category: "baseball" },
