@@ -48,6 +48,7 @@ import {
   hasStrongBaseballGloveSearchIntent,
   normalizeDealSearch,
   normalizeGloveSize,
+  orderDealsBySearchSpecificity,
   searchAliasPattern,
 } from "./deal-search";
 import {
@@ -944,7 +945,9 @@ export class DatabaseStorage implements IStorage {
       .orderBy(...orderClause)
       .limit(limit);
 
-    return results;
+    return normalizedSearch && params.q
+      ? orderDealsBySearchSpecificity(params.q, results)
+      : results;
   }
 
   async hideDeal(userId: string, dealId: string): Promise<void> {

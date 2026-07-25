@@ -303,6 +303,26 @@ export function dealSearchMatchSpecificity(
   }, 0);
 }
 
+/**
+ * Stable final ordering guard for database-backed search results. The database
+ * still performs candidate retrieval and its selected sort within each tier;
+ * this only guarantees that exact structured attributes precede broad recovery.
+ */
+export function orderDealsBySearchSpecificity<T extends SearchableDeal>(
+  query: string,
+  deals: T[],
+): T[] {
+  const search = normalizeDealSearch(query);
+  return deals
+    .map((deal, index) => ({
+      deal,
+      index,
+      specificity: dealSearchMatchSpecificity(search, deal),
+    }))
+    .sort((a, b) => b.specificity - a.specificity || a.index - b.index)
+    .map(({ deal }) => deal);
+}
+
 export function matchesDealClassificationFilters(
   deal: SearchableDeal,
   filters: { q?: string; sportId?: string; equipmentTypeId?: string; equipmentTypeIds?: string[] },

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Deal } from "@shared/schema";
-import { rankTopDeals } from "./top-deals-ranking";
+import { matchesTopDealCategoryBoundary, rankTopDeals } from "./top-deals-ranking";
 
 const now = new Date("2026-07-24T12:00:00Z");
 
@@ -96,6 +96,58 @@ test("explicit accessory categories can rank useful accessories", () => {
     category: { sportId: "baseball", equipmentTypeId: "bb-accessories", searchQuery: "accessories" },
   });
   assert.equal(ranked[0]?.id, "accessory");
+});
+
+test("fielding-glove categories keep position gloves and exclude adjacent gear", () => {
+  const context = {
+    now,
+    category: {
+      name: "Elite Baseball Glove Deals",
+      slug: "elite-baseball-gloves",
+      sportId: "baseball",
+      equipmentTypeId: null,
+      searchQuery: "glove mitt",
+    },
+  };
+  const fixtures = [
+    deal({ id: "fielding", title: 'Wilson A2000 1786 11.5" Baseball Fielding Glove' }),
+    deal({ id: "catcher", title: "Rawlings Heart of the Hide Catcher's Mitt" }),
+    deal({ id: "first-base", title: "Wilson A2000 First Base Mitt" }),
+    deal({ id: "batting", title: "Franklin CFX Pro Baseball Batting Gloves", equipmentTypeId: "bb-gloves" }),
+    deal({ id: "sliding", title: "Evoshield Sliding Mitt", equipmentTypeId: "bb-gloves" }),
+    deal({ id: "helmet", title: "Rawlings Mach AI Batting Helmet", equipmentTypeId: "bb-gloves" }),
+    deal({ id: "oven", title: "Baseball Training Oven Mitt Accessory", equipmentTypeId: "bb-gloves" }),
+    deal({ id: "care", title: "Premium Baseball Glove Care and Lace Kit", equipmentTypeId: "bb-gloves" }),
+    deal({ id: "signed", title: "Mookie Betts Signed Baseball Glove Memorabilia", equipmentTypeId: "bb-gloves" }),
+  ];
+
+  assert.deepEqual(
+    fixtures.filter((item) => matchesTopDealCategoryBoundary(item, context)).map((item) => item.id),
+    ["fielding", "catcher", "first-base"],
+  );
+  assert.deepEqual(
+    rankTopDeals(fixtures, context).map((item) => item.id).sort(),
+    ["catcher", "fielding", "first-base"],
+  );
+});
+
+test("bat categories reject batting helmets and accessories without affecting real bats", () => {
+  const context = {
+    now,
+    category: {
+      name: "Top Baseball Bat Deals",
+      slug: "baseball-bats",
+      sportId: "baseball",
+      equipmentTypeId: null,
+      searchQuery: "bat bbcor",
+    },
+  };
+  const bat = deal({ id: "bat", title: "Louisville Slugger Atlas BBCOR Baseball Bat", equipmentTypeId: "bb-bats" });
+  const helmet = deal({ id: "helmet", title: "Rawlings Mach Batting Helmet", equipmentTypeId: "bb-bats" });
+  const grip = deal({ id: "grip", title: "Premium Baseball Bat Grip Tape", equipmentTypeId: "bb-bats" });
+  assert.equal(matchesTopDealCategoryBoundary(bat, context), true);
+  assert.equal(matchesTopDealCategoryBoundary(helmet, context), false);
+  assert.equal(matchesTopDealCategoryBoundary(grip, context), false);
 });
 
 test("shipping distortion cannot turn a low sticker price into a top deal", () => {

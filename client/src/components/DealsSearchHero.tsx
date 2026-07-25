@@ -164,19 +164,11 @@ export function DealsSearchHero({
       </section>
 
       <section className="animate-float-in" data-testid="baseball-category-browser">
-        <div className="mb-3 flex items-end justify-between gap-3">
+        <div className="mb-3">
           <div>
             <h2 className="text-xl font-bold sm:text-2xl">Shop baseball</h2>
             <p className="text-xs text-muted-foreground sm:text-sm">A concise equipment menu—no global taxonomy clutter.</p>
           </div>
-          <button
-            type="button"
-            onClick={() => onCategory(SHOPPER_MEMORABILIA_SPORT_ID, "all")}
-            className="ring-focus min-h-11 shrink-0 rounded-xl border border-border bg-card px-3 text-xs font-bold hover:border-primary/35"
-            data-testid="browse-sport-memorabilia"
-          >
-            Memorabilia
-          </button>
         </div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
           {BASEBALL_QUICK_CATEGORIES.map((category) => (
@@ -190,6 +182,14 @@ export function DealsSearchHero({
               {category.name}
             </button>
           ))}
+          <button
+            type="button"
+            onClick={() => onCategory(SHOPPER_MEMORABILIA_SPORT_ID, "all")}
+            className="ring-focus min-h-14 rounded-2xl border border-border bg-card px-3 py-3 text-left text-sm font-bold shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-md"
+            data-testid="browse-sport-memorabilia"
+          >
+            Memorabilia
+          </button>
         </div>
       </section>
     </>
