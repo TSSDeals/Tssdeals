@@ -4,6 +4,7 @@ import { z } from "zod";
 import crypto from "crypto";
 import { api } from "@shared/routes";
 import { storage } from "./storage";
+import { shopperTopDealCategory } from "./top-deals-ranking";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { searchCJProducts, searchCJProductsPaginated, cjProductToDeal, getSportKeywords, getCJPartners } from "./cj-affiliate";
 import { searchEbayProducts, ebayItemToDeal, getEbaySportKeywords, getEbayCategorySyncs, searchEbayDealItems, ebayDealItemToDeal, getEbayDealCategorySyncs } from "./ebay-api";
@@ -1129,7 +1130,7 @@ export async function registerRoutes(
 
   app.get("/api/deal-categories", async (_req, res) => {
     const categories = await storage.listDealCategories(true);
-    res.json(categories);
+    res.json(categories.map(shopperTopDealCategory));
   });
 
   app.get("/api/deal-categories/:slug", async (req, res) => {
@@ -1137,8 +1138,8 @@ export async function registerRoutes(
     if (!category) {
       return res.status(404).json({ message: "Category not found" });
     }
-    const deals = await storage.getCategoryDeals(category, 20);
-    res.json({ category, deals });
+    const deals = await storage.getCategoryDeals(category, 40);
+    res.json({ category: shopperTopDealCategory(category), deals });
   });
 
   app.get("/api/popular-searches", async (_req, res) => {

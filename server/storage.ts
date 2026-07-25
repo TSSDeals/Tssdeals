@@ -1942,15 +1942,15 @@ export class DatabaseStorage implements IStorage {
     const existingCats = await db.select().from(dealCategories).limit(1);
     if (existingCats.length === 0) {
       await db.insert(dealCategories).values([
-        { name: "Top 20 Baseball/Softball Glove Deals Today", slug: "baseball-softball-gloves", description: "Best glove deals from across the web", searchQuery: "glove mitt", sportId: "baseball", isPredefined: true, sortOrder: 1, enabled: true },
-        { name: "Top 20 Baseball Bat Deals Today", slug: "baseball-bats", description: "Best baseball bat deals available now", searchQuery: "bat bbcor", sportId: "baseball", isPredefined: true, sortOrder: 2, enabled: true },
-        { name: "Top 20 Fastpitch Softball Bat Deals Today", slug: "fastpitch-softball-bats", description: "Best fastpitch softball bat deals today", searchQuery: "fastpitch bat", sportId: "fastpitch-softball", isPredefined: true, sortOrder: 3, enabled: true },
-        { name: "Top 20 Running Shoes Deals Today", slug: "running-shoes", description: "Top deals on running shoes", searchQuery: "running shoes sneakers", isPredefined: true, sortOrder: 4, enabled: true },
-        { name: "Top 20 Baseball/Football/Softball Cleats Deals", slug: "cleats", description: "Best cleat deals across baseball, football, and softball", searchQuery: "cleats spikes", isPredefined: true, sortOrder: 5, enabled: true },
+        { name: "Top Baseball & Softball Fielding Glove Deals", slug: "baseball-softball-gloves", description: "Verified fielding glove and position mitt deals", searchQuery: "glove mitt", sportId: "baseball", isPredefined: true, sortOrder: 1, enabled: true },
+        { name: "Top Baseball Bat Deals", slug: "baseball-bats", description: "Verified baseball bat deals available now", searchQuery: "bat bbcor", sportId: "baseball", isPredefined: true, sortOrder: 2, enabled: true },
+        { name: "Top Fastpitch Softball Bat Deals", slug: "fastpitch-softball-bats", description: "Verified fastpitch softball bat deals", searchQuery: "fastpitch bat", sportId: "fastpitch-softball", isPredefined: true, sortOrder: 3, enabled: true },
+        { name: "Top Running Shoe Deals", slug: "running-shoes", description: "Verified running footwear deals", searchQuery: "running shoes sneakers", isPredefined: true, sortOrder: 4, enabled: true },
+        { name: "Top Cleat Deals", slug: "cleats", description: "Verified baseball, football, and softball cleat deals", searchQuery: "cleats spikes", isPredefined: true, sortOrder: 5, enabled: true },
         { name: "Premium & Collector Gloves", slug: "premium-collector-gloves", description: "High-end, limited edition, and handmade baseball gloves from premium brands including Japanese hardball/hard grab gloves", searchQuery: "glove mitt", sportId: "baseball", brandKeywords: ["Mizuno Pro", "Haga", "Junkei", "Atoms", "JB", "Slaps", "Jax", "Jax Athletics", "Wilson Staff", "Wilson A2K", "Rawlings Pro Preferred", "Rawlings Heart of the Hide", "Rawlings Pro Limited", "ASICS", "SSK", "Zett", "Hi-Gold", "HiGold", "IP Select", "Donaiya", "Kubota Slugger", "Tamazawa", "Ryu", "Glove Studio Ryu", "Leggera", "Pro Haga", "Mizuno Pro Select", "Mizuno Limited", "Made in Japan", "Handmade", "Wagyu-JB", "Wagyu", "David Sports", "D-Quest", "Emery"], isPredefined: true, sortOrder: 5, enabled: true, skipDiscount: true, sortByPrice: true, minPriceCents: 35000, maxResults: 200 },
-        { name: "Elite Baseball Glove Deals", slug: "elite-baseball-gloves", description: "Premium high-end baseball glove deals from top brands", searchQuery: "glove", sportId: "baseball", brandKeywords: ["Wilson A2K", "Rawlings Pro Preferred", "Mizuno Pro", "Junkei", "Slaps", "Ryu Glove Designs", "IP Select", "Leggera"], isPredefined: true, sortOrder: 6, enabled: true, skipDiscount: true, sortByPrice: true, maxResults: 500 },
+        { name: "Top Elite Baseball Glove Deals", slug: "elite-baseball-gloves", description: "Verified premium baseball glove deals from trusted families", searchQuery: "glove", sportId: "baseball", brandKeywords: ["Wilson A2K", "Rawlings Pro Preferred", "Mizuno Pro", "Junkei", "Slaps", "Ryu Glove Designs", "IP Select", "Leggera"], isPredefined: true, sortOrder: 6, enabled: true, skipDiscount: true, sortByPrice: true, maxResults: 500 },
         { name: "Top Fitness & Exercise Deals Today", slug: "fitness-exercise", description: "Best deals on fitness and exercise equipment", searchQuery: "fitness exercise gym equipment weights", isPredefined: true, sortOrder: 7, enabled: true },
-        { name: "Top 20 Golf Club Deals Today", slug: "golf-clubs", description: "Best golf club deals from drivers to putters", searchQuery: "club driver iron wedge putter", sportId: "golf", isPredefined: true, sortOrder: 8, enabled: true },
+        { name: "Top Golf Club Deals", slug: "golf-clubs", description: "Verified golf club deals from drivers to putters", searchQuery: "club driver iron wedge putter", sportId: "golf", isPredefined: true, sortOrder: 8, enabled: true },
       ]).onConflictDoNothing();
     }
 
@@ -2488,7 +2488,7 @@ export class DatabaseStorage implements IStorage {
       whereParts.push(dsql`LOWER(${deals.title}) NOT LIKE '%cricket%'`);
     }
 
-    const effectiveLimit = category.maxResults ?? limit;
+    const effectiveLimit = Math.min(category.maxResults ?? limit, limit);
     const where = whereParts.length ? and(...whereParts) : undefined;
 
     // Ranking needs a broad, recent candidate pool. Pre-sorting by claimed percent-off
@@ -2560,7 +2560,7 @@ export class DatabaseStorage implements IStorage {
       if (existingSlugs.has(slug)) continue;
 
       await db.insert(dealCategories).values({
-        name: `Top 20 ${query.charAt(0).toUpperCase() + query.slice(1)} Deals`,
+        name: `Top ${query.charAt(0).toUpperCase() + query.slice(1)} Deals`,
         slug,
         description: `Popular search: "${query}"`,
         searchQuery: query,

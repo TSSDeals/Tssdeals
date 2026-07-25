@@ -119,6 +119,11 @@ test("fielding-glove categories keep position gloves and exclude adjacent gear",
     deal({ id: "oven", title: "Baseball Training Oven Mitt Accessory", equipmentTypeId: "bb-gloves" }),
     deal({ id: "care", title: "Premium Baseball Glove Care and Lace Kit", equipmentTypeId: "bb-gloves" }),
     deal({ id: "signed", title: "Mookie Betts Signed Baseball Glove Memorabilia", equipmentTypeId: "bb-gloves" }),
+    deal({ id: "staff-golf", title: "Staff Model® Glove", equipmentTypeId: "bb-gloves" }),
+    deal({ id: "rain-golf", title: "Rain Gloves", equipmentTypeId: "bb-gloves" }),
+    deal({ id: "conform-golf", title: "Wilson Men's Conform Glove", equipmentTypeId: "bb-gloves" }),
+    deal({ id: "football", title: "Wilson GST Football Receiver Gloves", equipmentTypeId: "bb-gloves" }),
+    deal({ id: "work", title: "Cold Weather Work Gloves", equipmentTypeId: "bb-gloves" }),
   ];
 
   assert.deepEqual(
@@ -128,6 +133,48 @@ test("fielding-glove categories keep position gloves and exclude adjacent gear",
   assert.deepEqual(
     rankTopDeals(fixtures, context).map((item) => item.id).sort(),
     ["catcher", "fielding", "first-base"],
+  );
+});
+
+test("elite glove categories require trusted premium family or source evidence", () => {
+  const context = {
+    now,
+    category: {
+      name: "Elite Baseball Glove Deals",
+      slug: "elite-baseball-gloves",
+      sportId: "baseball",
+      equipmentTypeId: null,
+      searchQuery: "glove",
+    },
+  };
+  const fixtures = [
+    deal({ id: "a2k", sourceId: "source-a2k", title: 'Wilson A2K 1786 11.5" Baseball Glove', brand: "Wilson", raw: { sellerUsername: "seller-a2k" } }),
+    deal({ id: "a2000", sourceId: "source-a2000", title: 'Wilson A2000 1786 11.5" Baseball Glove', brand: "Wilson", raw: { sellerUsername: "seller-a2000" } }),
+    deal({ id: "hoh", sourceId: "source-hoh", title: 'Rawlings Heart of the Hide 11.75" Infield Glove', brand: "Rawlings", raw: { sellerUsername: "seller-hoh" } }),
+    deal({ id: "pro-preferred", sourceId: "source-pro-preferred", title: 'Rawlings Pro Preferred 12.75" Outfield Glove', brand: "Rawlings", raw: { sellerUsername: "seller-pro-preferred" } }),
+    deal({ id: "mizuno-pro", sourceId: "source-mizuno-pro", title: 'Mizuno Pro 11.5" Baseball Glove', brand: "Mizuno", raw: { sellerUsername: "seller-mizuno-pro" } }),
+    deal({
+      id: "premium-source",
+      sourceId: "ball-glove-blueprint",
+      title: '11.5" Inaba Infield Baseball Glove',
+      brand: "Inaba",
+      raw: { premiumGloveSource: true, premiumMaker: "Inaba", glovePosition: "infield", sellerUsername: "ball-glove-blueprint" },
+    }),
+    deal({ id: "prospect", title: "Mizuno Prospect Series PowerClose Baseball Glove", brand: "Mizuno" }),
+    deal({ id: "players", title: "Rawlings Players Series Youth Baseball Glove", brand: "Rawlings" }),
+    deal({ id: "r9", title: "Rawlings R9 Series Baseball Glove", brand: "Rawlings" }),
+    deal({ id: "a500", title: "Wilson A500 Youth Baseball Glove", brand: "Wilson" }),
+    deal({ id: "a700", title: "Wilson A700 Baseball Glove", brand: "Wilson" }),
+    deal({ id: "generic", title: "Premium Leather Baseball Glove", brand: null }),
+  ];
+
+  assert.deepEqual(
+    fixtures.filter((item) => matchesTopDealCategoryBoundary(item, context)).map((item) => item.id),
+    ["a2k", "a2000", "hoh", "pro-preferred", "mizuno-pro", "premium-source"],
+  );
+  assert.deepEqual(
+    rankTopDeals(fixtures, context).map((item) => item.id).sort(),
+    ["a2000", "a2k", "hoh", "mizuno-pro", "premium-source", "pro-preferred"].sort(),
   );
 });
 
@@ -148,6 +195,70 @@ test("bat categories reject batting helmets and accessories without affecting re
   assert.equal(matchesTopDealCategoryBoundary(bat, context), true);
   assert.equal(matchesTopDealCategoryBoundary(helmet, context), false);
   assert.equal(matchesTopDealCategoryBoundary(grip, context), false);
+});
+
+test("baseball bat gate rejects production racquet and apparel leaks", () => {
+  const context = { now, category: { slug: "baseball-bats", name: "Top Baseball Bat Deals", searchQuery: "bat bbcor", sportId: "baseball" } };
+  const fixtures = [
+    deal({ id: "valid", title: "Louisville Slugger Atlas BBCOR Baseball Bat", equipmentTypeId: "bb-bats" }),
+    deal({ id: "shift", title: "Wilson SHIFT 99 V1.0 FRM CUSTOM", equipmentTypeId: "bb-bats" }),
+    deal({ id: "ultra", title: "Wilson Ultra 95 QZV5 Tennis Racket", equipmentTypeId: "bb-bats" }),
+    deal({ id: "griffey", title: "Ken Griffey Jr Seattle Mariners Baseball Jersey", equipmentTypeId: "bb-bats" }),
+    deal({ id: "jeter", title: "Derek Jeter New York Yankees Jersey", equipmentTypeId: "bb-bats" }),
+  ];
+  assert.deepEqual(fixtures.filter((item) => matchesTopDealCategoryBoundary(item, context)).map((item) => item.id), ["valid"]);
+});
+
+test("fastpitch bat variants collapse by model family before counting", () => {
+  const context = { now, category: { slug: "fastpitch-softball-bats", name: "Top Fastpitch Softball Bat Deals", searchQuery: "fastpitch bat", sportId: "fastpitch-softball" } };
+  const variants = [-11, -10, -9, -8].map((drop, index) =>
+    deal({
+      id: `astura-${drop}`,
+      sourceId: `source-${index}`,
+      title: `2025 Marucci Astura Fastpitch Softball Bat ${drop}`,
+      brand: "Marucci",
+      equipmentTypeId: "fp-bats",
+      sportId: "fastpitch-softball",
+      url: `https://example.com/astura-${drop}`,
+      priceDropPercent: String(20 + index),
+    }),
+  );
+  const ranked = rankTopDeals(variants, context);
+  assert.equal(ranked.length, 1);
+  assert.match(ranked[0].title, /Marucci Astura/);
+});
+
+test("running shoes and cleats require footwear form and reject apparel mentions", () => {
+  const running = { now, category: { slug: "running-shoes", name: "Top Running Shoe Deals", searchQuery: "running shoes" } };
+  const cleats = { now, category: { slug: "cleats", name: "Top Cleat Deals", searchQuery: "cleats spikes" } };
+  assert.equal(matchesTopDealCategoryBoundary(deal({ title: "Nike Pegasus 41 Road Running Shoes", equipmentTypeId: "running-shoes" }), running), true);
+  assert.equal(matchesTopDealCategoryBoundary(deal({ title: "Fear of God MLB Athletics Sweatshirt", equipmentTypeId: "running-shoes" }), running), false);
+  assert.equal(matchesTopDealCategoryBoundary(deal({ title: "New Balance FuelCell Baseball Cleats", equipmentTypeId: "cleats" }), cleats), true);
+  assert.equal(matchesTopDealCategoryBoundary(deal({ title: "Team Shirt Designed to Match Cleats", equipmentTypeId: "cleats" }), cleats), false);
+});
+
+test("golf clubs require actual club form and cap non-USD results", () => {
+  const context = { now, limit: 10, category: { slug: "golf-clubs", name: "Top Golf Club Deals", searchQuery: "club driver iron wedge putter", sportId: "golf" } };
+  const usd = deal({ id: "usd-driver", title: "TaylorMade Qi10 Golf Driver", equipmentTypeId: "golf-clubs", sportId: "golf", currency: "USD" });
+  const leaks = [
+    deal({ id: "golf-shirt", title: "Titleist Golf Polo Shirt", equipmentTypeId: "golf-clubs", sportId: "golf" }),
+    deal({ id: "headcover", title: "Driver Headcover Accessory", equipmentTypeId: "golf-clubs", sportId: "golf" }),
+  ];
+  const foreign = Array.from({ length: 6 }, (_, index) =>
+    deal({
+      id: `eur-${index}`,
+      sourceId: `foreign-${index}`,
+      title: `Callaway Paradym Golf Driver Model ${index}`,
+      equipmentTypeId: "golf-clubs",
+      sportId: "golf",
+      currency: "EUR",
+      url: `https://example.eu/driver-${index}`,
+    }),
+  );
+  const ranked = rankTopDeals([usd, ...leaks, ...foreign], context);
+  assert.equal(ranked[0].id, "usd-driver");
+  assert.equal(ranked.some((item) => leaks.some((leak) => leak.id === item.id)), false);
+  assert.ok(ranked.filter((item) => item.currency === "EUR").length <= 2);
 });
 
 test("shipping distortion cannot turn a low sticker price into a top deal", () => {

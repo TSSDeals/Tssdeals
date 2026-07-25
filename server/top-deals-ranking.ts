@@ -12,15 +12,36 @@ const FIELDING_GLOVE_CATEGORY_PATTERN =
 const FIELDING_GLOVE_EQUIPMENT_PATTERN =
   /^(?:(?:bb|fp|sp)-(?:gloves?|fielding-gloves?)|baseball-gloves?|softball-gloves?|fielding-gloves?|gloves?)$/i;
 const FIELDING_GLOVE_TITLE_PATTERN =
-  /\b(?:(?:baseball|softball|fastpitch|slowpitch)\s+(?:fielding\s+)?gloves?|(?:infield(?:er)?|outfield(?:er)?|pitcher(?:'s)?|fielding)\s+gloves?|catcher(?:'s)?\s+mitts?|first[\s-]*base(?:man(?:'s)?)?\s+mitts?|a(?:1000|2000|2k)\b|heart\s+of\s+the\s+hide|pro\s+preferred)\b/i;
+  /\b(?:(?:baseball|softball|fastpitch|slowpitch)\s+(?:fielding\s+)?(?:gloves?|mitts?)|(?:infield(?:er)?|outfield(?:er)?|pitcher(?:'s)?|fielding)\s+(?:gloves?|mitts?)|catcher(?:'s)?\s+mitts?|first[\s-]*base(?:man(?:'s)?)?\s+mitts?|a(?:1000|2000|2k)\b|heart\s+of\s+the\s+hide|pro\s+preferred)\b/i;
+const FIELDING_GLOVE_STRUCTURED_PATTERN =
+  /\b(?:baseball|softball|fastpitch|slowpitch|fielding|infield|outfield|pitcher|catcher|first[\s-]*base)\b[\s\S]*\b(?:gloves?|mitts?)\b|\b(?:gloves?|mitts?)\b[\s\S]*\b(?:baseball|softball|fastpitch|slowpitch|fielding|infield|outfield|pitcher|catcher|first[\s-]*base)\b/i;
 const FIELDING_GLOVE_EXCLUSION_PATTERN =
-  /\b(?:batting\s+gloves?|sliding\s+mitts?|oven\s+mitts?|training\s+mitts?|glove\s+(?:care|oil|conditioner|cleaner|wrap|lace|laces|lacing|repair|replacement|parts?|webs?)|(?:replacement|repair)\s+glove|batting\s+helmets?|helmets?|face\s*(?:guard|mask)|chest\s+protectors?|protective\s+gear|elbow\s+guards?|leg\s+guards?|signed|autograph(?:ed)?|memorabilia|collectible|display[\s-]only|game[\s-]used)\b/i;
+  /\b(?:golf|rain|cold[\s-]*weather|winter|football|work|utility)\s+gloves?\b|\b(?:batting\s+gloves?|sliding\s+mitts?|oven\s+mitts?|training\s+(?:gloves?|mitts?)|glove\s+(?:care|oil|conditioner|cleaner|wrap|lace|laces|lacing|repair|replacement|parts?|webs?)|(?:replacement|repair)\s+glove|batting\s+helmets?|helmets?|face\s*(?:guard|mask)|chest\s+protectors?|protective\s+gear|elbow\s+guards?|leg\s+guards?|signed|autograph(?:ed)?|memorabilia|collectible|display[\s-]only|game[\s-]used)\b/i;
+const ELITE_GLOVE_CATEGORY_PATTERN = /\b(?:elite|premium|high[\s-]*end|collector)\b/i;
+const ELITE_GLOVE_FAMILY_PATTERN =
+  /\b(?:wilson\s+)?a(?:2000|2k)\b|\b(?:rawlings\s+)?(?:pro\s+preferred|heart\s+of\s+the\s+hide)\b|\bmizuno\s+pro\b|\b(?:atoms|d-quest|emery|inaba|ip\s+select|leggera(?:-diamante)?|mack\s+provisions|wagyu[\s-]*jb|zett|nokona|junkei|glove\s+studio\s+ryu|kubota\s+slugger|donaiya|tamazawa|hi[\s-]*gold)\b/i;
+const VALUE_OR_TRAINING_GLOVE_FAMILY_PATTERN =
+  /\bmizuno\s+prospect\b|\brawlings\s+(?:players?|r9)\b|\bwilson\s+a(?:500|700)\b|\b(?:youth|junior|training|trainer|practice)\b/i;
 const BAT_CATEGORY_PATTERN = /\b(?:baseball|softball|fastpitch|slowpitch)?\s*bats?\b|\bbbcor\b/i;
 const BAT_EQUIPMENT_PATTERN = /^(?:(?:bb|fp|sp)-bats?|baseball-bats?|softball-bats?|bats?)$/i;
 const BAT_TITLE_PATTERN =
   /\b(?:baseball|softball|fastpitch|slowpitch|youth|tee[\s-]?ball)\s+bats?\b|\b(?:bbcor|usssa|usa\s+baseball)\b/i;
 const BAT_EXCLUSION_PATTERN =
-  /\b(?:batting\s+gloves?|batting\s+helmets?|helmet|bat\s+(?:rack|holder|display|grip|tape|weight|sleeve|cover|replacement|parts?)|replacement\s+bat)\b/i;
+  /\b(?:batting\s+gloves?|batting\s+helmets?|helmet|bat\s+(?:rack|holder|display|grip|tape|weight|sleeve|cover|replacement|parts?)|replacement\s+bat|jerseys?|shirts?|hoodies?|sweatshirts?|jackets?|tennis|pickleball|racquets?|rackets?|signed|autograph(?:ed)?|memorabilia|collectible|display[\s-]only)\b/i;
+const FASTPITCH_EVIDENCE_PATTERN = /\b(?:fast[\s-]?pitch|fastpitch\s+softball|softball)\b/i;
+const SLOWPITCH_EVIDENCE_PATTERN = /\bslow[\s-]?pitch\b/i;
+const APPAREL_PATTERN =
+  /\b(?:jerseys?|shirts?|t[\s-]?shirts?|hoodies?|sweatshirts?|jackets?|pants?|shorts?|hats?|caps?|socks?|apparel)\b/i;
+const RUNNING_SHOE_CATEGORY_PATTERN = /\brunning[\s-]+(?:shoes?|footwear|sneakers?)\b/i;
+const RUNNING_SHOE_FORM_PATTERN =
+  /\b(?:running|road|trail|racing)\s+(?:shoes?|footwear|sneakers?|trainers?)\b|\b(?:shoes?|footwear|sneakers?|trainers?)\b[\s\S]*\b(?:running|road|trail|racing)\b/i;
+const CLEAT_CATEGORY_PATTERN = /\bcleats?\b/i;
+const CLEAT_FORM_PATTERN = /\b(?:cleats?|turf\s+shoes?|baseball\s+spikes?|football\s+spikes?|softball\s+spikes?)\b/i;
+const GOLF_CLUB_CATEGORY_PATTERN = /\bgolf[\s-]+clubs?\b/i;
+const GOLF_CLUB_FORM_PATTERN =
+  /\b(?:golf\s+clubs?|complete\s+(?:golf\s+)?sets?|drivers?|fairway\s+woods?|hybrids?|iron\s+sets?|[2-9]\s*irons?|wedges?|putters?)\b/i;
+const GOLF_CLUB_EXCLUSION_PATTERN =
+  /\b(?:apparel|shirts?|polos?|pants?|shorts?|jackets?|hats?|caps?|gloves?|balls?|bags?|head[\s-]?covers?|grips?|shaft\s+only|club\s+heads?\s+only|covers?|cleaners?|towels?)\b/i;
 
 export type TopDealReasonCode =
   | "verified-price-drop"
@@ -43,6 +64,26 @@ export interface TopDealsContext {
   clickCounts?: ReadonlyMap<string, number>;
   limit?: number;
   now?: Date;
+}
+
+const CURATED_CATEGORY_NAMES: Record<string, string> = {
+  "baseball-softball-gloves": "Top Baseball & Softball Fielding Glove Deals",
+  "baseball-bats": "Top Baseball Bat Deals",
+  "fastpitch-softball-bats": "Top Fastpitch Softball Bat Deals",
+  "running-shoes": "Top Running Shoe Deals",
+  cleats: "Top Cleat Deals",
+  "premium-collector-gloves": "Top Premium & Collector Glove Deals",
+  "elite-baseball-gloves": "Top Elite Baseball Glove Deals",
+  "golf-clubs": "Top Golf Club Deals",
+};
+
+export function shopperTopDealCategory<T extends Partial<DealCategory>>(category: T): T {
+  const name = category.slug ? CURATED_CATEGORY_NAMES[category.slug] : undefined;
+  if (name) return { ...category, name };
+  if (typeof category.name === "string") {
+    return { ...category, name: category.name.replace(/^Top\s+\d+\s+/i, "Top ") };
+  }
+  return category;
 }
 
 function rawBoolean(deal: Deal, keys: string[]): boolean | undefined {
@@ -109,9 +150,83 @@ function isFieldingGloveCategory(context: TopDealsContext): boolean {
     && !/\bbatting\s+gloves?\b/i.test(evidence);
 }
 
+function isEliteGloveCategory(context: TopDealsContext): boolean {
+  return isFieldingGloveCategory(context) && ELITE_GLOVE_CATEGORY_PATTERN.test(categoryEvidence(context));
+}
+
+function structuredFieldingEvidence(deal: Deal): string {
+  const raw = (deal.raw ?? {}) as Record<string, unknown>;
+  return [
+    raw.category,
+    raw.categoryName,
+    raw.productType,
+    raw.shopifyProductType,
+    raw.collection,
+    raw.collections,
+    raw.breadcrumbs,
+    raw.glovePosition,
+  ]
+    .flatMap((value) => Array.isArray(value) ? value : [value])
+    .filter((value): value is string => typeof value === "string")
+    .join(" ");
+}
+
+function structuredProductEvidence(deal: Deal): string {
+  const raw = (deal.raw ?? {}) as Record<string, unknown>;
+  return [
+    raw.category,
+    raw.categoryName,
+    raw.productType,
+    raw.shopifyProductType,
+    raw.collection,
+    raw.collections,
+    raw.breadcrumbs,
+    raw.certification,
+    raw.sport,
+  ]
+    .flatMap((value) => Array.isArray(value) ? value : [value])
+    .filter((value): value is string => typeof value === "string")
+    .join(" ");
+}
+
+function hasPositiveFieldingGloveEvidence(deal: Deal): boolean {
+  return FIELDING_GLOVE_TITLE_PATTERN.test(deal.title ?? "")
+    || FIELDING_GLOVE_STRUCTURED_PATTERN.test(structuredFieldingEvidence(deal));
+}
+
+function hasTrustedEliteGloveEvidence(deal: Deal): boolean {
+  const raw = (deal.raw ?? {}) as Record<string, unknown>;
+  const evidence = `${deal.brand ?? ""} ${deal.title ?? ""} ${String(raw.premiumMaker ?? "")}`;
+  if (VALUE_OR_TRAINING_GLOVE_FAMILY_PATTERN.test(evidence)) return false;
+  if (raw.premiumGloveSource === true && typeof raw.premiumMaker === "string" && raw.premiumMaker.trim()) {
+    return true;
+  }
+  return ELITE_GLOVE_FAMILY_PATTERN.test(evidence);
+}
+
 function isBatCategory(context: TopDealsContext): boolean {
   return BAT_CATEGORY_PATTERN.test(categoryEvidence(context))
     && !/\bbatting\s+(?:gloves?|helmets?)\b/i.test(categoryEvidence(context));
+}
+
+function isFastpitchBatCategory(context: TopDealsContext): boolean {
+  return isBatCategory(context) && /\bfast[\s-]?pitch\b/i.test(categoryEvidence(context));
+}
+
+function isRunningShoeCategory(context: TopDealsContext): boolean {
+  return RUNNING_SHOE_CATEGORY_PATTERN.test(categoryEvidence(context));
+}
+
+function isCleatCategory(context: TopDealsContext): boolean {
+  return CLEAT_CATEGORY_PATTERN.test(categoryEvidence(context));
+}
+
+function isGolfClubCategory(context: TopDealsContext): boolean {
+  return GOLF_CLUB_CATEGORY_PATTERN.test(categoryEvidence(context));
+}
+
+function productEvidence(deal: Deal): string {
+  return `${deal.title ?? ""} ${deal.equipmentTypeId ?? ""} ${structuredProductEvidence(deal)}`;
 }
 
 /** Read-time category boundary only; it never rewrites stored taxonomy. */
@@ -119,13 +234,32 @@ export function matchesTopDealCategoryBoundary(deal: Deal, context: TopDealsCont
   const title = deal.title ?? "";
   if (isFieldingGloveCategory(context)) {
     if (FIELDING_GLOVE_EXCLUSION_PATTERN.test(title)) return false;
-    return FIELDING_GLOVE_EQUIPMENT_PATTERN.test(deal.equipmentTypeId ?? "")
-      || FIELDING_GLOVE_TITLE_PATTERN.test(title);
+    if (!FIELDING_GLOVE_EQUIPMENT_PATTERN.test(deal.equipmentTypeId ?? "")) return false;
+    if (!hasPositiveFieldingGloveEvidence(deal)) return false;
+    if (isEliteGloveCategory(context) && !hasTrustedEliteGloveEvidence(deal)) return false;
+    return true;
   }
   if (isBatCategory(context)) {
     if (BAT_EXCLUSION_PATTERN.test(title)) return false;
-    return BAT_EQUIPMENT_PATTERN.test(deal.equipmentTypeId ?? "")
-      || BAT_TITLE_PATTERN.test(title);
+    const evidence = productEvidence(deal);
+    if (!BAT_EQUIPMENT_PATTERN.test(deal.equipmentTypeId ?? "") && !BAT_TITLE_PATTERN.test(evidence)) return false;
+    if (!BAT_TITLE_PATTERN.test(evidence)) return false;
+    if (isFastpitchBatCategory(context)) {
+      return FASTPITCH_EVIDENCE_PATTERN.test(evidence) && !SLOWPITCH_EVIDENCE_PATTERN.test(evidence);
+    }
+    return !/\b(?:fast[\s-]?pitch|slow[\s-]?pitch)\b/i.test(evidence);
+  }
+  if (isRunningShoeCategory(context)) {
+    if (APPAREL_PATTERN.test(title)) return false;
+    return RUNNING_SHOE_FORM_PATTERN.test(productEvidence(deal));
+  }
+  if (isCleatCategory(context)) {
+    if (APPAREL_PATTERN.test(title)) return false;
+    return CLEAT_FORM_PATTERN.test(productEvidence(deal));
+  }
+  if (isGolfClubCategory(context)) {
+    if (APPAREL_PATTERN.test(title) || GOLF_CLUB_EXCLUSION_PATTERN.test(title)) return false;
+    return GOLF_CLUB_FORM_PATTERN.test(productEvidence(deal));
   }
   return true;
 }
@@ -172,14 +306,23 @@ function categoryKey(deal: Deal): string {
   return deal.equipmentTypeId ?? deal.sportId ?? "unclassified";
 }
 
-function productKey(deal: Deal): string {
-  const title = (deal.title ?? "")
+function productKey(deal: Deal, context: TopDealsContext): string {
+  let title = (deal.title ?? "")
     .toLowerCase()
     .replace(/\b(?:new|used|preowned|open box|demo|sale|clearance)\b/g, " ")
     .replace(/\b\d{2,3}\s*(?:in(?:ch(?:es)?)?|["″])?\s*[/x-]\s*\d{1,3}\s*(?:oz)?\b/g, " ")
     .replace(/\b\d+(?:\.\d+)?\s*(?:oz\b|inch(?:es)?\b|in\b|["″])/g, " ")
     .replace(/\b20\d{2}\b/g, " ")
     .replace(/\(\s*-\d{1,2}\s*\)/g, " ")
+    .replace(/\b(?:black|white|red|blue|green|pink|purple|orange|yellow|grey|gray)\b/g, " ")
+    .trim();
+  if (isFastpitchBatCategory(context)) {
+    title = title
+      .replace(/(^|\s)-\s*(?:8|9|10|11|12|13)\b/g, " ")
+      .replace(/\bdrop\s*-?\s*(?:8|9|10|11|12|13)\b/g, " ")
+      .replace(/\b(?:8|9|10|11|12|13)\s*(?:drop)?\b/g, " ");
+  }
+  title = title
     .replace(/[^a-z0-9]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -267,31 +410,38 @@ function scoreDeal(deal: Deal, context: TopDealsContext, now: Date): RankedTopDe
 export function rankTopDeals(pool: Deal[], context: TopDealsContext = {}): RankedTopDeal[] {
   const now = context.now ?? new Date();
   const limit = context.limit ?? 20;
-  const scored = pool
-    .filter((deal) => eligible(deal, context, now))
-    .map((deal) => scoreDeal(deal, context, now))
+  const representatives = new Map<string, RankedTopDeal>();
+  for (const deal of pool.filter((candidate) => eligible(candidate, context, now))) {
+    const key = productKey(deal, context);
+    if (key.endsWith("::")) continue;
+    const scored = scoreDeal(deal, context, now);
+    const previous = representatives.get(key);
+    if (!previous || scored.topDealScore > previous.topDealScore) representatives.set(key, scored);
+  }
+
+  const deduped = [...representatives.values()]
     .filter((deal) =>
       deal.topDealScore >= 28 &&
       deal.topDealReasons.some((reason) =>
         ["verified-price-drop", "historical-low", "verified-savings", "strong-market-value"].includes(reason.code),
       ),
     )
-    .sort((a, b) => b.topDealScore - a.topDealScore || Number(b.priceCents) - Number(a.priceCents));
-
-  const deduped: RankedTopDeal[] = [];
-  const seenProducts = new Set<string>();
-  for (const deal of scored) {
-    const key = productKey(deal);
-    if (key.endsWith("::") || seenProducts.has(key)) continue;
-    seenProducts.add(key);
-    deduped.push(deal);
-  }
+    .sort((a, b) => {
+      if (isGolfClubCategory(context)) {
+        const aUsd = (a.currency ?? "USD").toUpperCase() === "USD" ? 1 : 0;
+        const bUsd = (b.currency ?? "USD").toUpperCase() === "USD" ? 1 : 0;
+        if (aUsd !== bUsd) return bUsd - aUsd;
+      }
+      return b.topDealScore - a.topDealScore || Number(b.priceCents) - Number(a.priceCents);
+    });
 
   const result: RankedTopDeal[] = [];
   const sourceCounts = new Map<string, number>();
   const sellerCounts = new Map<string, number>();
   const categoryCounts = new Map<string, number>();
   const broad = isBroadCategory(context);
+  let nonUsdGolfDeals = 0;
+  const nonUsdGolfLimit = Math.max(1, Math.floor(limit * 0.2));
   for (const deal of deduped) {
     const source = deal.sourceId ?? "unknown";
     const seller = sellerKey(deal);
@@ -299,6 +449,10 @@ export function rankTopDeals(pool: Deal[], context: TopDealsContext = {}): Ranke
     if ((sourceCounts.get(source) ?? 0) >= Math.max(2, Math.ceil(limit * 0.25))) continue;
     if ((sellerCounts.get(seller) ?? 0) >= Math.max(2, Math.ceil(limit * 0.2))) continue;
     if (broad && (categoryCounts.get(category) ?? 0) >= Math.max(3, Math.ceil(limit * 0.3))) continue;
+    if (isGolfClubCategory(context) && (deal.currency ?? "USD").toUpperCase() !== "USD") {
+      if (nonUsdGolfDeals >= nonUsdGolfLimit) continue;
+      nonUsdGolfDeals += 1;
+    }
     result.push(deal);
     sourceCounts.set(source, (sourceCounts.get(source) ?? 0) + 1);
     sellerCounts.set(seller, (sellerCounts.get(seller) ?? 0) + 1);
