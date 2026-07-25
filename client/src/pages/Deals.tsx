@@ -47,6 +47,7 @@ import {
   groupShopperSubFilters,
   parseRecentShopperSearches,
 } from "@shared/shopper-search-ux";
+import { dealsQueryFromSearch, searchWithDealsQuery } from "@/lib/deals-url-state";
 
 type SortOption = "newest" | "oldest" | "price-low" | "price-high" | "discount-high" | "a-z" | "z-a";
 
@@ -95,6 +96,12 @@ const FEED_SPORT_IDS = DEFAULT_FEED_SPORTS.map((s) => s.id);
 const FEED_COUNT_OPTIONS = [10, 20, 50, 100];
 const RECENT_SEARCHES_KEY = "tss_recent_searches";
 
+function initialFiltersFromUrl(): FilterState {
+  if (typeof window === "undefined") return DEFAULT_FILTERS;
+  const q = dealsQueryFromSearch(window.location.search);
+  return q ? { ...DEFAULT_FILTERS, q, minPercentOff: 0 } : DEFAULT_FILTERS;
+}
+
 function safeLocalGet(key: string): string | null {
   try {
     return localStorage.getItem(key);
@@ -119,8 +126,8 @@ export default function DealsPage() {
     [sports.data],
   );
 
-  const [pending, setPending] = useState<FilterState>(DEFAULT_FILTERS);
-  const [applied, setApplied] = useState<FilterState>(DEFAULT_FILTERS);
+  const [pending, setPending] = useState<FilterState>(initialFiltersFromUrl);
+  const [applied, setApplied] = useState<FilterState>(initialFiltersFromUrl);
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
   const [recentSearches, setRecentSearches] = useState<string[]>(() =>
     parseRecentShopperSearches(safeLocalGet(RECENT_SEARCHES_KEY)),
@@ -130,6 +137,23 @@ export default function DealsPage() {
   const [photoSearching, setPhotoSearching] = useState(false);
   const [photoIdentified, setPhotoIdentified] = useState<string | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
+
+  const syncQueryUrl = (query: string, mode: "push" | "replace" = "push") => {
+    const nextSearch = searchWithDealsQuery(window.location.search, query);
+    const nextUrl = `${window.location.pathname}${nextSearch}${window.location.hash}`;
+    window.history[mode === "push" ? "pushState" : "replaceState"]({}, "", nextUrl);
+  };
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const q = dealsQueryFromSearch(window.location.search);
+      const next = q ? { ...DEFAULT_FILTERS, q, minPercentOff: 0 } : DEFAULT_FILTERS;
+      setPending(next);
+      setApplied(next);
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
 
   async function handlePhotoSearch(file: File) {
     setPhotoSearching(true);
@@ -227,6 +251,7 @@ export default function DealsPage() {
   const runSearch = (next: FilterState = pending) => {
     setPending(next);
     setApplied(next);
+    syncQueryUrl(next.q);
     setAdvancedFiltersOpen(false);
     if (next.q.trim()) {
       setRecentSearches((current) => {
@@ -394,6 +419,7 @@ export default function DealsPage() {
     if (action.kind === "query") {
       setPending((current) => ({ ...current, q: action.query, minPercentOff: 0 }));
       setApplied((current) => ({ ...current, q: action.query, minPercentOff: 0 }));
+      syncQueryUrl(action.query);
       return;
     }
 

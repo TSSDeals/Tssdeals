@@ -10,6 +10,7 @@ import {
   matchesDealClassificationFilters,
   matchesNormalizedDealSearch,
   normalizeDealSearch,
+  orderDealsBySearchSpecificity,
   projectDealSearchClassification,
   type SearchableDeal,
 } from "./deal-search";
@@ -36,6 +37,32 @@ test("exact 27/17 outranks a generic drop-10 fallback", () => {
   assert.equal(matchesNormalizedDealSearch(search, fallback), true);
   assert.ok(batSizeMatchSpecificity(search, exact) > batSizeMatchSpecificity(search, fallback));
   assert.ok(dealSearchMatchSpecificity(search, exact) > dealSearchMatchSpecificity(search, fallback));
+});
+
+test("final search ordering keeps exact bat dimensions ahead of drop-only recovery", () => {
+  const generic = { title: "Louisville Slugger Supra USSSA Baseball Bat -10", dropWeight: 10 };
+  const exact = { title: 'Louisville Slugger Supra 27in 17oz USSSA Baseball Bat', dropWeight: 10 };
+  const otherExact = { title: "Louisville Slugger Supra 27/17 USSSA Baseball Bat", dropWeight: 10 };
+  assert.deepEqual(
+    orderDealsBySearchSpecificity("27/17 Louisville Supra", [generic, exact, otherExact]),
+    [exact, otherExact, generic],
+  );
+});
+
+test("final specificity ordering preserves correct LHT glove behavior", () => {
+  const right = {
+    title: "Wilson A1000 1786 Baseball Glove RHT",
+    sportId: "baseball",
+    equipmentTypeId: "bb-gloves",
+  };
+  const left = {
+    title: "Wilson A1000 1786 Baseball Glove Left Hand Throw",
+    sportId: "baseball",
+    equipmentTypeId: "bb-gloves",
+  };
+  const ordered = orderDealsBySearchSpecificity("LHT Wilson A1000", [right, left]);
+  assert.equal(ordered[0], left);
+  assert.equal(matchesNormalizedDealSearch(normalizeDealSearch("LHT Wilson A1000"), right), false);
 });
 
 test("exact model boundaries outrank loose model-number continuations", () => {

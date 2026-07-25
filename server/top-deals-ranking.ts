@@ -7,6 +7,20 @@ const ACCESSORY_PATTERN =
   /\b(?:accessor(?:y|ies)|grip tape|bat grip|ball holder|glove wrap|lace kit|wristband|headband|socks?|water bottle|towel|keychain)\b/i;
 const PART_PATTERN =
   /\b(?:replacement|spare|part only|head only|shaft only|handle only|strap only|hardware|screws?|bolts?|cap only|cover only)\b/i;
+const FIELDING_GLOVE_CATEGORY_PATTERN =
+  /\b(?:fielding|baseball|softball|fastpitch|slowpitch|elite|premium|collector)\b[\s/&-]*(?:gloves?|mitts?)\b|\b(?:gloves?|mitts?)\b/i;
+const FIELDING_GLOVE_EQUIPMENT_PATTERN =
+  /^(?:(?:bb|fp|sp)-(?:gloves?|fielding-gloves?)|baseball-gloves?|softball-gloves?|fielding-gloves?|gloves?)$/i;
+const FIELDING_GLOVE_TITLE_PATTERN =
+  /\b(?:(?:baseball|softball|fastpitch|slowpitch)\s+(?:fielding\s+)?gloves?|(?:infield(?:er)?|outfield(?:er)?|pitcher(?:'s)?|fielding)\s+gloves?|catcher(?:'s)?\s+mitts?|first[\s-]*base(?:man(?:'s)?)?\s+mitts?|a(?:1000|2000|2k)\b|heart\s+of\s+the\s+hide|pro\s+preferred)\b/i;
+const FIELDING_GLOVE_EXCLUSION_PATTERN =
+  /\b(?:batting\s+gloves?|sliding\s+mitts?|oven\s+mitts?|training\s+mitts?|glove\s+(?:care|oil|conditioner|cleaner|wrap|lace|laces|lacing|repair|replacement|parts?|webs?)|(?:replacement|repair)\s+glove|batting\s+helmets?|helmets?|face\s*(?:guard|mask)|chest\s+protectors?|protective\s+gear|elbow\s+guards?|leg\s+guards?|signed|autograph(?:ed)?|memorabilia|collectible|display[\s-]only|game[\s-]used)\b/i;
+const BAT_CATEGORY_PATTERN = /\b(?:baseball|softball|fastpitch|slowpitch)?\s*bats?\b|\bbbcor\b/i;
+const BAT_EQUIPMENT_PATTERN = /^(?:(?:bb|fp|sp)-bats?|baseball-bats?|softball-bats?|bats?)$/i;
+const BAT_TITLE_PATTERN =
+  /\b(?:baseball|softball|fastpitch|slowpitch|youth|tee[\s-]?ball)\s+bats?\b|\b(?:bbcor|usssa|usa\s+baseball)\b/i;
+const BAT_EXCLUSION_PATTERN =
+  /\b(?:batting\s+gloves?|batting\s+helmets?|helmet|bat\s+(?:rack|holder|display|grip|tape|weight|sleeve|cover|replacement|parts?)|replacement\s+bat)\b/i;
 
 export type TopDealReasonCode =
   | "verified-price-drop"
@@ -25,7 +39,7 @@ export type RankedTopDeal = Deal & {
 };
 
 export interface TopDealsContext {
-  category?: Pick<DealCategory, "sportId" | "equipmentTypeId" | "searchQuery">;
+  category?: Partial<Pick<DealCategory, "name" | "slug" | "sportId" | "equipmentTypeId" | "searchQuery">>;
   clickCounts?: ReadonlyMap<string, number>;
   limit?: number;
   now?: Date;
@@ -82,6 +96,38 @@ function isExplicitAccessoryContext(context: TopDealsContext): boolean {
 
 function isBroadCategory(context: TopDealsContext): boolean {
   return !context.category?.equipmentTypeId && !(context.category?.searchQuery ?? "").trim();
+}
+
+function categoryEvidence(context: TopDealsContext): string {
+  const category = context.category;
+  return `${category?.name ?? ""} ${category?.slug ?? ""} ${category?.equipmentTypeId ?? ""} ${category?.searchQuery ?? ""}`;
+}
+
+function isFieldingGloveCategory(context: TopDealsContext): boolean {
+  const evidence = categoryEvidence(context);
+  return FIELDING_GLOVE_CATEGORY_PATTERN.test(evidence)
+    && !/\bbatting\s+gloves?\b/i.test(evidence);
+}
+
+function isBatCategory(context: TopDealsContext): boolean {
+  return BAT_CATEGORY_PATTERN.test(categoryEvidence(context))
+    && !/\bbatting\s+(?:gloves?|helmets?)\b/i.test(categoryEvidence(context));
+}
+
+/** Read-time category boundary only; it never rewrites stored taxonomy. */
+export function matchesTopDealCategoryBoundary(deal: Deal, context: TopDealsContext): boolean {
+  const title = deal.title ?? "";
+  if (isFieldingGloveCategory(context)) {
+    if (FIELDING_GLOVE_EXCLUSION_PATTERN.test(title)) return false;
+    return FIELDING_GLOVE_EQUIPMENT_PATTERN.test(deal.equipmentTypeId ?? "")
+      || FIELDING_GLOVE_TITLE_PATTERN.test(title);
+  }
+  if (isBatCategory(context)) {
+    if (BAT_EXCLUSION_PATTERN.test(title)) return false;
+    return BAT_EQUIPMENT_PATTERN.test(deal.equipmentTypeId ?? "")
+      || BAT_TITLE_PATTERN.test(title);
+  }
+  return true;
 }
 
 function equipmentRelevance(deal: Deal, context: TopDealsContext): number {
@@ -143,6 +189,7 @@ function productKey(deal: Deal): string {
 function eligible(deal: Deal, context: TopDealsContext, now: Date): boolean {
   const title = (deal.title ?? "").trim();
   if (title.length < 8 || !usableUrl(deal.url) || !Number.isFinite(deal.priceCents) || deal.priceCents <= 0) return false;
+  if (!matchesTopDealCategoryBoundary(deal, context)) return false;
   if (rawBoolean(deal, ["available", "availability", "availabilityStatus", "isAvailable", "inStock", "isActive", "active"]) === false) return false;
   const currentAt = lastCurrentAt(deal);
   if (!currentAt || now.getTime() - currentAt.getTime() > 21 * DAY_MS) return false;

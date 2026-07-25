@@ -20,6 +20,13 @@ test("homepage search is the primary accessible shopping action", () => {
   assert.match(heroSource, /min-h-11/);
 });
 
+test("deal search hydrates and synchronizes direct URL queries", () => {
+  assert.match(dealsSource, /useState<FilterState>\(initialFiltersFromUrl\)/);
+  assert.match(dealsSource, /dealsQueryFromSearch\(window\.location\.search\)/);
+  assert.match(dealsSource, /syncQueryUrl\(next\.q\)/);
+  assert.match(dealsSource, /addEventListener\("popstate", handlePopState\)/);
+});
+
 test("shopper categories come from the curated taxonomy projection", () => {
   assert.match(heroSource, /curateShopperEquipmentTypes/);
   assert.match(heroSource, /SHOPPER_MEMORABILIA_SPORT_ID/);
