@@ -5,7 +5,7 @@ import { classifyDealAttributes } from "./sub-filter-classifier";
 const TWIN_SEAM_STORE_URL = "https://www.twinseamsports.com";
 const TWIN_SEAM_SOURCE_ID = "twin-seam-sports";
 
-interface ShopifyVariant {
+export interface ShopifyVariant {
   id: number;
   title: string;
   price: string;
@@ -17,14 +17,14 @@ interface ShopifyVariant {
   option3: string | null;
 }
 
-interface ShopifyImage {
+export interface ShopifyImage {
   id: number;
   src: string;
   width: number;
   height: number;
 }
 
-interface ShopifyProduct {
+export interface ShopifyProduct {
   id: number;
   title: string;
   handle: string;
@@ -152,6 +152,7 @@ async function fetchCollectionProducts(
 export async function fetchShopifyProducts(
   storeUrl: string = TWIN_SEAM_STORE_URL,
   maxPages: number = 20,
+  pageDelayMs: number = 0,
 ): Promise<ShopifyProduct[]> {
   const allProducts: ShopifyProduct[] = [];
   let page = 1;
@@ -182,6 +183,9 @@ export async function fetchShopifyProducts(
 
     if (data.products.length < limit) break;
     page++;
+    if (pageDelayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, pageDelayMs));
+    }
   }
 
   return allProducts;
