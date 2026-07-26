@@ -148,3 +148,40 @@ test("Shopify client authentication errors never include credential values", asy
     },
   );
 });
+
+test("Collective catalog retries a throttled page without losing its cursor", async () => {
+  clearShopifyClientTokenCache();
+  let graphqlCalls = 0;
+  const waits: number[] = [];
+  const fetchImpl = async (input: string | URL | Request) => {
+    if (String(input).endsWith("/admin/oauth/access_token")) {
+      return new Response(JSON.stringify({ access_token: "token", expires_in: 3600 }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    graphqlCalls++;
+    if (graphqlCalls === 1) {
+      return new Response(JSON.stringify({
+        errors: [{ message: "Throttled", extensions: { code: "THROTTLED" } }],
+        extensions: { cost: { throttleStatus: { currentlyAvailable: 0, restoreRate: 100 } } },
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    return new Response(JSON.stringify({
+      data: {
+        products: {
+          nodes: [],
+          pageInfo: { hasNextPage: false, endCursor: null },
+        },
+      },
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+  const products = await (await import("./shopify-collective-sync")).fetchCollectiveProducts({
+    env: { SHOPIFY_CLIENT_ID: "id", SHOPIFY_CLIENT_SECRET: "secret" },
+    fetchImpl,
+    sleep: async (milliseconds) => { waits.push(milliseconds); },
+  });
+  assert.deepEqual(products, []);
+  assert.equal(graphqlCalls, 2);
+  assert.deepEqual(waits, [5000]);
+});
