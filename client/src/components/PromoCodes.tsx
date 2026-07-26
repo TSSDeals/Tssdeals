@@ -275,8 +275,8 @@ export default function PromoCodes() {
       {codes.length === 0 && !codesQuery.isLoading && (
         <div className="text-center py-8 text-muted-foreground text-sm">
           <Tag className="h-10 w-10 mx-auto mb-3 opacity-30" />
-          <p>No promo codes found.</p>
-          <p className="mt-1">Click "Sync All" to pull codes from affiliate networks, or "Add Code" to enter one manually.</p>
+          <p>No promotions found.</p>
+          <p className="mt-1">Click "Sync All" to pull promotions from affiliate networks, or "Add Code" to enter one manually.</p>
         </div>
       )}
 
@@ -300,7 +300,13 @@ export default function PromoCodes() {
                     <DiscountBadge type={promo.discountType} value={promo.discountValue} />
                   </div>
                   <div className="mt-1.5 flex items-center gap-2 flex-wrap">
-                    <CopyButton text={promo.code} />
+                    {promo.code ? (
+                      <CopyButton text={promo.code} />
+                    ) : (
+                      <span className="rounded bg-sky-500/10 px-2 py-0.5 text-[11px] font-semibold text-sky-600 dark:text-sky-400">
+                        Offer link
+                      </span>
+                    )}
                     {promo.description && (
                       <span className="text-xs text-muted-foreground truncate max-w-[300px]">{promo.description}</span>
                     )}
@@ -310,7 +316,7 @@ export default function PromoCodes() {
                     {promo.endDate && <span>Expires: {formatDate(promo.endDate)}</span>}
                     {promo.trackingUrl && (
                       <a href={promo.trackingUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline flex items-center gap-0.5">
-                        <ExternalLink className="h-3 w-3" />Link
+                        <ExternalLink className="h-3 w-3" />Open tracked offer
                       </a>
                     )}
                   </div>

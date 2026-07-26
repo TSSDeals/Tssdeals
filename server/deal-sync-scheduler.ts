@@ -1200,12 +1200,17 @@ export async function runFullSync(storage: IStorage): Promise<FullSyncResult | n
       // rule-based with zero OpenAI calls; AI runs once daily in runDailyAiPass
       // (12:15pm ET) to control cost.
 
+    }
+
+    // Promotions change independently of product feeds, so refresh them on
+    // every scheduled sync even when no deal rows were created or updated.
+    if (!stopRequestedSince(stopEpoch)) {
       try {
         const { syncAllPromoCodes } = await import("./promo-codes");
         const promoResult = await syncAllPromoCodes();
         const totalPromos = promoResult.cj + promoResult.impact + promoResult.fanatics + promoResult.rakuten;
         if (totalPromos > 0) {
-          log(`Promo sync: ${totalPromos} codes synced, ${promoResult.matched} sources matched`, "deal-sync");
+          log(`Promo sync: ${totalPromos} promotions synced, ${promoResult.matched} sources matched`, "deal-sync");
         }
       } catch (err: any) {
         log(`Promo sync error: ${err.message}`, "deal-sync");

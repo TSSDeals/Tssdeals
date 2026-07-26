@@ -18,8 +18,13 @@ import { SourceLogo } from "./SourceLogo";
 import { deriveDealCardPricing } from "@/lib/deal-card-pricing";
 import { formatKnownShipping } from "@shared/deal-display";
 import { baselineCouponDisplay } from "@/lib/baseline-coupon-display";
+import { BrowserPurchaseDialog } from "./BrowserPurchaseDialog";
+import {
+  browserPurchaseProgram,
+  shouldUseBrowserPurchaseInterstitial,
+} from "@shared/retailer-programs";
 
-function PromoCodeBadge({ code, description }: { code: string; description?: string | null }) {
+function PromoCodeBadge({ code, description }: { code?: string | null; description?: string | null }) {
   const [copied, setCopied] = useState(false);
 
   return (
@@ -28,20 +33,24 @@ function PromoCodeBadge({ code, description }: { code: string; description?: str
       onClick={(e) => {
         e.preventDefault();
         e.stopPropagation();
-        navigator.clipboard.writeText(code);
+        if (code) navigator.clipboard.writeText(code);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
       }}
-      title={description || `Use code ${code} at checkout`}
-      data-testid={`promo-badge-${code}`}
+      title={description || (code ? `Use code ${code} at checkout` : "Retailer promotion")}
+      data-testid={`promo-badge-${code || "offer"}`}
     >
       <Tag className="h-3 w-3 text-green-500" />
-      <span className="text-xs font-medium text-green-600 dark:text-green-400">Code:</span>
-      <code className="text-xs font-bold font-mono text-green-600 dark:text-green-400">{code}</code>
-      {copied ? (
-        <Check className="h-3 w-3 text-green-500" />
+      {code ? (
+        <>
+          <span className="text-xs font-medium text-green-600 dark:text-green-400">Code:</span>
+          <code className="text-xs font-bold font-mono text-green-600 dark:text-green-400">{code}</code>
+          {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3 text-green-500/50" />}
+        </>
       ) : (
-        <Copy className="h-3 w-3 text-green-500/50" />
+        <span className="text-xs font-semibold text-green-600 dark:text-green-400">
+          {description || "Special retailer offer"}
+        </span>
       )}
     </div>
   );
@@ -70,8 +79,49 @@ export function DealCard({
   const [editOpen, setEditOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [browserPurchaseOpen, setBrowserPurchaseOpen] = useState(false);
+  const [pendingPurchaseUrl, setPendingPurchaseUrl] = useState("");
   const [hidden, setHidden] = useState(false);
   const baselineCoupon = baselineCouponDisplay(deal);
+  const purchaseProgram = browserPurchaseProgram(deal?.sourceId, deal?.url);
+
+  const continueToDeal = (dealUrl: string) => {
+    if (!isAuthenticated) {
+      openDealPrompt(dealUrl, deal?.id);
+    } else {
+      window.open(dealUrl, "_blank", "noopener,noreferrer");
+    }
+  };
+
+  const handleViewDeal = () => {
+    const dealUrl = outboundRetailerUrl(deal?.url);
+
+    // Start click recording before any dialog or navigation. keepalive lets the
+    // request finish when the new retailer tab takes focus.
+    fetch(`/api/deals/${deal?.id}/click`, { method: "POST", keepalive: true }).catch(() => {});
+    try {
+      sessionStorage.setItem(
+        "tssdeals_last_click",
+        JSON.stringify({
+          dealId: deal?.id,
+          sourceId: deal?.sourceId,
+          clickedAt: new Date().toISOString(),
+        }),
+      );
+    } catch {}
+
+    const isMobile = typeof window !== "undefined" &&
+      window.matchMedia("(pointer: coarse)").matches &&
+      window.matchMedia("(max-width: 1024px)").matches;
+
+    if (shouldUseBrowserPurchaseInterstitial(deal?.sourceId, dealUrl, isMobile)) {
+      setPendingPurchaseUrl(dealUrl);
+      setBrowserPurchaseOpen(true);
+      return;
+    }
+
+    continueToDeal(dealUrl);
+  };
 
   const hideMutation = useMutation({
     mutationFn: () => apiRequest("POST", `/api/deals/${deal.id}/hide`),
@@ -249,7 +299,7 @@ export function DealCard({
                   : null}
               </div>
 
-              {deal?.promoCode && (
+              {(deal?.promoCode || deal?.promoDescription) && (
                 <PromoCodeBadge code={deal.promoCode} description={deal.promoDescription} />
               )}
 
@@ -446,16 +496,7 @@ export function DealCard({
 
             <div className="w-full sm:ml-auto sm:w-auto">
               <Button
-                onClick={() => {
-                  fetch(`/api/deals/${deal?.id}/click`, { method: 'POST' }).catch(() => {});
-                  try { sessionStorage.setItem('tssdeals_last_click', JSON.stringify({ dealId: deal?.id, clickedAt: new Date().toISOString() })); } catch {}
-                  const dealUrl = outboundRetailerUrl(deal?.url);
-                  if (!isAuthenticated) {
-                    openDealPrompt(dealUrl, deal?.id);
-                  } else {
-                    window.open(dealUrl, "_blank", "noopener,noreferrer");
-                  }
-                }}
+                onClick={handleViewDeal}
                 className={cn(
                   "ring-focus min-h-11 w-full rounded-xl px-4 sm:w-auto",
                   "bg-gradient-to-r from-primary to-primary/80 text-primary-foreground",
@@ -627,6 +668,16 @@ export function DealCard({
       </Dialog>
 
       <PriceHistoryDialog open={historyOpen} onOpenChange={setHistoryOpen} deal={deal} />
+      <BrowserPurchaseDialog
+        open={browserPurchaseOpen}
+        onOpenChange={setBrowserPurchaseOpen}
+        merchantName={purchaseProgram?.merchantName ?? "retailer"}
+        purchaseUrl={pendingPurchaseUrl}
+        onContinue={() => {
+          setBrowserPurchaseOpen(false);
+          continueToDeal(pendingPurchaseUrl);
+        }}
+      />
     </div>
   );
 }

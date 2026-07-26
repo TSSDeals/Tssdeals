@@ -2,21 +2,13 @@ import { db } from "./db";
 import { promoCodes, deals, sources } from "@shared/schema";
 import { eq, and, desc, sql, isNull, or, lte, gte } from "drizzle-orm";
 import { log } from "./index";
-
-const CJ_PROMOTIONS_URL = "https://promotion-api.cj.com/v2/promotions";
-
-interface CJPromotion {
-  id: string;
-  promotionType: string;
-  couponCode: string;
-  promotionStartDate: string;
-  promotionEndDate: string;
-  clickUrl: string;
-  description: string;
-  advertiserName: string;
-  advertiserId: string;
-  status: string;
-}
+import {
+  CJ_LINK_SEARCH_URL,
+  CJ_PROMOTION_TYPES,
+  parseCJLinkSearchJson,
+  parseCJLinkSearchXml,
+  parseCJPromotionDate,
+} from "./cj-promotions";
 
 async function upsertPromo(values: {
   source: string; advertiserId: string | null; advertiserName: string;
@@ -24,6 +16,9 @@ async function upsertPromo(values: {
   endDate: Date | null; discountType: string | null; discountValue: string | null;
   trackingUrl: string | null; raw: any;
 }) {
+  const identityCondition = values.code
+    ? eq(promoCodes.code, values.code)
+    : eq(promoCodes.trackingUrl, values.trackingUrl ?? "");
   const existing = await db
     .select({ id: promoCodes.id })
     .from(promoCodes)
@@ -31,7 +26,7 @@ async function upsertPromo(values: {
       and(
         eq(promoCodes.source, values.source),
         eq(promoCodes.advertiserName, values.advertiserName),
-        eq(promoCodes.code, values.code),
+        identityCondition,
       )
     )
     .limit(1);
@@ -79,68 +74,69 @@ async function fetchCJPromotions(): Promise<number> {
   }
 
   let totalUpserted = 0;
-  let page = 1;
   const perPage = 100;
 
   try {
-    while (true) {
-      const params = new URLSearchParams({
-        "promotion-type": "coupon",
-        "website-id": propertyId || "",
-        "page-number": String(page),
-        "records-per-page": String(perPage),
-      });
-
-      const response = await fetch(`${CJ_PROMOTIONS_URL}?${params}`, {
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          Accept: "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        const errText = await response.text();
-        log(`CJ promotions API error ${response.status}: ${errText.slice(0, 300)}`, "promo-codes");
-        break;
-      }
-
-      const contentType = response.headers.get("content-type") || "";
-      let promos: CJPromotion[] = [];
-
-      if (contentType.includes("xml") || contentType.includes("text")) {
-        const xmlText = await response.text();
-        promos = parseCJPromotionsXml(xmlText);
-      } else {
-        const json = await response.json() as any;
-        promos = json.data || [];
-      }
-
-      if (promos.length === 0) break;
-
-      for (const promo of promos) {
-        if (!promo.couponCode || !promo.couponCode.trim()) continue;
-
-        const discountInfo = parseDiscountFromDescription(promo.description || "");
-
-        await upsertPromo({
-          source: "cj",
-          advertiserId: promo.advertiserId || null,
-          advertiserName: promo.advertiserName || "Unknown",
-          code: promo.couponCode.trim(),
-          description: promo.description || null,
-          startDate: promo.promotionStartDate ? new Date(promo.promotionStartDate) : null,
-          endDate: promo.promotionEndDate ? new Date(promo.promotionEndDate) : null,
-          discountType: discountInfo.type,
-          discountValue: discountInfo.value,
-          trackingUrl: promo.clickUrl || null,
-          raw: promo as any,
+    for (const promotionType of CJ_PROMOTION_TYPES) {
+      let page = 1;
+      while (true) {
+        const params = new URLSearchParams({
+          "promotion-type": promotionType,
+          "website-id": propertyId || "",
+          "advertiser-ids": "joined",
+          "page-number": String(page),
+          "records-per-page": String(perPage),
         });
-        totalUpserted++;
-      }
 
-      if (promos.length < perPage) break;
-      page++;
-      await delay(500);
+        const response = await fetch(`${CJ_LINK_SEARCH_URL}?${params}`, {
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            Accept: "application/json, application/xml",
+          },
+        });
+
+        if (!response.ok) {
+          const errText = await response.text();
+          log(`CJ ${promotionType} API error ${response.status}: ${errText.slice(0, 300)}`, "promo-codes");
+          break;
+        }
+
+        const contentType = response.headers.get("content-type") || "";
+        const responseText = await response.text();
+        const promos = contentType.includes("json")
+          ? parseCJLinkSearchJson(JSON.parse(responseText))
+          : parseCJLinkSearchXml(responseText);
+
+        if (promos.length === 0) break;
+
+        for (const promo of promos) {
+          if (!promo.advertiserName || !promo.clickUrl) continue;
+          const code = promo.couponCode.trim();
+          const description = promo.description.trim();
+          if (!code && !description) continue;
+
+          const discountInfo = parseDiscountFromDescription(description);
+
+          await upsertPromo({
+            source: "cj",
+            advertiserId: promo.advertiserId || null,
+            advertiserName: promo.advertiserName,
+            code,
+            description: description || null,
+            startDate: parseCJPromotionDate(promo.promotionStartDate),
+            endDate: parseCJPromotionDate(promo.promotionEndDate),
+            discountType: discountInfo.type,
+            discountValue: discountInfo.value,
+            trackingUrl: promo.clickUrl,
+            raw: promo as any,
+          });
+          totalUpserted++;
+        }
+
+        if (promos.length < perPage) break;
+        page++;
+        await delay(500);
+      }
     }
   } catch (err: any) {
     log(`CJ promotions fetch error: ${err.message}`, "promo-codes");
@@ -148,35 +144,6 @@ async function fetchCJPromotions(): Promise<number> {
 
   log(`CJ promotions: ${totalUpserted} promo codes synced`, "promo-codes");
   return totalUpserted;
-}
-
-function parseCJPromotionsXml(xml: string): CJPromotion[] {
-  const promos: CJPromotion[] = [];
-  const promoRegex = /<promotion>([\s\S]*?)<\/promotion>/gi;
-  let match;
-
-  while ((match = promoRegex.exec(xml)) !== null) {
-    const block = match[1];
-    const extract = (tag: string): string => {
-      const m = new RegExp(`<${tag}><!\\[CDATA\\[([\\s\\S]*?)\\]\\]></${tag}>|<${tag}>([^<]*)</${tag}>`, "i").exec(block);
-      return (m?.[1] ?? m?.[2] ?? "").trim();
-    };
-
-    promos.push({
-      id: extract("id"),
-      promotionType: extract("promotion-type"),
-      couponCode: extract("coupon-code"),
-      promotionStartDate: extract("promotion-start-date"),
-      promotionEndDate: extract("promotion-end-date"),
-      clickUrl: extract("click-url"),
-      description: extract("description"),
-      advertiserName: extract("advertiser-name"),
-      advertiserId: extract("advertiser-id"),
-      status: extract("promotion-status"),
-    });
-  }
-
-  return promos;
 }
 
 async function fetchImpactPromotions(): Promise<number> {
@@ -463,6 +430,10 @@ export async function matchPromosToDeals(): Promise<{ matched: number; cleared: 
   const promosBySource = new Map<string, typeof activePromos>();
 
   for (const promo of activePromos) {
+    // A coupon code can be safely attached to each deal for a retailer. Code-free
+    // links can target a category or landing page, so retain those in the admin
+    // promotion library without claiming they apply to every product.
+    if (!promo.code.trim()) continue;
     const sourceIds = await mapAdvertiserToSourceIds(promo.advertiserName);
     for (const sid of sourceIds) {
       if (!promosBySource.has(sid)) promosBySource.set(sid, []);

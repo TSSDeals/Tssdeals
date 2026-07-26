@@ -18,6 +18,11 @@ export type CouponRule = {
 export type RetailerProgram = {
   sourceId: string;
   preferenceRank: number;
+  browserPurchase?: {
+    mobileBrowserPreferred: boolean;
+    merchantName: string;
+    hosts: string[];
+  };
   affiliate?: {
     parameter: string;
     value: string;
@@ -29,6 +34,51 @@ export type RetailerProgram = {
     rules: CouponRule[];
   };
 };
+
+export type BrowserPurchaseProgram = NonNullable<RetailerProgram["browserPurchase"]>;
+
+export const DICKS_SPORTING_GOODS_SOURCE_ID = "dicks-sporting-goods";
+
+export const BROWSER_PURCHASE_PROGRAMS: BrowserPurchaseProgram[] = [
+  {
+    mobileBrowserPreferred: true,
+    merchantName: "DICK'S Sporting Goods",
+    hosts: [
+      "dickssportinggoods.com",
+      "www.dickssportinggoods.com",
+    ],
+  },
+];
+
+export function browserPurchaseProgram(
+  sourceId: string | null | undefined,
+  rawUrl: string | null | undefined,
+): BrowserPurchaseProgram | null {
+  const normalizedSource = sourceId?.trim().toLowerCase() ?? "";
+  if (
+    normalizedSource === DICKS_SPORTING_GOODS_SOURCE_ID ||
+    normalizedSource === "cj-dicks-sporting-goods"
+  ) {
+    return BROWSER_PURCHASE_PROGRAMS[0];
+  }
+
+  if (!rawUrl) return null;
+  try {
+    const hostname = new URL(rawUrl).hostname.toLowerCase();
+    return BROWSER_PURCHASE_PROGRAMS.find((program) => program.hosts.includes(hostname)) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export function shouldUseBrowserPurchaseInterstitial(
+  sourceId: string | null | undefined,
+  rawUrl: string | null | undefined,
+  isMobile: boolean,
+): boolean {
+  const program = browserPurchaseProgram(sourceId, rawUrl);
+  return Boolean(isMobile && program?.mobileBrowserPreferred);
+}
 
 export const BASELINE_SPORTS_PROGRAM: RetailerProgram = {
   sourceId: BASELINE_SPORTS_SOURCE_ID,
