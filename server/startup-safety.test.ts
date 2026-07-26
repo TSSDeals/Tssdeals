@@ -20,6 +20,14 @@ import {
 } from "./maintenance-policy";
 import { bootstrapApplication, createStartupReadiness } from "./startup-readiness";
 
+test("retail identity migration repairs missing private base tables before altering them", () => {
+  const source = readFileSync(join(process.cwd(), "server", "startup-migrations.ts"), "utf8");
+  const migrationStart = source.indexOf("...STARTUP_MIGRATION_MANIFEST[3]");
+  const createTable = source.indexOf("CREATE TABLE IF NOT EXISTS wholesale_products", migrationStart);
+  const alterTable = source.indexOf("ALTER TABLE wholesale_products ADD COLUMN IF NOT EXISTS retail_name", migrationStart);
+  assert.ok(migrationStart >= 0 && createTable > migrationStart && alterTable > createTable);
+});
+
 test("restart applies each versioned startup operation once", async () => {
   const applied = new Set<string>();
   let mutationCalls = 0;
