@@ -16,6 +16,11 @@ import { syncMultipleShopifyStores } from "./shopify-multi-store-sync";
 import { syncBallGloveBlueprint } from "./ball-glove-blueprint-sync";
 import { baselineSyncEnabled, syncBaselineSports } from "./baseline-sports-sync";
 import { collectiveSyncEnabled, syncShopifyCollective } from "./shopify-collective-sync";
+import {
+  hasRecentSuccessfulEbaySnapshot,
+  SCHEDULED_EBAY_VALIDATION_LIMIT,
+  SCHEDULED_SIDELINESWAP_VALIDATION_LIMIT,
+} from "./deal-validation-policy";
 import { syncPlayItAgain } from "./playitagain-sync";
 import { isPushConfigured, sendPushToUser } from "./push-notifications";
 import { isSmsConfigured, sendPriceAlertSms, sendWelcomeSms } from "./sms-notifications";
@@ -1315,22 +1320,34 @@ export function startDealSyncScheduler(storage: IStorage) {
   );
   log("Stale deal cleanup scheduler started: 3am ET daily", "deal-sync");
 
-  // Deal validation: runs every 30 minutes
+  // Validate a small sample once daily, after the 8pm public feed has had first
+  // use of Browse capacity. Never spend eBay calls without a recent successful
+  // snapshot; failed feeds must preserve quota for the next import attempt.
   cron.schedule(
-    "*/30 * * * *",
-    () => {
-      import("./deal-validation").then(({ runDealValidation }) => {
+    "0 21 * * *",
+    async () => {
+      try {
+        const ebayStatus = await getEbayPublicSyncStatus(storage);
+        const ebayMax = hasRecentSuccessfulEbaySnapshot(ebayStatus)
+          ? SCHEDULED_EBAY_VALIDATION_LIMIT
+          : 0;
+        const { runDealValidation } = await import("./deal-validation");
         log("Running deal validation (dead link check)...", "deal-validation");
-        runDealValidation(500).then((r) => {
-          log(
-            `Deal validation complete: eBay ${r.ebayRemoved}/${r.ebayChecked} removed, SS ${r.ssRemoved}/${r.ssChecked} removed (${(r.durationMs / 1000).toFixed(1)}s)`,
-            "deal-validation",
-          );
-        }).catch(err => log(`Deal validation error: ${err.message}`, "deal-validation"));
-      });
+        const r = await runDealValidation({
+          ebayMax,
+          sidelineSwapMax: SCHEDULED_SIDELINESWAP_VALIDATION_LIMIT,
+        });
+        log(
+          `Deal validation complete: eBay ${r.ebayRemoved}/${r.ebayChecked} removed, SS ${r.ssRemoved}/${r.ssChecked} removed (${(r.durationMs / 1000).toFixed(1)}s)`,
+          "deal-validation",
+        );
+      } catch (err: any) {
+        log(`Deal validation error: ${err.message}`, "deal-validation");
+      }
     },
+    { timezone: "America/New_York" },
   );
-  log("Deal validation scheduler started: every 30 minutes", "deal-sync");
+  log("Deal validation scheduler started: 9pm ET daily (eBay capped at 25 after a successful feed)", "deal-sync");
 
   // Deliberately do not run a full sync merely because the process restarted.
   // Import/update remains on the published schedule or an explicit Admin run.
