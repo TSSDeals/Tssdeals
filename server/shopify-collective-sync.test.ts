@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  clearShopifyClientTokenCache,
   collectiveProductToDeals,
+  getShopifyAdminAccessToken,
   syncShopifyCollective,
   type CollectiveProduct,
 } from "./shopify-collective-sync";
@@ -84,5 +86,65 @@ test("Collective write mode cannot run without the feature flag", async () => {
       ensureSource: async () => undefined,
     }),
     /ENABLE_SHOPIFY_COLLECTIVE_SYNC/,
+  );
+});
+
+test("Shopify client credentials produce and cache a short-lived Admin token", async () => {
+  clearShopifyClientTokenCache();
+  let calls = 0;
+  const fetchImpl = async (input: string | URL | Request, init?: RequestInit) => {
+    calls++;
+    assert.equal(String(input), "https://twinseamsports.myshopify.com/admin/oauth/access_token");
+    assert.equal(init?.method, "POST");
+    const body = String(init?.body);
+    assert.match(body, /grant_type=client_credentials/);
+    assert.match(body, /client_id=client-id/);
+    assert.match(body, /client_secret=client-secret/);
+    return new Response(JSON.stringify({
+      access_token: "short-lived-token",
+      expires_in: 86_400,
+      scope: "read_products",
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+
+  const env = {
+    SHOPIFY_CLIENT_ID: "client-id",
+    SHOPIFY_CLIENT_SECRET: "client-secret",
+    SHOPIFY_STORE_DOMAIN: "twinseamsports.myshopify.com",
+  };
+  assert.equal(await getShopifyAdminAccessToken({ env, fetchImpl, now: () => 1_000 }), "short-lived-token");
+  assert.equal(await getShopifyAdminAccessToken({ env, fetchImpl, now: () => 2_000 }), "short-lived-token");
+  assert.equal(calls, 1);
+});
+
+test("legacy static Admin token remains supported without a network exchange", async () => {
+  clearShopifyClientTokenCache();
+  assert.equal(
+    await getShopifyAdminAccessToken({
+      env: { SHOPIFY_ADMIN_ACCESS_TOKEN: "existing-token" },
+      fetchImpl: async () => { throw new Error("must not fetch"); },
+    }),
+    "existing-token",
+  );
+});
+
+test("Shopify client authentication errors never include credential values", async () => {
+  clearShopifyClientTokenCache();
+  await assert.rejects(
+    getShopifyAdminAccessToken({
+      env: {
+        SHOPIFY_CLIENT_ID: "sensitive-id",
+        SHOPIFY_CLIENT_SECRET: "sensitive-secret",
+      },
+      fetchImpl: async () => new Response(JSON.stringify({
+        error: "invalid_client",
+        error_description: "Client credentials are invalid",
+      }), { status: 401, headers: { "Content-Type": "application/json" } }),
+    }),
+    (error: any) => {
+      assert.match(error.message, /client credentials are invalid/i);
+      assert.doesNotMatch(error.message, /sensitive-id|sensitive-secret/);
+      return true;
+    },
   );
 });
