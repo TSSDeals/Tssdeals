@@ -29,6 +29,12 @@ export const STARTUP_MIGRATION_MANIFEST = [
     kind: "structural",
     description: "Private wholesale catalog and business ledger tables",
   },
+  {
+    id: "20260726_004_wholesale_retail_identity",
+    checksum: "92cda15aa66c5f99994aa90654061e21fe8f118711bb575912f104ae89202731",
+    kind: "structural",
+    description: "Evidence-backed retail identity fields for private wholesale products",
+  },
 ] as const;
 
 export type ApprovedSeedState = "empty" | "satisfied" | "partial";

@@ -228,6 +228,23 @@ export const STARTUP_MIGRATIONS: readonly VersionedMigration<StartupContext>[] =
       for (const statement of statements) await context.execute(sql.raw(statement));
     },
   },
+  {
+    ...STARTUP_MIGRATION_MANIFEST[3],
+    async up(context) {
+      const statements = [
+        `ALTER TABLE wholesale_products ADD COLUMN IF NOT EXISTS retail_name TEXT`,
+        `ALTER TABLE wholesale_products ADD COLUMN IF NOT EXISTS retail_brand VARCHAR`,
+        `ALTER TABLE wholesale_products ADD COLUMN IF NOT EXISTS retail_model VARCHAR`,
+        `ALTER TABLE wholesale_products ADD COLUMN IF NOT EXISTS retail_category VARCHAR`,
+        `ALTER TABLE wholesale_products ADD COLUMN IF NOT EXISTS identity_status VARCHAR NOT NULL DEFAULT 'needs_catalog'`,
+        `ALTER TABLE wholesale_products ADD COLUMN IF NOT EXISTS identity_confidence INTEGER NOT NULL DEFAULT 0`,
+        `ALTER TABLE wholesale_products ADD COLUMN IF NOT EXISTS identity_source TEXT`,
+        `ALTER TABLE wholesale_products ADD COLUMN IF NOT EXISTS identity_source_ref TEXT`,
+        `CREATE INDEX IF NOT EXISTS wholesale_products_identity_status_idx ON wholesale_products(identity_status)`,
+      ];
+      for (const statement of statements) await context.execute(sql.raw(statement));
+    },
+  },
 ] as const;
 
 const ledger: MigrationLedger<StartupContext> = {

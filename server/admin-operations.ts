@@ -55,10 +55,47 @@ type ParsedWholesaleRow = {
   sourceSheet: string;
   sourceRow: number;
   raw: Record<string, unknown>;
+  retailName: string;
+  retailBrand: string | null;
+  retailCategory: string | null;
+  identityStatus: "supplier" | "needs_catalog";
+  identityConfidence: number;
+  identitySource: string;
 };
 
+const GENERIC_PRODUCT_WORDS = new Set([
+  "black", "white", "navy", "red", "royal", "grey", "gray", "green", "yellow",
+  "orange", "purple", "pink", "pair", "each", "adult", "youth", "small", "medium",
+  "large", "xl", "xxl", "glove", "bat", "ball", "helmet", "bag", "shoe",
+]);
+
+export function deriveSupplierRetailIdentity(input: {
+  name: string;
+  manufacturer: string | null;
+  category: string | null;
+  sku: string | null;
+}) {
+  const words = key(input.name).split(" ").filter(Boolean);
+  const descriptiveWords = words.filter((word) => !GENERIC_PRODUCT_WORDS.has(word) && !/^\d+$/.test(word));
+  const meaningful = input.name.length >= 8 && descriptiveWords.length >= 2;
+  const brandAlreadyPresent = input.manufacturer
+    ? key(input.name).includes(key(input.manufacturer))
+    : false;
+  const retailName = meaningful
+    ? [brandAlreadyPresent ? null : input.manufacturer, input.name].filter(Boolean).join(" ")
+    : input.name;
+  return {
+    retailName,
+    retailBrand: input.manufacturer,
+    retailCategory: input.category,
+    identityStatus: meaningful ? "supplier" as const : "needs_catalog" as const,
+    identityConfidence: meaningful ? 65 : 15,
+    identitySource: "supplier price list",
+  };
+}
+
 function aliasMatch(header: string, aliases: readonly string[]): boolean {
-  return aliases.some((alias) => header === alias || header.includes(alias));
+  return aliases.some((alias) => header === alias || (alias.length > 5 && header.includes(alias)));
 }
 
 function findHeader(rows: unknown[][]): { rowIndex: number; columns: Partial<Record<Field, number>> } | null {
@@ -133,6 +170,7 @@ export function parseWholesaleWorkbook(buffer: Buffer, filename: string): Parsed
         : clean(row[header.columns.brand]) || inferManufacturer(filename, sheetName);
       const category = header.columns.category === undefined ? section : clean(row[header.columns.category]) || section;
       const name = description || sku;
+      const identity = deriveSupplierRetailIdentity({ name, manufacturer, category, sku: sku || null });
       parsed.push({
         supplier: "Extra Innings Direct",
         manufacturer,
@@ -150,6 +188,7 @@ export function parseWholesaleWorkbook(buffer: Buffer, filename: string): Parsed
         sourceSheet: sheetName,
         sourceRow: index + 1,
         raw,
+        ...identity,
       });
     }
   }
@@ -215,13 +254,16 @@ async function replaceWholesaleFile(filename: string, products: ParsedWholesaleR
         ${product.hand}, ${product.wholesaleCents}, ${product.msrpCents}, ${product.mapCents},
         ${product.imageUrl}, ${product.sourceSheet}, ${product.sourceRow},
         ${JSON.stringify(product.raw)}::jsonb,
-        ${[product.manufacturer, product.category, product.sku, product.upc, product.name, product.size, product.color, product.hand].filter(Boolean).join(" ")}
+        ${[product.manufacturer, product.category, product.sku, product.upc, product.name, product.retailName, product.size, product.color, product.hand].filter(Boolean).join(" ")},
+        ${product.retailName}, ${product.retailBrand}, ${product.retailCategory},
+        ${product.identityStatus}, ${product.identityConfidence}, ${product.identitySource}
       )`);
       await tx.execute(sql`
         INSERT INTO wholesale_products (
           import_id, supplier, manufacturer, category, sku, upc, name, size, color,
           hand, wholesale_cents, msrp_cents, map_cents, image_url, source_sheet,
-          source_row, raw_data, search_text
+          source_row, raw_data, search_text, retail_name, retail_brand, retail_category,
+          identity_status, identity_confidence, identity_source
         ) VALUES ${sql.join(values, sql.raw(","))}
       `);
     }
@@ -259,12 +301,74 @@ async function replaceLedger(filename: string, entries: ReturnType<typeof parseL
   });
 }
 
+type CatalogIdentity = {
+  sku?: string;
+  upc?: string;
+  retailName: string;
+  brand?: string;
+  model?: string;
+  category?: string;
+  sourceRef: string;
+  confidence?: number;
+};
+
+export function parseCatalogIdentityFile(buffer: Buffer): CatalogIdentity[] {
+  const parsed = JSON.parse(buffer.toString("utf8"));
+  const candidates = Array.isArray(parsed) ? parsed : parsed?.matches;
+  if (!Array.isArray(candidates)) throw new Error("Catalog identity file must contain a matches array.");
+  return candidates.map((candidate: any) => ({
+    sku: clean(candidate.sku) || undefined,
+    upc: clean(candidate.upc) || undefined,
+    retailName: clean(candidate.retailName),
+    brand: clean(candidate.brand) || undefined,
+    model: clean(candidate.model) || undefined,
+    category: clean(candidate.category) || undefined,
+    sourceRef: clean(candidate.sourceRef),
+    confidence: Math.min(100, Math.max(0, Number(candidate.confidence) || 90)),
+  })).filter((candidate) =>
+    candidate.retailName.length >= 4
+    && candidate.sourceRef.length >= 3
+    && Boolean(candidate.sku || candidate.upc));
+}
+
+async function applyCatalogIdentities(matches: CatalogIdentity[]) {
+  let updated = 0;
+  for (let offset = 0; offset < matches.length; offset += 250) {
+    const chunk = matches.slice(offset, offset + 250);
+    const values = chunk.map((match) => sql`(
+      ${match.sku ?? null}, ${match.upc ?? null}, ${match.retailName}, ${match.brand ?? null},
+      ${match.model ?? null}, ${match.category ?? null}, ${match.sourceRef}, ${match.confidence ?? 90}
+    )`);
+    const result = await db.execute(sql`
+      UPDATE wholesale_products AS product
+      SET retail_name = match.retail_name,
+          retail_brand = coalesce(match.brand, product.retail_brand, product.manufacturer),
+          retail_model = coalesce(match.model, product.retail_model),
+          retail_category = coalesce(match.category, product.retail_category, product.category),
+          identity_status = 'catalog_matched',
+          identity_confidence = match.confidence,
+          identity_source = 'manufacturer catalog',
+          identity_source_ref = match.source_ref,
+          search_text = concat_ws(' ', product.search_text, match.retail_name, match.brand, match.model, match.category)
+      FROM (VALUES ${sql.join(values, sql.raw(","))})
+        AS match(sku, upc, retail_name, brand, model, category, source_ref, confidence)
+      WHERE (match.sku IS NOT NULL AND lower(product.sku) = lower(match.sku))
+         OR (match.upc IS NOT NULL AND product.upc = match.upc)
+      RETURNING product.id
+    `);
+    updated += (result as any).rows?.length ?? 0;
+  }
+  return updated;
+}
+
 export function registerAdminOperationsRoutes(app: Express, isAdmin: RequestHandler) {
   app.get("/api/admin/operations/summary", isAdmin, async (_req, res) => {
     const result = await db.execute(sql.raw(`
       SELECT
         (SELECT count(*)::int FROM wholesale_products) AS wholesale_products,
         (SELECT count(DISTINCT source_file_name)::int FROM wholesale_imports) AS wholesale_files,
+        (SELECT count(*)::int FROM wholesale_products WHERE identity_status = 'catalog_matched') AS catalog_matched_products,
+        (SELECT count(*)::int FROM wholesale_products WHERE identity_status = 'needs_catalog') AS needs_catalog_products,
         (SELECT count(*)::int FROM business_ledger_entries) AS ledger_entries,
         (SELECT coalesce(sum(revenue_cents),0)::bigint FROM business_ledger_entries) AS ledger_revenue_cents,
         (SELECT coalesce(sum(profit_cents),0)::bigint FROM business_ledger_entries) AS ledger_profit_cents,
@@ -282,7 +386,9 @@ export function registerAdminOperationsRoutes(app: Express, isAdmin: RequestHand
     const pattern = `%${query.replace(/[%_]/g, "\\$&")}%`;
     const result = await db.execute(sql`
       SELECT id, supplier, manufacturer, category, sku, upc, name, size, color, hand,
-             wholesale_cents, msrp_cents, map_cents, image_url, source_sheet, source_row
+             wholesale_cents, msrp_cents, map_cents, image_url, source_sheet, source_row,
+             retail_name, retail_brand, retail_model, retail_category, identity_status,
+             identity_confidence, identity_source, identity_source_ref
       FROM wholesale_products
       WHERE (${query} = '' OR search_text ILIKE ${pattern})
         AND (${category} = '' OR category = ${category})
@@ -326,5 +432,11 @@ export function registerAdminOperationsRoutes(app: Express, isAdmin: RequestHand
     if (!req.file) return res.status(400).json({ message: "Choose the TSS ledger workbook." });
     const entries = parseLedgerWorkbook(req.file.buffer);
     res.json({ file: req.file.originalname, rows: await replaceLedger(req.file.originalname, entries) });
+  });
+
+  app.post("/api/admin/operations/import-catalog-identities", isAdmin, upload.single("file"), async (req: any, res) => {
+    if (!req.file) return res.status(400).json({ message: "Choose a generated catalog identity JSON file." });
+    const matches = parseCatalogIdentityFile(req.file.buffer);
+    res.json({ matches: matches.length, updatedRows: await applyCatalogIdentities(matches) });
   });
 }
