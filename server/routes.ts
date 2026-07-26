@@ -785,7 +785,8 @@ export async function registerRoutes(
 
   app.post("/api/admin/validate-deals", isAdmin, async (req: any, res) => {
     try {
-      const maxPerSource = Math.min(2000, Math.max(50, parseInt(req.body?.maxPerSource ?? "500") || 500));
+      const { safeManualValidationLimit } = await import("./deal-validation-policy");
+      const maxPerSource = safeManualValidationLimit(req.body?.maxPerSource);
       const { runDealValidation } = await import("./deal-validation");
       const result = await runDealValidation(maxPerSource);
       res.json(result);

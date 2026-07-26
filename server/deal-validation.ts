@@ -90,13 +90,22 @@ export interface ValidationResult {
   durationMs: number;
 }
 
-export async function runDealValidation(maxPerSource = 500): Promise<ValidationResult> {
+export interface DealValidationOptions {
+  ebayMax: number;
+  sidelineSwapMax: number;
+}
+
+export async function runDealValidation(
+  options: number | DealValidationOptions = 25,
+): Promise<ValidationResult> {
+  const ebayMax = typeof options === "number" ? options : options.ebayMax;
+  const sidelineSwapMax = typeof options === "number" ? options : options.sidelineSwapMax;
   const start = Date.now();
   const result: ValidationResult = { ebayChecked: 0, ebayRemoved: 0, ssChecked: 0, ssRemoved: 0, durationMs: 0 };
 
   // --- eBay validation ---
-  const token = await getEbayAppToken();
-  if (token) {
+  const token = ebayMax > 0 ? await getEbayAppToken() : null;
+  if (token && ebayMax > 0) {
     // Prioritize deals not refreshed recently — oldest lastSeenAt first, limit to maxPerSource
     const ebayDeals = await db
       .select({ id: deals.id, url: deals.url })
@@ -108,7 +117,7 @@ export async function runDealValidation(maxPerSource = 500): Promise<ValidationR
         )
       )
       .orderBy(deals.lastSeenAt) // oldest first = most likely to be dead
-      .limit(maxPerSource);
+      .limit(ebayMax);
 
     const deadEbayIds: string[] = [];
     const batchSize = 5;
@@ -147,7 +156,7 @@ export async function runDealValidation(maxPerSource = 500): Promise<ValidationR
       )
     )
     .orderBy(deals.lastSeenAt)
-    .limit(maxPerSource);
+    .limit(Math.max(0, sidelineSwapMax));
 
   const deadSsIds: string[] = [];
   const ssBatchSize = 10;
