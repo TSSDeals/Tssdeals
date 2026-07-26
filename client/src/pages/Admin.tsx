@@ -1778,9 +1778,9 @@ export default function AdminPage() {
                 <Store className="h-5 w-5 text-white" />
               </div>
               <div>
-                <h2 className="text-lg font-bold tracking-tight">Rakuten / Hoka</h2>
+                <h2 className="text-lg font-bold tracking-tight">Rakuten Sports</h2>
                 <p className="text-sm text-muted-foreground mt-0.5">
-                  Sync Hoka products via Rakuten Advertising
+                  Sync approved HOKA, Orvis, and Cannondale products via Rakuten Advertising
                 </p>
               </div>
             </div>
@@ -1800,7 +1800,7 @@ export default function AdminPage() {
                 ) : (
                   <>
                     <RefreshCw className="mr-2 h-4 w-4" />
-                    Sync Rakuten / Hoka
+                    Sync Rakuten Sports
                   </>
                 )}
               </Button>
