@@ -39,6 +39,7 @@ import { registerMagicLinkRoutes } from "./magic-link-auth";
 import { registerSmsAuthRoutes } from "./sms-auth";
 import { registerTeamStatsRoutes } from "./team-stats";
 import { registerInvoiceRoutes } from "./invoices";
+import { registerAdminOperationsRoutes } from "./admin-operations";
 import { projectDealSearchClassification } from "./deal-search";
 import {
   LEGACY_SHOPPER_MEMORABILIA_SPORT_IDS,
@@ -89,6 +90,7 @@ export async function registerRoutes(
   registerSmsAuthRoutes(app);
   registerTeamStatsRoutes(app);
   registerInvoiceRoutes(app);
+  registerAdminOperationsRoutes(app, isAdmin);
 
   app.get("/92ea36508d8a3f146aa22783a2d57295.html", (_req, res) => {
     res.type("text/html").send("twilio-domain-verification=92ea36508d8a3f146aa22783a2d57295");
