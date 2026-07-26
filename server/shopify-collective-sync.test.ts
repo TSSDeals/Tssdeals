@@ -82,6 +82,12 @@ test("Collective adapter rejects baseball-themed jewelry, hats, and unrelated dr
     productType: "Power Tools",
     category: { fullName: "Hardware > Tools > Power Tools" },
   }), []);
+  assert.deepEqual(collectiveProductToDeals({
+    ...glove,
+    title: "Golf Club Brush",
+    productType: "Golf Clubs",
+    category: { fullName: "Sporting Goods > Golf > Golf Club Parts & Accessories" },
+  }), []);
 });
 
 test("Collective adapter keeps the verified taxonomy category over broad product types", () => {

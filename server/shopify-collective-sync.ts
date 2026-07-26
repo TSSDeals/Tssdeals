@@ -20,14 +20,14 @@ const CATEGORY_RULES: Array<{ pattern: RegExp; sportId: string; equipmentTypeId:
   { pattern: /\bgolf\b[\s\S]*\b(?:clubs?|drivers?|fairway woods?|iron sets?|putters?|wedges?)\b|\b(?:golf clubs?|golf drivers?|golf putters?|golf wedges?)\b/i, sportId: "golf", equipmentTypeId: "golf-other" },
 ];
 
-const SHOPIFY_TAXONOMY_RULES: Array<{ phrase: string; sportId: string; equipmentTypeId: string }> = [
-  { phrase: "baseball & softball fielding gloves", sportId: "baseball", equipmentTypeId: "bb-gloves" },
-  { phrase: "baseball bats", sportId: "baseball", equipmentTypeId: "bb-bats" },
-  { phrase: "softball bats", sportId: "fastpitch-softball", equipmentTypeId: "fp-bats" },
-  { phrase: "baseball & softball cleats", sportId: "baseball", equipmentTypeId: "bb-cleats" },
-  { phrase: "baseball & softball protective gear", sportId: "baseball", equipmentTypeId: "bb-protective" },
-  { phrase: "running shoes", sportId: "running", equipmentTypeId: "run-shoes" },
-  { phrase: "golf clubs", sportId: "golf", equipmentTypeId: "golf-other" },
+const SHOPIFY_TAXONOMY_RULES: Array<{ pattern: RegExp; sportId: string; equipmentTypeId: string }> = [
+  { pattern: /\bbaseball\s*&\s*softball\b[\s\S]*\bfielding gloves?\s*$/i, sportId: "baseball", equipmentTypeId: "bb-gloves" },
+  { pattern: /\bbaseball\b[\s\S]*\bbats?\s*$/i, sportId: "baseball", equipmentTypeId: "bb-bats" },
+  { pattern: /\bsoftball\b[\s\S]*\bbats?\s*$/i, sportId: "fastpitch-softball", equipmentTypeId: "fp-bats" },
+  { pattern: /\bbaseball\s*&\s*softball\b[\s\S]*\bcleats?\s*$/i, sportId: "baseball", equipmentTypeId: "bb-cleats" },
+  { pattern: /\bbaseball\s*&\s*softball\b[\s\S]*\bprotective gear\s*$/i, sportId: "baseball", equipmentTypeId: "bb-protective" },
+  { pattern: /\brunning\b[\s\S]*\bshoes?\s*$/i, sportId: "running", equipmentTypeId: "run-shoes" },
+  { pattern: /\bgolf\b[\s\S]*\bgolf clubs?\s*$/i, sportId: "golf", equipmentTypeId: "golf-other" },
 ];
 
 export type CollectiveVariant = {
@@ -143,12 +143,16 @@ function productText(product: CollectiveProduct): string {
 
 export function collectiveCategory(product: CollectiveProduct): { sportId: string; equipmentTypeId: string } | null {
   const category = product.category?.fullName?.toLowerCase() ?? "";
-  const taxonomyRule = SHOPIFY_TAXONOMY_RULES.find((rule) => category.includes(rule.phrase));
+  const taxonomyRule = SHOPIFY_TAXONOMY_RULES.find((rule) => rule.pattern.test(category));
   if (taxonomyRule) {
     const text = productText(product);
     if (EXCLUDED.test(text)) return null;
     return { sportId: taxonomyRule.sportId, equipmentTypeId: taxonomyRule.equipmentTypeId };
   }
+  // A populated Shopify category is stronger evidence than merchant wording.
+  // If it is outside the launch allowlist, do not reinterpret the product from
+  // a sports phrase in its title (for example, "baseball bat necklace").
+  if (category) return null;
   const text = [product.title, product.productType, ...(product.tags ?? [])].join(" ");
   if (EXCLUDED.test(text)) return null;
   return CATEGORY_RULES.find((rule) => rule.pattern.test(text)) ?? null;
