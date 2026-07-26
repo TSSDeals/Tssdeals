@@ -101,9 +101,10 @@ export default function AdminOperations() {
       rightSlot={<Link href="/app/admin"><Button variant="outline" size="sm"><ArrowLeft className="mr-1.5 h-4 w-4" />Admin</Button></Link>}
     >
       <div className="space-y-5" data-testid="admin-operations">
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
           <SummaryCard label="Wholesale products" value={Number(summary.data?.wholesale_products ?? 0).toLocaleString()} />
-          <SummaryCard label="Price files" value={Number(summary.data?.wholesale_files ?? 0).toLocaleString()} />
+          <SummaryCard label="Catalog matched" value={Number(summary.data?.catalog_matched_products ?? 0).toLocaleString()} />
+          <SummaryCard label="Needs catalog name" value={Number(summary.data?.needs_catalog_products ?? 0).toLocaleString()} />
           <SummaryCard label="Ledger entries" value={Number(summary.data?.ledger_entries ?? 0).toLocaleString()} />
           <SummaryCard label="Recorded profit" value={money(summary.data?.ledger_profit_cents ?? 0)} />
         </div>
@@ -189,11 +190,21 @@ function WholesaleRow({ row }: { row: any }) {
     <article className="grid gap-3 rounded-2xl border bg-card p-4 shadow-sm sm:grid-cols-[1fr_auto] sm:items-center">
       <div className="min-w-0">
         <div className="flex flex-wrap gap-1.5 text-xs text-muted-foreground">
-          {row.manufacturer && <span>{row.manufacturer}</span>}
-          {row.category && <><span>·</span><span>{row.category}</span></>}
+          {(row.retail_brand || row.manufacturer) && <span>{row.retail_brand || row.manufacturer}</span>}
+          {(row.retail_category || row.category) && <><span>·</span><span>{row.retail_category || row.category}</span></>}
           {row.sku && <><span>·</span><span>SKU {row.sku}</span></>}
         </div>
-        <h2 className="mt-1 font-semibold">{row.name}</h2>
+        <div className="mt-1 flex flex-wrap items-center gap-2">
+          <h2 className="font-semibold">{row.retail_name || row.name}</h2>
+          {row.identity_status === "catalog_matched" ? (
+            <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-medium text-blue-800">Catalog matched</span>
+          ) : row.identity_status === "needs_catalog" ? (
+            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">Needs catalog name</span>
+          ) : null}
+        </div>
+        {row.retail_name && row.retail_name !== row.name && (
+          <p className="mt-1 text-xs text-muted-foreground">Supplier: {row.name}</p>
+        )}
         <p className="mt-1 text-sm text-muted-foreground">{[row.size, row.hand, row.color].filter(Boolean).join(" · ")}</p>
       </div>
       <div className="grid grid-cols-3 gap-2 text-right sm:min-w-[315px]">
