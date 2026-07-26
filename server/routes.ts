@@ -1038,7 +1038,9 @@ export async function registerRoutes(
       featured: input.featured,
       priceDropOnly: input.priceDropOnly,
       limit: input.limit,
-      currency: input.currency,
+      // TSSDeals currently serves US shoppers by default. Keep an explicit
+      // override available for future international/Japanese-market views.
+      currency: input.currency ?? "USD",
       sortBy: input.sortBy,
       userId: currentUserId,
     });

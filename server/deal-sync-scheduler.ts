@@ -6,7 +6,13 @@ import { searchCJProductsPaginated, cjProductToDeal, getSportKeywords, getCJPart
 import { syncShopifyStore } from "./shopify-sync";
 import { syncSidelineSwap } from "./sidelineswap";
 import { searchShareASaleProducts, shareASaleProductToDeal, getShareASaleSportKeywords } from "./shareasale";
-import { listImpactCatalogs, getImpactCatalogItems, impactItemToDeal } from "./impact-api";
+import {
+  listImpactCatalogs,
+  getImpactCatalogItems,
+  impactItemToDeal,
+  isUsdImpactCatalog,
+  isUsdImpactItem,
+} from "./impact-api";
 import { searchRakutenProducts, rakutenProductToDeal, getRakutenSportKeywords, syncRakutenMerchant, RAKUTEN_MERCHANTS } from "./rakuten-api";
 import { searchAmazonProductsAllPages, amazonItemToDeal, getAmazonSportKeywords, getAmazonSportBrowseNodes, getAmazonOAuth2Token, type AmazonAuth } from "./amazon-api";
 import { syncNameOfTheGame } from "./woocommerce-sync";
@@ -599,8 +605,12 @@ export async function syncImpactDeals(storage: IStorage): Promise<{ created: num
   let totalErrors = 0;
 
   try {
-    const catalogs = await listImpactCatalogs(accountSid, authToken);
-    log(`Impact: found ${catalogs.length} catalogs`, "deal-sync");
+    const allCatalogs = await listImpactCatalogs(accountSid, authToken);
+    const catalogs = allCatalogs.filter(isUsdImpactCatalog);
+    log(
+      `Impact: found ${allCatalogs.length} catalogs; syncing ${catalogs.length} USD catalogs`,
+      "deal-sync",
+    );
 
     for (const catalog of catalogs) {
       if (stopRequestedSince(stopEpoch)) break;
@@ -623,6 +633,7 @@ export async function syncImpactDeals(storage: IStorage): Promise<{ created: num
           if (items.length === 0) break;
 
           const dealsToInsert = items
+            .filter(isUsdImpactItem)
             .map((item) => {
               const { sportId, eqTypePrefix } = detectSportFromImpactItem(
                 item.Category ?? "",
