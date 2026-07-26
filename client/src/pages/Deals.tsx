@@ -415,8 +415,15 @@ export default function DealsPage() {
   const homepageVisuals = useMemo(() => {
     const categoryImages: Record<string, string> = {};
     const starterImages: Record<string, string> = {};
-    const visualDeals = ((homepageVisualDeals.data ?? []) as any[]).filter(
-      (deal) => !["ebay", "sidelineswap"].includes(deal?.sourceId),
+    const defaultFeedDeals = ((defaultFeed.data ?? []) as any[])
+      .flatMap((group) => group.deals ?? []);
+    const visualDeals = [
+      ...((homepageVisualDeals.data ?? []) as any[]),
+      ...defaultFeedDeals,
+      ...((twinSeamQuery.data ?? []) as any[]),
+    ].filter((deal, index, deals) =>
+      !["ebay", "sidelineswap"].includes(deal?.sourceId)
+      && deals.findIndex((candidate) => candidate?.id === deal?.id) === index
     );
 
     for (const deal of visualDeals) {
@@ -444,7 +451,7 @@ export default function DealsPage() {
     }
 
     return { categoryImages, starterImages };
-  }, [homepageVisualDeals.data]);
+  }, [defaultFeed.data, homepageVisualDeals.data, twinSeamQuery.data]);
 
   const restDeals = useMemo(() => {
     const all = deals.data ?? [];
