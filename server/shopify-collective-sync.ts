@@ -55,7 +55,15 @@ type AdminProductsPage = {
       pageInfo: { hasNextPage: boolean; endCursor: string | null };
     };
   };
-  errors?: Array<{ message?: string }>;
+  errors?: Array<{ message?: string; extensions?: { code?: string } }>;
+  extensions?: {
+    cost?: {
+      throttleStatus?: {
+        currentlyAvailable?: number;
+        restoreRate?: number;
+      };
+    };
+  };
 };
 
 type ShopifyClientTokenResponse = {
@@ -210,14 +218,18 @@ export function collectiveSyncEnabled(env: NodeJS.ProcessEnv = process.env): boo
 export async function fetchCollectiveProducts(options: {
   env?: NodeJS.ProcessEnv;
   fetchImpl?: typeof fetch;
+  sleep?: (milliseconds: number) => Promise<void>;
 } = {}): Promise<CollectiveProduct[]> {
   const env = options.env ?? process.env;
   const domain = env.SHOPIFY_STORE_DOMAIN?.trim() || SHOPIFY_COLLECTIVE_STORE_DOMAIN;
   const fetchImpl = options.fetchImpl ?? fetch;
+  const sleep = options.sleep ?? ((milliseconds: number) =>
+    new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
   const token = await getShopifyAdminAccessToken({ env, fetchImpl });
   const products: CollectiveProduct[] = [];
   let cursor: string | null = null;
-  do {
+  let throttleAttempts = 0;
+  while (true) {
     const response = await fetchImpl(`https://${domain}/admin/api/2026-07/graphql.json`, {
       method: "POST",
       headers: {
@@ -226,12 +238,12 @@ export async function fetchCollectiveProducts(options: {
       },
       body: JSON.stringify({
         query: `query CollectiveProducts($cursor: String) {
-          products(first: 100, after: $cursor, query: "status:active") {
+          products(first: 25, after: $cursor, query: "status:active") {
             nodes {
               id legacyResourceId title handle status vendor productType tags onlineStoreUrl
               category { fullName }
               featuredMedia { preview { image { url width height } } }
-              variants(first: 100) {
+              variants(first: 20) {
                 nodes { id legacyResourceId title sku price compareAtPrice availableForSale }
               }
             }
@@ -242,15 +254,28 @@ export async function fetchCollectiveProducts(options: {
       }),
     });
     const payload = await response.json() as AdminProductsPage;
+    const throttled = payload.errors?.some((error) =>
+      error.extensions?.code === "THROTTLED" || /throttled/i.test(error.message ?? ""));
+    if (throttled && throttleAttempts < 8) {
+      throttleAttempts++;
+      const throttle = payload.extensions?.cost?.throttleStatus;
+      const available = throttle?.currentlyAvailable ?? 0;
+      const restoreRate = Math.max(1, throttle?.restoreRate ?? 50);
+      const waitMs = Math.min(10_000, Math.max(1_000, Math.ceil((500 - available) / restoreRate * 1000)));
+      await sleep(waitMs);
+      continue;
+    }
     if (!response.ok || payload.errors?.length || !payload.data) {
       const detail = payload.errors?.map((error) => error.message).filter(Boolean).join("; ");
       throw new Error(`Shopify Admin catalog fetch failed (${response.status})${detail ? `: ${detail}` : ""}`);
     }
+    throttleAttempts = 0;
     products.push(...payload.data.products.nodes);
-    cursor = payload.data.products.pageInfo.hasNextPage
-      ? payload.data.products.pageInfo.endCursor
-      : null;
-  } while (cursor);
+    if (!payload.data.products.pageInfo.hasNextPage) break;
+    cursor = payload.data.products.pageInfo.endCursor;
+    if (!cursor) break;
+    await sleep(200);
+  }
   return products;
 }
 
