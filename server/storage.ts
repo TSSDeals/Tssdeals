@@ -1876,6 +1876,7 @@ export class DatabaseStorage implements IStorage {
 
       const baseWhere = [
         eq(deals.sportId, sport.id),
+        eq(deals.currency, "USD"),
         dsql`CAST(${deals.percentOff} AS numeric) >= ${MIN_DISCOUNT}`,
         freshFilter,
         ...(equipFilter ? [equipFilter] : []),
@@ -1913,6 +1914,7 @@ export class DatabaseStorage implements IStorage {
         const usedIds = new Set(finalDeals.map((d) => d.id));
         const fallbackWhere: any[] = [
           eq(deals.sportId, sport.id),
+          eq(deals.currency, "USD"),
           freshFilter,
           equipFilter,
         ];

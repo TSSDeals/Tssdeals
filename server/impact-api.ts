@@ -1,6 +1,6 @@
 import type { InsertDeal } from "@shared/schema";
 
-interface ImpactCatalog {
+export interface ImpactCatalog {
   Id: string;
   Name: string;
   AdvertiserId: string;
@@ -13,7 +13,7 @@ interface ImpactCatalog {
   ItemsUri: string;
 }
 
-interface ImpactCatalogItem {
+export interface ImpactCatalogItem {
   CatalogItemId: string;
   Name: string;
   Description: string;
@@ -54,6 +54,14 @@ interface ImpactItemsResponse {
 
 function buildBasicAuth(accountSid: string, authToken: string): string {
   return "Basic " + Buffer.from(`${accountSid}:${authToken}`).toString("base64");
+}
+
+export function isUsdImpactCatalog(catalog: Pick<ImpactCatalog, "Currency">): boolean {
+  return (catalog.Currency || "").trim().toUpperCase() === "USD";
+}
+
+export function isUsdImpactItem(item: Pick<ImpactCatalogItem, "Currency">): boolean {
+  return (item.Currency || "").trim().toUpperCase() === "USD";
 }
 
 export async function listImpactCatalogs(

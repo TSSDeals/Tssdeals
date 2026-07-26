@@ -1,40 +1,16 @@
-import { listImpactCatalogs, getImpactCatalogItems, impactItemToDeal } from "./impact-api";
+import {
+  listImpactCatalogs,
+  getImpactCatalogItems,
+  impactItemToDeal,
+  isUsdImpactCatalog,
+  isUsdImpactItem,
+} from "./impact-api";
 import { log } from "./index";
 import type { IStorage } from "./storage";
+import { classifyFanaticsItem } from "./fanatics-classification";
 
 const FANATICS_SOURCE_ID = "fanatics";
 const FANATICS_SOURCE_NAME = "Fanatics";
-
-const SPORT_KEYWORD_MAP: Record<string, string[]> = {
-  baseball: ["baseball", "mlb"],
-  "fastpitch-softball": ["softball", "fastpitch"],
-  "slowpitch-softball": ["softball", "slowpitch"],
-  basketball: ["basketball", "nba"],
-  football: ["football", "nfl"],
-  soccer: ["soccer", "mls", "fifa"],
-  hockey: ["hockey", "nhl"],
-  lacrosse: ["lacrosse"],
-  golf: ["golf", "pga"],
-  volleyball: ["volleyball"],
-  wrestling: ["wrestling"],
-  cycling: ["cycling"],
-  gymnastics: ["gymnastics"],
-  cheerleading: ["cheerleading"],
-  rugby: ["rugby"],
-  swimming: ["swimming"],
-  "disc-golf": ["disc golf"],
-  fishing: ["fishing"],
-};
-
-function detectSportFromItem(name: string, category: string, subCategory: string): string {
-  const text = `${name} ${category} ${subCategory}`.toLowerCase();
-  for (const [sportId, keywords] of Object.entries(SPORT_KEYWORD_MAP)) {
-    for (const kw of keywords) {
-      if (text.includes(kw)) return sportId;
-    }
-  }
-  return "baseball";
-}
 
 export async function syncFanaticsDeals(
   storage: IStorage,
@@ -55,8 +31,12 @@ export async function syncFanaticsDeals(
   let totalErrors = 0;
 
   try {
-    const catalogs = await listImpactCatalogs(accountSid, authToken);
-    log(`Fanatics: found ${catalogs.length} catalogs`, "deal-sync");
+    const allCatalogs = await listImpactCatalogs(accountSid, authToken);
+    const catalogs = allCatalogs.filter(isUsdImpactCatalog);
+    log(
+      `Fanatics: found ${allCatalogs.length} catalogs; syncing ${catalogs.length} USD catalogs`,
+      "deal-sync",
+    );
 
     for (const catalog of catalogs) {
       try {
@@ -69,12 +49,11 @@ export async function syncFanaticsDeals(
           if (items.length === 0) break;
 
           const dealsToInsert = items
+            .filter(isUsdImpactItem)
             .map((item) => {
-              const sportId = detectSportFromItem(item.Name, item.Category, item.SubCategory);
-              const sportEqTypes = allEquipmentTypes.filter(et => et.sportId === sportId);
-              const defaultEqType = sportEqTypes.find(et => et.id.endsWith("-other"))?.id ?? sportEqTypes[0]?.id ?? sportId;
+              const { sportId, equipmentTypeId } = classifyFanaticsItem(item, allEquipmentTypes);
 
-              const deal = impactItemToDeal(item, sportId, defaultEqType);
+              const deal = impactItemToDeal(item, sportId, equipmentTypeId);
               if (deal) {
                 deal.sourceId = FANATICS_SOURCE_ID;
               }
