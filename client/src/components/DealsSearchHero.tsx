@@ -25,6 +25,8 @@ export function DealsSearchHero({
   onPhotoSearch,
   onClearPhoto,
   onCategory,
+  starterImages = {},
+  categoryImages = {},
 }: {
   query: string;
   recentSearches: string[];
@@ -36,6 +38,8 @@ export function DealsSearchHero({
   onPhotoSearch: (file: File) => void;
   onClearPhoto: () => void;
   onCategory: (sportId: string, equipmentTypeId: string) => void;
+  starterImages?: Record<string, string>;
+  categoryImages?: Record<string, string>;
 }) {
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -48,15 +52,16 @@ export function DealsSearchHero({
         className="search-hero animate-float-in overflow-hidden rounded-[1.75rem] border border-primary/20 p-5 shadow-xl shadow-primary/10 sm:p-7 lg:p-9"
         data-testid="search-hero"
       >
-        <div className="max-w-3xl">
+        <div className="mx-auto max-w-4xl text-center">
           <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-background/75 px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] text-primary">
             <Sparkles className="h-3.5 w-3.5" />
-            Search by the words parents actually use
+            Search the way parents and players talk
           </div>
-          <h1 className="max-w-2xl text-3xl font-bold leading-[1.08] sm:text-4xl lg:text-5xl">
-            Find the right gear. Compare the real deal.
+          <h1 className="mx-auto text-3xl font-bold leading-[1.08] sm:text-4xl lg:text-5xl">
+            <span className="block">Find the right gear.</span>
+            <span className="block">Compare the real deal.</span>
           </h1>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">
+          <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">
             Type a model, size, drop, or throw hand. TwinSeam matches shopping shorthand such as 27/17, -10, LHT, and RHT.
           </p>
         </div>
@@ -134,11 +139,23 @@ export function DealsSearchHero({
                   key={starter.query}
                   type="button"
                   onClick={() => onSearch(starter.query)}
-                  className="ring-focus min-h-11 shrink-0 rounded-xl border border-border bg-background/80 px-3 py-2 text-left transition-colors hover:border-primary/40 hover:bg-background"
+                  className="ring-focus flex min-h-11 shrink-0 items-center gap-2 rounded-xl border border-border bg-background/80 px-2.5 py-2 text-left transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:bg-background hover:shadow-md sm:min-h-14"
                   data-testid={`starter-${starter.query.replace(/\W+/g, "-").toLowerCase()}`}
                 >
-                  <span className="block text-xs font-bold">{starter.label}</span>
-                  <span className="block text-[11px] text-muted-foreground">{starter.detail}</span>
+                  {starterImages[starter.query] && (
+                    <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-lg border border-border/70 bg-white">
+                      <img
+                        src={starterImages[starter.query]}
+                        alt=""
+                        loading="lazy"
+                        className="h-full w-full object-contain p-0.5"
+                      />
+                    </span>
+                  )}
+                  <span>
+                    <span className="block text-xs font-bold">{starter.label}</span>
+                    <span className="block text-[11px] text-muted-foreground">{starter.detail}</span>
+                  </span>
                 </button>
               ))}
             </div>
@@ -176,16 +193,29 @@ export function DealsSearchHero({
               key={category.id}
               type="button"
               onClick={() => onCategory("baseball", category.id)}
-              className="ring-focus min-h-14 rounded-2xl border border-border bg-card px-3 py-3 text-left text-sm font-bold shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-md"
+              className="ring-focus group relative min-h-14 rounded-2xl overflow-hidden border border-border bg-card px-3 py-3 text-left text-sm font-bold shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-md sm:min-h-20"
               data-testid={`quick-category-${category.id}`}
             >
-              {category.name}
+              <span className={cn("relative z-10 block max-w-[70%]", categoryImages[category.id] && "drop-shadow-[0_1px_0_rgba(255,255,255,0.9)]")}>
+                {category.name}
+              </span>
+              {categoryImages[category.id] && (
+                <>
+                  <span className="absolute inset-y-0 right-0 w-1/2 bg-gradient-to-l from-card via-card/85 to-transparent" />
+                  <img
+                    src={categoryImages[category.id]}
+                    alt=""
+                    loading="lazy"
+                    className="absolute right-1 top-1/2 h-[72px] w-[72px] -translate-y-1/2 object-contain opacity-90 transition-transform group-hover:scale-105"
+                  />
+                </>
+              )}
             </button>
           ))}
           <button
             type="button"
             onClick={() => onCategory(SHOPPER_MEMORABILIA_SPORT_ID, "all")}
-            className="ring-focus min-h-14 rounded-2xl border border-border bg-card px-3 py-3 text-left text-sm font-bold shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-md"
+            className="ring-focus min-h-14 rounded-2xl border border-border bg-card px-3 py-3 text-left text-sm font-bold shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-md sm:min-h-20"
             data-testid="browse-sport-memorabilia"
           >
             Memorabilia

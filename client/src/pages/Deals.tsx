@@ -43,6 +43,7 @@ import {
   type SearchRecoveryAction,
 } from "@shared/search-language";
 import {
+  SHOPPER_STARTER_SEARCHES,
   addRecentShopperSearch,
   groupShopperSubFilters,
   parseRecentShopperSearches,
@@ -376,6 +377,12 @@ export default function DealsPage() {
     source: "twin-seam-sports",
     limit: 24,
   } : null);
+  const homepageVisualDeals = useDeals(isDefaultView ? {
+    sportId: "baseball",
+    minPercentOff: 0,
+    limit: 100,
+    sortBy: "newest",
+  } : null);
 
   const bonusDealsQuery = useQuery<any[]>({
     queryKey: ["/api/bonus-deals"],
@@ -399,6 +406,40 @@ export default function DealsPage() {
     const featuredIds = new Set(featured.map((d: any) => d.id));
     return tsRaw.filter((d: any) => !featuredIds.has(d.id));
   }, [twinSeamQuery.data, featured]);
+
+  const homepageVisuals = useMemo(() => {
+    const categoryImages: Record<string, string> = {};
+    const starterImages: Record<string, string> = {};
+    const visualDeals = ((homepageVisualDeals.data ?? []) as any[]).filter(
+      (deal) => !["ebay", "sidelineswap"].includes(deal?.sourceId),
+    );
+
+    for (const deal of visualDeals) {
+      if (!deal?.imageUrl) continue;
+      const categoryId = shopperResultEquipmentTypeId(deal);
+      if (!categoryImages[categoryId]) categoryImages[categoryId] = deal.imageUrl;
+    }
+
+    const normalizedDeals = visualDeals
+      .filter((deal) => deal?.imageUrl && deal?.title)
+      .map((deal) => ({
+        deal,
+        title: String(deal.title).toLowerCase().replace(/[^a-z0-9]+/g, " "),
+      }));
+    for (const starter of SHOPPER_STARTER_SEARCHES) {
+      const significantTerms = starter.query
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, " ")
+        .split(/\s+/)
+        .filter((term) => term.length >= 3);
+      const match = normalizedDeals.find(({ title }) =>
+        significantTerms.every((term) => title.includes(term))
+      );
+      if (match) starterImages[starter.query] = match.deal.imageUrl;
+    }
+
+    return { categoryImages, starterImages };
+  }, [homepageVisualDeals.data]);
 
   const restDeals = useMemo(() => {
     const all = deals.data ?? [];
@@ -568,6 +609,8 @@ export default function DealsPage() {
           brand: "all",
           minPercentOff: 0,
         })}
+        starterImages={homepageVisuals.starterImages}
+        categoryImages={homepageVisuals.categoryImages}
       />
 
       <div className="hidden justify-end lg:flex" data-testid="deal-utilities">
