@@ -5,12 +5,34 @@ import {
   attachBaselineCouponRecommendations,
   BASELINE_SPORTS_PROGRAM,
   BASELINE_SPORTS_SOURCE_ID,
+  browserPurchaseProgram,
+  shouldUseBrowserPurchaseInterstitial,
   preferredRetailerRank,
   recommendBaselineCoupon,
   SHOPIFY_COLLECTIVE_SOURCE_ID,
   TWIN_SEAM_SOURCE_ID,
   type ComparableRetailOffer,
 } from "./retailer-programs";
+
+test("DICK'S uses the reusable browser-purchase program only on mobile", () => {
+  const cjUrl =
+    "https://www.anrdoezrs.net/click-123456-78901234?url=https%3A%2F%2Fwww.dickssportinggoods.com%2Fp%2Fitem";
+
+  assert.equal(browserPurchaseProgram("dicks-sporting-goods", cjUrl)?.merchantName, "DICK'S Sporting Goods");
+  assert.equal(shouldUseBrowserPurchaseInterstitial("dicks-sporting-goods", cjUrl, true), true);
+  assert.equal(shouldUseBrowserPurchaseInterstitial("dicks-sporting-goods", cjUrl, false), false);
+  assert.equal(shouldUseBrowserPurchaseInterstitial("ebay", "https://ebay.com/itm/1", true), false);
+});
+
+test("browser-purchase detection never rewrites the affiliate URL", () => {
+  const exactUrl =
+    "https://www.anrdoezrs.net/click-123456-78901234?sid=TSS%2Bmobile&url=https%3A%2F%2Fwww.dickssportinggoods.com%2Fp%2Fitem#offer";
+  const before = exactUrl;
+  browserPurchaseProgram(undefined, exactUrl);
+  shouldUseBrowserPurchaseInterstitial(undefined, exactUrl, true);
+  assert.equal(exactUrl, before);
+  assert.equal(applyOutboundAffiliateUrl(exactUrl), exactUrl);
+});
 
 test("Baseline affiliate URL tagging replaces duplicates and preserves query and fragment", () => {
   assert.equal(
