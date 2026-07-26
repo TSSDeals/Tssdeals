@@ -33,7 +33,7 @@ import EbayPricingAnalysis from "@/components/EbayPricingAnalysis";
 import SidelineSwapSync from "@/components/SidelineSwapSync";
 import PromoCodes from "@/components/PromoCodes";
 import { DataReportingPanel } from "@/components/DataReportingPanel";
-import { Activity, AlertTriangle, ArrowDown, ArrowUp, Ban, BarChart3, Calendar, Check, ChevronDown, ChevronUp, Download, ExternalLink, Eye, EyeOff, FileText, Filter, Gift, Globe, GripVertical, Link2, Link2Off, Loader2, MousePointerClick, Package, Pencil, PlayCircle, Plus, RefreshCw, Search, Shield, ShieldCheck, ShoppingBag, ShoppingCart, Sparkles, Store, Terminal, TicketX, Trash2, TrendingDown, TrendingUp, Users, X, Zap } from "lucide-react";
+import { Activity, AlertTriangle, ArrowDown, ArrowUp, Ban, BarChart3, Calendar, Check, ChevronDown, ChevronUp, Database, Download, ExternalLink, Eye, EyeOff, FileText, Filter, Gift, Globe, GripVertical, Link2, Link2Off, Loader2, MousePointerClick, Package, Pencil, PlayCircle, Plus, RefreshCw, Search, Shield, ShieldCheck, ShoppingBag, ShoppingCart, Sparkles, Store, Terminal, TicketX, Trash2, TrendingDown, TrendingUp, Users, X, Zap } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { ClassificationReviewItem } from "@shared/schema";
@@ -1241,6 +1241,17 @@ export default function AdminPage() {
             >
               <FileText className="mr-1.5 h-4 w-4" />
               Invoices
+            </Button>
+          </a>
+          <a href="/app/admin/operations">
+            <Button
+              variant="outline"
+              size="sm"
+              className="ring-focus rounded-xl"
+              data-testid="admin-operations-link"
+            >
+              <Database className="mr-1.5 h-4 w-4" />
+              Operations
             </Button>
           </a>
           <Button

@@ -23,6 +23,12 @@ export const STARTUP_MIGRATION_MANIFEST = [
     kind: "approved-seed",
     description: "Existing approved static taxonomy/application seed",
   },
+  {
+    id: "20260726_003_private_operations_tables",
+    checksum: "2a18a96ab7c519045792abdc179e7fb41acd613ab7d5a7ccf9f341a6b4c8df21",
+    kind: "structural",
+    description: "Private wholesale catalog and business ledger tables",
+  },
 ] as const;
 
 export type ApprovedSeedState = "empty" | "satisfied" | "partial";
