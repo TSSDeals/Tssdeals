@@ -58,6 +58,65 @@ type AdminProductsPage = {
   errors?: Array<{ message?: string }>;
 };
 
+type ShopifyClientTokenResponse = {
+  access_token?: string;
+  expires_in?: number;
+  scope?: string;
+  error?: string;
+  error_description?: string;
+};
+
+let cachedClientToken: { value: string; expiresAt: number } | null = null;
+
+export async function getShopifyAdminAccessToken(options: {
+  env?: NodeJS.ProcessEnv;
+  fetchImpl?: typeof fetch;
+  now?: () => number;
+} = {}): Promise<string> {
+  const env = options.env ?? process.env;
+  const staticToken = env.SHOPIFY_ADMIN_ACCESS_TOKEN?.trim();
+  if (staticToken) return staticToken;
+
+  const clientId = env.SHOPIFY_CLIENT_ID?.trim();
+  const clientSecret = env.SHOPIFY_CLIENT_SECRET?.trim();
+  const domain = env.SHOPIFY_STORE_DOMAIN?.trim() || SHOPIFY_COLLECTIVE_STORE_DOMAIN;
+  if (!clientId || !clientSecret) {
+    throw new Error("SHOPIFY_CLIENT_ID and SHOPIFY_CLIENT_SECRET are not configured");
+  }
+
+  const now = options.now ?? Date.now;
+  if (cachedClientToken && cachedClientToken.expiresAt > now() + 60_000) {
+    return cachedClientToken.value;
+  }
+
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const response = await fetchImpl(`https://${domain}/admin/oauth/access_token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "client_credentials",
+      client_id: clientId,
+      client_secret: clientSecret,
+    }),
+  });
+  const payload = await response.json() as ShopifyClientTokenResponse;
+  if (!response.ok || !payload.access_token) {
+    const detail = payload.error_description || payload.error || `HTTP ${response.status}`;
+    throw new Error(`Shopify client authentication failed: ${detail}`);
+  }
+
+  const lifetimeSeconds = Number.isFinite(payload.expires_in) ? Number(payload.expires_in) : 86_400;
+  cachedClientToken = {
+    value: payload.access_token,
+    expiresAt: now() + lifetimeSeconds * 1000,
+  };
+  return payload.access_token;
+}
+
+export function clearShopifyClientTokenCache(): void {
+  cachedClientToken = null;
+}
+
 function productText(product: CollectiveProduct): string {
   return [
     product.category?.fullName ?? "",
@@ -153,11 +212,9 @@ export async function fetchCollectiveProducts(options: {
   fetchImpl?: typeof fetch;
 } = {}): Promise<CollectiveProduct[]> {
   const env = options.env ?? process.env;
-  const token = env.SHOPIFY_ADMIN_ACCESS_TOKEN?.trim();
   const domain = env.SHOPIFY_STORE_DOMAIN?.trim() || SHOPIFY_COLLECTIVE_STORE_DOMAIN;
-  if (!token) throw new Error("SHOPIFY_ADMIN_ACCESS_TOKEN is not configured");
-
   const fetchImpl = options.fetchImpl ?? fetch;
+  const token = await getShopifyAdminAccessToken({ env, fetchImpl });
   const products: CollectiveProduct[] = [];
   let cursor: string | null = null;
   do {
