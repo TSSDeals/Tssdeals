@@ -11,16 +11,23 @@ const OWN_VENDOR = /\btwin\s*seam\s*sports\b/i;
 const EXCLUDED = /\b(?:work gloves?|winter gloves?|golf gloves?|batting gloves?|sliding mitts?|oven mitts?|costume|furniture|display case|gift card|signed|autograph|memorabilia)\b/i;
 
 const CATEGORY_RULES: Array<{ pattern: RegExp; sportId: string; equipmentTypeId: string }> = [
-  { pattern: /\bbaseball\s*(?:&|and)\s*softball fielding gloves?\b|\b(?:baseball|softball|fielding|infield|outfield|pitcher'?s?|catcher'?s?|first base)\b[\s\S]*\b(?:glove|mitt)s?\b/i, sportId: "baseball", equipmentTypeId: "bb-gloves" },
+  { pattern: /\b(?:baseball|softball|fielding|infield|outfield|pitcher'?s?|catcher'?s?|first base)\b[\s\S]*\b(?:glove|mitt)s?\b|\b(?:glove|mitt)s?\b[\s\S]*\b(?:baseball|softball|fielding|infield|outfield|pitcher'?s?|catcher'?s?|first base)\b/i, sportId: "baseball", equipmentTypeId: "bb-gloves" },
   { pattern: /\bfastpitch\b[\s\S]*\bbats?\b|\bbats?\b[\s\S]*\bfastpitch\b/i, sportId: "fastpitch-softball", equipmentTypeId: "fp-bats" },
   { pattern: /\b(?:baseball|usssa|bbcor|usa baseball|wood)\b[\s\S]*\bbats?\b|\bbats?\b[\s\S]*\b(?:baseball|usssa|bbcor|usa baseball)\b/i, sportId: "baseball", equipmentTypeId: "bb-bats" },
-  { pattern: /\bbatting helmets?\b|\bcatcher'?s gear\b|\bchest protectors?\b|\bleg guards?\b/i, sportId: "baseball", equipmentTypeId: "bb-protective" },
+  { pattern: /\b(?:baseball|softball|catcher'?s?)\b[\s\S]*\b(?:batting helmets?|catcher'?s gear|chest protectors?|leg guards?)\b|\b(?:batting helmets?|catcher'?s gear|chest protectors?|leg guards?)\b[\s\S]*\b(?:baseball|softball|catcher'?s?)\b/i, sportId: "baseball", equipmentTypeId: "bb-protective" },
   { pattern: /\b(?:baseball|softball)\b[\s\S]*\bcleats?\b|\bcleats?\b[\s\S]*\b(?:baseball|softball)\b/i, sportId: "baseball", equipmentTypeId: "bb-cleats" },
-  { pattern: /\b(?:baseballs?|softballs?|practice balls?|training balls?)\b/i, sportId: "baseball", equipmentTypeId: "bb-balls" },
-  { pattern: /\b(?:batting tees?|pitching machines?|baseball training equipment|softball training equipment)\b/i, sportId: "baseball", equipmentTypeId: "bb-training" },
-  { pattern: /\b(?:baseball|softball)\b[\s\S]*\b(?:bags?|apparel|shirts?|hoodies?|hats?|accessories)\b/i, sportId: "baseball", equipmentTypeId: "bb-shoes-apparel" },
   { pattern: /\b(?:running shoes?|road running shoes?|trail running shoes?)\b/i, sportId: "running", equipmentTypeId: "run-shoes" },
-  { pattern: /\b(?:golf clubs?|drivers?|fairway woods?|iron sets?|putters?|wedges?)\b/i, sportId: "golf", equipmentTypeId: "golf-other" },
+  { pattern: /\bgolf\b[\s\S]*\b(?:clubs?|drivers?|fairway woods?|iron sets?|putters?|wedges?)\b|\b(?:golf clubs?|golf drivers?|golf putters?|golf wedges?)\b/i, sportId: "golf", equipmentTypeId: "golf-other" },
+];
+
+const SHOPIFY_TAXONOMY_RULES: Array<{ phrase: string; sportId: string; equipmentTypeId: string }> = [
+  { phrase: "baseball & softball fielding gloves", sportId: "baseball", equipmentTypeId: "bb-gloves" },
+  { phrase: "baseball bats", sportId: "baseball", equipmentTypeId: "bb-bats" },
+  { phrase: "softball bats", sportId: "fastpitch-softball", equipmentTypeId: "fp-bats" },
+  { phrase: "baseball & softball cleats", sportId: "baseball", equipmentTypeId: "bb-cleats" },
+  { phrase: "baseball & softball protective gear", sportId: "baseball", equipmentTypeId: "bb-protective" },
+  { phrase: "running shoes", sportId: "running", equipmentTypeId: "run-shoes" },
+  { phrase: "golf clubs", sportId: "golf", equipmentTypeId: "golf-other" },
 ];
 
 export type CollectiveVariant = {
@@ -135,7 +142,14 @@ function productText(product: CollectiveProduct): string {
 }
 
 export function collectiveCategory(product: CollectiveProduct): { sportId: string; equipmentTypeId: string } | null {
-  const text = productText(product);
+  const category = product.category?.fullName?.toLowerCase() ?? "";
+  const taxonomyRule = SHOPIFY_TAXONOMY_RULES.find((rule) => category.includes(rule.phrase));
+  if (taxonomyRule) {
+    const text = productText(product);
+    if (EXCLUDED.test(text)) return null;
+    return { sportId: taxonomyRule.sportId, equipmentTypeId: taxonomyRule.equipmentTypeId };
+  }
+  const text = [product.title, product.productType, ...(product.tags ?? [])].join(" ");
   if (EXCLUDED.test(text)) return null;
   return CATEGORY_RULES.find((rule) => rule.pattern.test(text)) ?? null;
 }
@@ -194,6 +208,11 @@ export function collectiveProductToDeals(product: CollectiveProduct): InsertDeal
         SHOPIFY_COLLECTIVE_SOURCE_ID,
       );
       if (!deal) return null;
+      // The Collective gate is deliberately stricter than the legacy Shopify
+      // importer. Do not let a broad merchant product-type refinement undo the
+      // category decision that was just verified above.
+      deal.sportId = category.sportId;
+      deal.equipmentTypeId = category.equipmentTypeId;
       deal.url = variantUrl(product, variant);
       deal.raw = {
         ...(deal.raw as Record<string, unknown>),

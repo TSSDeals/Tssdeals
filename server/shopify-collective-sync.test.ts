@@ -63,6 +63,39 @@ test("Collective adapter keeps batting gloves separate from fielding gloves", ()
   }), []);
 });
 
+test("Collective adapter rejects baseball-themed jewelry, hats, and unrelated drivers", () => {
+  assert.deepEqual(collectiveProductToDeals({
+    ...glove,
+    title: "Baseball Initial Pendant Necklace Jersey Number Charm",
+    productType: "Necklaces",
+    category: { fullName: "Apparel & Accessories > Jewelry > Necklaces" },
+  }), []);
+  assert.deepEqual(collectiveProductToDeals({
+    ...glove,
+    title: "Dominican Baseball LIDOM Cap",
+    productType: "Hats",
+    category: { fullName: "Apparel & Accessories > Clothing Accessories > Hats" },
+  }), []);
+  assert.deepEqual(collectiveProductToDeals({
+    ...glove,
+    title: "Impact Driver Tool Set",
+    productType: "Power Tools",
+    category: { fullName: "Hardware > Tools > Power Tools" },
+  }), []);
+});
+
+test("Collective adapter keeps the verified taxonomy category over broad product types", () => {
+  const deals = collectiveProductToDeals({
+    ...glove,
+    title: "Jax EN-7 Fielding Glove",
+    productType: "Golf Clubs",
+    category: { fullName: "Sporting Goods > Baseball & Softball > Fielding Gloves" },
+  });
+  assert.equal(deals.length, 1);
+  assert.equal(deals[0].sportId, "baseball");
+  assert.equal(deals[0].equipmentTypeId, "bb-gloves");
+});
+
 test("Collective sync is explicit opt-in and dry-run never writes", async () => {
   let writes = 0;
   const result = await syncShopifyCollective({
