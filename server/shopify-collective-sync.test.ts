@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   clearShopifyClientTokenCache,
   collectiveProductToDeals,
+  fetchCollectiveProductsBulk,
   getShopifyAdminAccessToken,
   syncShopifyCollective,
   type CollectiveProduct,
@@ -184,4 +185,61 @@ test("Collective catalog retries a throttled page without losing its cursor", as
   assert.deepEqual(products, []);
   assert.equal(graphqlCalls, 2);
   assert.deepEqual(waits, [5000]);
+});
+
+test("bulk catalog assembles product and variant JSONL without per-product paging", async () => {
+  clearShopifyClientTokenCache();
+  let graphqlCalls = 0;
+  const fetchImpl = async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input);
+    if (url.endsWith("/admin/oauth/access_token")) {
+      return new Response(JSON.stringify({ access_token: "token", expires_in: 3600 }), {
+        status: 200, headers: { "Content-Type": "application/json" },
+      });
+    }
+    if (url === "https://bulk.example/catalog.jsonl") {
+      return new Response([
+        JSON.stringify({
+          id: glove.id,
+          legacyResourceId: glove.legacyResourceId,
+          title: glove.title,
+          handle: glove.handle,
+          status: glove.status,
+          vendor: glove.vendor,
+          productType: glove.productType,
+          tags: glove.tags,
+          onlineStoreUrl: glove.onlineStoreUrl,
+          category: glove.category,
+          featuredImage: { url: "https://cdn.shopify.com/glove.jpg", width: 800, height: 800 },
+        }),
+        JSON.stringify({ ...glove.variants.nodes[0], __parentId: glove.id }),
+      ].join("\n"), { status: 200 });
+    }
+    graphqlCalls++;
+    const body = JSON.parse(String(init?.body));
+    if (body.query.includes("bulkOperationRunQuery")) {
+      return new Response(JSON.stringify({ data: { bulkOperationRunQuery: {
+        bulkOperation: { id: "gid://shopify/BulkOperation/1", status: "CREATED" },
+        userErrors: [],
+      } } }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    return new Response(JSON.stringify({ data: { currentBulkOperation: {
+      id: "gid://shopify/BulkOperation/1",
+      status: "COMPLETED",
+      errorCode: null,
+      objectCount: "2",
+      url: "https://bulk.example/catalog.jsonl",
+    } } }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+
+  const products = await fetchCollectiveProductsBulk({
+    env: { SHOPIFY_CLIENT_ID: "id", SHOPIFY_CLIENT_SECRET: "secret" },
+    fetchImpl,
+    sleep: async () => undefined,
+  });
+  assert.equal(graphqlCalls, 2);
+  assert.equal(products.length, 1);
+  assert.equal(products[0].variants.nodes.length, 1);
+  assert.equal(products[0].variants.nodes[0].sku, "A2000-RHT");
+  assert.equal(products[0].featuredMedia?.preview?.image?.url, "https://cdn.shopify.com/glove.jpg");
 });

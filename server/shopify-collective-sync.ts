@@ -279,6 +279,131 @@ export async function fetchCollectiveProducts(options: {
   return products;
 }
 
+type BulkProductLine = Omit<CollectiveProduct, "featuredMedia" | "variants"> & {
+  featuredImage?: { url: string; width: number; height: number } | null;
+  __parentId?: string;
+};
+
+type BulkVariantLine = CollectiveVariant & { __parentId: string };
+
+export async function fetchCollectiveProductsBulk(options: {
+  env?: NodeJS.ProcessEnv;
+  fetchImpl?: typeof fetch;
+  sleep?: (milliseconds: number) => Promise<void>;
+} = {}): Promise<CollectiveProduct[]> {
+  const env = options.env ?? process.env;
+  const domain = env.SHOPIFY_STORE_DOMAIN?.trim() || SHOPIFY_COLLECTIVE_STORE_DOMAIN;
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const sleep = options.sleep ?? ((milliseconds: number) =>
+    new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
+  const token = await getShopifyAdminAccessToken({ env, fetchImpl });
+  const endpoint = `https://${domain}/admin/api/2026-07/graphql.json`;
+
+  const graphql = async (query: string) => {
+    const response = await fetchImpl(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Shopify-Access-Token": token,
+      },
+      body: JSON.stringify({ query }),
+    });
+    const payload = await response.json() as any;
+    if (!response.ok || payload.errors?.length) {
+      const detail = payload.errors?.map((error: any) => error.message).filter(Boolean).join("; ");
+      throw new Error(`Shopify bulk catalog request failed (${response.status})${detail ? `: ${detail}` : ""}`);
+    }
+    return payload.data;
+  };
+
+  const bulkQuery = `{
+    products(query: "status:active") {
+      edges {
+        node {
+          id legacyResourceId title handle status vendor productType tags onlineStoreUrl
+          category { fullName }
+          featuredImage { url width height }
+          variants {
+            edges {
+              node { id legacyResourceId title sku price compareAtPrice availableForSale }
+            }
+          }
+        }
+      }
+    }
+  }`;
+  const started = await graphql(`mutation {
+    bulkOperationRunQuery(query: ${JSON.stringify(bulkQuery)}) {
+      bulkOperation { id status }
+      userErrors { field message }
+    }
+  }`);
+  const userErrors = started?.bulkOperationRunQuery?.userErrors ?? [];
+  if (userErrors.length || !started?.bulkOperationRunQuery?.bulkOperation?.id) {
+    const detail = userErrors.map((error: any) => error.message).filter(Boolean).join("; ");
+    throw new Error(`Shopify bulk catalog could not start${detail ? `: ${detail}` : ""}`);
+  }
+  const operationId = started.bulkOperationRunQuery.bulkOperation.id;
+
+  let downloadUrl: string | null = null;
+  for (let attempt = 0; attempt < 300; attempt++) {
+    const statusData = await graphql(`query {
+      currentBulkOperation(type: QUERY) { id status errorCode objectCount url }
+    }`);
+    const operation = statusData?.currentBulkOperation;
+    if (!operation || operation.id !== operationId) {
+      throw new Error("Shopify bulk catalog operation was replaced before completion");
+    }
+    if (operation.status === "COMPLETED") {
+      downloadUrl = operation.url;
+      break;
+    }
+    if (["FAILED", "CANCELED", "EXPIRED"].includes(operation.status)) {
+      throw new Error(`Shopify bulk catalog operation ${String(operation.status).toLowerCase()}${operation.errorCode ? `: ${operation.errorCode}` : ""}`);
+    }
+    await sleep(2_000);
+  }
+  if (!downloadUrl) throw new Error("Shopify bulk catalog operation timed out");
+
+  const download = await fetchImpl(downloadUrl);
+  if (!download.ok) throw new Error(`Shopify bulk catalog download failed (${download.status})`);
+  const lines = (await download.text()).split(/\r?\n/).filter(Boolean);
+  const products = new Map<string, CollectiveProduct>();
+  const pendingVariants = new Map<string, CollectiveVariant[]>();
+
+  for (const line of lines) {
+    const row = JSON.parse(line) as BulkProductLine | BulkVariantLine;
+    if (String(row.id).startsWith("gid://shopify/ProductVariant/")) {
+      const variant = row as BulkVariantLine;
+      const variants = pendingVariants.get(variant.__parentId) ?? [];
+      variants.push({
+        id: variant.id,
+        legacyResourceId: String(variant.legacyResourceId),
+        title: variant.title,
+        sku: variant.sku,
+        price: variant.price,
+        compareAtPrice: variant.compareAtPrice,
+        availableForSale: variant.availableForSale,
+      });
+      pendingVariants.set(variant.__parentId, variants);
+      continue;
+    }
+    const product = row as BulkProductLine;
+    const image = product.featuredImage;
+    products.set(product.id, {
+      ...product,
+      legacyResourceId: String(product.legacyResourceId),
+      featuredMedia: image ? { preview: { image } } : null,
+      variants: { nodes: pendingVariants.get(product.id) ?? [] },
+    });
+  }
+  for (const [productId, variants] of pendingVariants) {
+    const product = products.get(productId);
+    if (product) product.variants.nodes = variants;
+  }
+  return [...products.values()];
+}
+
 export async function syncShopifyCollective(options: {
   dryRun: boolean;
   bulkUpsertDeals: (deals: InsertDeal[]) => Promise<{ created: number; updated: number }>;
@@ -290,7 +415,7 @@ export async function syncShopifyCollective(options: {
   if (!collectiveSyncEnabled(env)) {
     throw new Error(`${SHOPIFY_COLLECTIVE_FEATURE_FLAG} is not enabled`);
   }
-  const products = await (options.fetchProducts ?? (() => fetchCollectiveProducts({ env })))();
+  const products = await (options.fetchProducts ?? (() => fetchCollectiveProductsBulk({ env })))();
   const deals = products.flatMap(collectiveProductToDeals);
   const acceptedProductIds = new Set(deals.map((deal) => (deal.raw as any).shopifyProductGid));
   if (options.dryRun) {
