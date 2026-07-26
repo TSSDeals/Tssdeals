@@ -39,6 +39,23 @@ export interface RakutenMerchantConfig {
 
 export const RAKUTEN_MERCHANTS: RakutenMerchantConfig[] = [
   {
+    mid: "53974",
+    name: "Cannondale Bicycles",
+    brand: "Cannondale",
+    sourceId: "rak-cannondale-bicycles",
+    keywords: [
+      "mountain bike",
+      "road bike",
+      "gravel bike",
+      "electric bike",
+      "kids bike",
+      "bicycle",
+      "cycling",
+    ],
+    sportIds: ["cycling"],
+    equipmentTypeId: "cyc-bikes",
+  },
+  {
     mid: "43729",
     name: "Hoka",
     brand: "HOKA",
