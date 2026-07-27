@@ -13,7 +13,7 @@ const NON_CLEAT_PRODUCTS = [
   /\b(?:replacement|replaceable)\b.{0,30}\b(?:cleats?|spikes?|studs?)\b/i,
   /\b(?:cleat|shoe)\s+(?:covers?|bags?|laces?|inserts?|insoles?|deodorizers?|cleaners?|brushes?)\b/i,
   /\b(?:spike|stud)\s+(?:kits?|packs?|wrenches?|tools?)\b/i,
-  /\b(?:laces?|insoles?|inserts?|heel cups?|shoe trees?)\b/i,
+  /\b(?:replacement\s+laces?|insoles?|inserts?|heel cups?|shoe trees?)\b/i,
   /\b(?:shirt|tee|hoodie|jacket|shorts|pants|hat|cap|sock|socks)\b/i,
   /\b(?:mini|miniature|souvenir|novelty|toy|ornament|keychain)\b/i,
   /\b(?:signed|autograph(?:ed)?|display case)\b/i,
