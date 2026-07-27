@@ -21,6 +21,29 @@ async function jsonFetch(url: string) {
   return response.json();
 }
 
+const LEDGER_SORT_OPTIONS = [
+  ["date", "Activity date"],
+  ["itemNumber", "Item number"],
+  ["description", "Description"],
+  ["status", "Status"],
+  ["supplier", "Seller / supplier"],
+  ["category", "Category"],
+  ["brand", "Brand"],
+  ["model", "Model"],
+  ["sku", "eBay SKU"],
+  ["quantity", "Quantity"],
+  ["purchaseDate", "Purchase date"],
+  ["saleDate", "Sale date"],
+  ["purchaseCost", "Purchase cost"],
+  ["deliveredCost", "Delivered cost"],
+  ["finalCog", "Final COG"],
+  ["salePrice", "Sale price"],
+  ["revenue", "Revenue"],
+  ["ebayBreakEven", "eBay break even"],
+  ["inPersonMinimum", "In-person minimum"],
+  ["netProfit", "Net profit"],
+] as const;
+
 export default function AdminOperations() {
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const isAdmin = (user as any)?.isAdmin === true;
@@ -29,6 +52,9 @@ export default function AdminOperations() {
   const [tab, setTab] = useState<"wholesale" | "ledger">("wholesale");
   const [query, setQuery] = useState("");
   const [markup, setMarkup] = useState(25);
+  const [ledgerStatus, setLedgerStatus] = useState("");
+  const [ledgerSort, setLedgerSort] = useState("date");
+  const [ledgerDirection, setLedgerDirection] = useState<"asc" | "desc">("desc");
   const [uploading, setUploading] = useState<"wholesale" | "ledger" | null>(null);
 
   const summary = useQuery({
@@ -42,8 +68,21 @@ export default function AdminOperations() {
     enabled: isAuthenticated && isAdmin && tab === "wholesale",
   });
   const ledger = useQuery({
-    queryKey: ["/api/admin/operations/ledger", query],
-    queryFn: () => jsonFetch(`/api/admin/operations/ledger?q=${encodeURIComponent(query)}`),
+    queryKey: ["/api/admin/operations/ledger", query, ledgerStatus, ledgerSort, ledgerDirection],
+    queryFn: () => {
+      const params = new URLSearchParams({
+        q: query,
+        status: ledgerStatus,
+        sort: ledgerSort,
+        direction: ledgerDirection,
+      });
+      return jsonFetch(`/api/admin/operations/ledger?${params.toString()}`);
+    },
+    enabled: isAuthenticated && isAdmin && tab === "ledger",
+  });
+  const ledgerStatuses = useQuery({
+    queryKey: ["/api/admin/operations/ledger-statuses"],
+    queryFn: () => jsonFetch("/api/admin/operations/ledger-statuses"),
     enabled: isAuthenticated && isAdmin && tab === "ledger",
   });
 
@@ -66,6 +105,9 @@ export default function AdminOperations() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["/api/admin/operations/summary"] }),
         queryClient.invalidateQueries({ queryKey: [`/api/admin/operations/${kind}`] }),
+        ...(kind === "ledger"
+          ? [queryClient.invalidateQueries({ queryKey: ["/api/admin/operations/ledger-statuses"] })]
+          : []),
       ]);
       toast({
         title: kind === "wholesale" ? "Wholesale pricing imported" : "Ledger imported",
@@ -140,7 +182,7 @@ export default function AdminOperations() {
             </div>
           </div>
 
-          <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_180px]">
+          <div className={`mt-4 grid gap-3 ${tab === "wholesale" ? "sm:grid-cols-[1fr_180px]" : "sm:grid-cols-2 lg:grid-cols-[minmax(260px,1fr)_220px_210px_150px]"}`}>
             <div className="relative">
               <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
               <Input
@@ -159,6 +201,42 @@ export default function AdminOperations() {
                   <span className="absolute right-3 top-2.5 text-sm text-muted-foreground">% markup</span>
                 </div>
               </div>
+            )}
+            {tab === "ledger" && (
+              <>
+                <select
+                  aria-label="Filter ledger by status"
+                  value={ledgerStatus}
+                  onChange={(event) => setLedgerStatus(event.target.value)}
+                  className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="">All statuses</option>
+                  {(ledgerStatuses.data ?? []).map((option: any) => (
+                    <option key={option.status} value={option.status}>
+                      {option.status} ({Number(option.count).toLocaleString()})
+                    </option>
+                  ))}
+                </select>
+                <select
+                  aria-label="Sort ledger by"
+                  value={ledgerSort}
+                  onChange={(event) => setLedgerSort(event.target.value)}
+                  className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  {LEDGER_SORT_OPTIONS.map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+                <select
+                  aria-label="Ledger sort direction"
+                  value={ledgerDirection}
+                  onChange={(event) => setLedgerDirection(event.target.value as "asc" | "desc")}
+                  className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="desc">Highest / newest first</option>
+                  <option value="asc">Lowest / oldest first</option>
+                </select>
+              </>
             )}
           </div>
           {tab === "wholesale" && (
@@ -224,10 +302,12 @@ function LedgerRow({ row }: { row: any }) {
         <h2 className="mt-1 font-semibold">{row.description}</h2>
         <p className="mt-1 text-sm text-muted-foreground">{[row.brand, row.model, row.sku].filter(Boolean).join(" · ")}</p>
       </div>
-      <div className="grid grid-cols-3 gap-2 text-right sm:min-w-[315px]">
-        <Price label="Delivered" value={row.delivered_cost_cents} />
+      <div className="grid grid-cols-2 gap-2 text-right sm:min-w-[520px] sm:grid-cols-5">
+        <Price label="Final COG" value={row.final_cog_cents} />
+        <Price label="eBay break even" value={row.ebay_break_even_cents} />
+        <Price label="In-person minimum" value={row.in_person_minimum_cents} />
         <Price label="Revenue" value={row.revenue_cents ?? row.sale_price_cents} />
-        <Price label="Profit" value={row.profit_cents} emphasize />
+        <Price label="Net profit" value={row.profit_cents} emphasize />
       </div>
     </article>
   );

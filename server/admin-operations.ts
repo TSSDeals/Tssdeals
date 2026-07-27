@@ -134,6 +134,41 @@ export function calculateWholesalePricing(
   return { feeAdjustedCostCents, targetPriceCents };
 }
 
+const LEDGER_SORT_COLUMNS: Record<string, string> = {
+  date: "coalesce(sale_date, purchase_date)",
+  itemNumber: "item_number",
+  description: "description",
+  status: "status",
+  supplier: "supplier",
+  category: "category",
+  brand: "brand",
+  model: "model",
+  sku: "sku",
+  quantity: "quantity",
+  purchaseDate: "purchase_date",
+  saleDate: "sale_date",
+  purchaseCost: "purchase_cost_cents",
+  deliveredCost: "delivered_cost_cents",
+  finalCog: "final_cog_cents",
+  salePrice: "sale_price_cents",
+  revenue: "revenue_cents",
+  ebayBreakEven: "ebay_break_even_cents",
+  inPersonMinimum: "in_person_minimum_cents",
+  netProfit: "profit_cents",
+};
+
+export function resolveLedgerSort(sortBy: unknown, sortDirection: unknown) {
+  const requested = clean(sortBy);
+  const selected = Object.prototype.hasOwnProperty.call(LEDGER_SORT_COLUMNS, requested)
+    ? requested
+    : "date";
+  return {
+    sortBy: selected,
+    column: LEDGER_SORT_COLUMNS[selected],
+    direction: clean(sortDirection).toLowerCase() === "asc" ? "ASC" : "DESC",
+  };
+}
+
 export function parseWholesaleWorkbook(buffer: Buffer, filename: string): ParsedWholesaleRow[] {
   const workbook = XLSX.read(buffer, { type: "buffer", cellDates: true });
   const parsed: ParsedWholesaleRow[] = [];
@@ -214,6 +249,7 @@ export function parseLedgerWorkbook(buffer: Buffer) {
       if (value !== null && value !== undefined && value !== "") raw[header] = value;
     });
     const value = (label: string) => row[headers.findIndex((header) => key(header) === key(label))];
+    const finalCogCents = cents(value("Final COG"));
     return {
       sourceRow: headerIndex + index + 2,
       itemNumber: clean(value("Item #")) || null,
@@ -229,9 +265,12 @@ export function parseLedgerWorkbook(buffer: Buffer) {
       saleDate: value("Sale / Transfer Date") || null,
       purchaseCostCents: cents(value("Purchased Cost")),
       deliveredCostCents: cents(value("Delivered Cost")),
+      finalCogCents,
       salePriceCents: cents(value("Sale Price")),
       revenueCents: cents(value("Total Revenue")),
-      profitCents: cents(value("Total Profit")) ?? cents(value("Net Profit")),
+      profitCents: cents(value("Net Profit")),
+      ebayBreakEvenCents: cents(value("eBay Break Even Price (no ship profit)")),
+      inPersonMinimumCents: finalCogCents === null ? null : Math.round(finalCogCents * 1.1),
       raw,
     };
   }).filter((row) => row.itemNumber || Object.keys(row.raw).length > 2);
@@ -286,14 +325,16 @@ async function replaceLedger(filename: string, entries: ReturnType<typeof parseL
         ${entry.status}, ${entry.supplier}, ${entry.category}, ${entry.brand}, ${entry.model},
         ${entry.sku}, ${entry.quantity}, ${validDate(entry.purchaseDate)},
         ${validDate(entry.saleDate)}, ${entry.purchaseCostCents},
-        ${entry.deliveredCostCents}, ${entry.salePriceCents}, ${entry.revenueCents},
-        ${entry.profitCents}, ${JSON.stringify(entry.raw)}::jsonb
+        ${entry.deliveredCostCents}, ${entry.finalCogCents}, ${entry.salePriceCents},
+        ${entry.revenueCents}, ${entry.profitCents}, ${entry.ebayBreakEvenCents},
+        ${entry.inPersonMinimumCents}, ${JSON.stringify(entry.raw)}::jsonb
       )`);
       await tx.execute(sql`
         INSERT INTO business_ledger_entries (
           import_id, source_row, item_number, description, status, supplier, category,
           brand, model, sku, quantity, purchase_date, sale_date, purchase_cost_cents,
-          delivered_cost_cents, sale_price_cents, revenue_cents, profit_cents, raw_data
+          delivered_cost_cents, final_cog_cents, sale_price_cents, revenue_cents,
+          profit_cents, ebay_break_even_cents, in_person_minimum_cents, raw_data
         ) VALUES ${sql.join(values, sql.raw(","))}
       `);
     }
@@ -403,16 +444,31 @@ export function registerAdminOperationsRoutes(app: Express, isAdmin: RequestHand
 
   app.get("/api/admin/operations/ledger", isAdmin, async (req, res) => {
     const query = clean(req.query.q);
+    const status = clean(req.query.status);
+    const order = resolveLedgerSort(req.query.sort, req.query.direction);
     const pattern = `%${query.replace(/[%_]/g, "\\$&")}%`;
     const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 50));
     const result = await db.execute(sql`
       SELECT id, source_row, item_number, description, status, supplier, category,
              brand, model, sku, quantity, purchase_date, sale_date, purchase_cost_cents,
-             delivered_cost_cents, sale_price_cents, revenue_cents, profit_cents
+             delivered_cost_cents, final_cog_cents, sale_price_cents, revenue_cents,
+             profit_cents, ebay_break_even_cents, in_person_minimum_cents
       FROM business_ledger_entries
-      WHERE ${query} = '' OR concat_ws(' ', item_number, description, status, supplier, category, brand, model, sku) ILIKE ${pattern}
-      ORDER BY coalesce(sale_date, purchase_date) DESC NULLS LAST, source_row DESC
+      WHERE (${query} = '' OR concat_ws(' ', item_number, description, status, supplier, category, brand, model, sku) ILIKE ${pattern})
+        AND (${status} = '' OR status = ${status})
+      ORDER BY ${sql.raw(order.column)} ${sql.raw(order.direction)} NULLS LAST, source_row DESC
       LIMIT ${limit}
+    `);
+    res.json((result as any).rows);
+  });
+
+  app.get("/api/admin/operations/ledger-statuses", isAdmin, async (_req, res) => {
+    const result = await db.execute(sql`
+      SELECT status, count(*)::int AS count
+      FROM business_ledger_entries
+      WHERE status IS NOT NULL AND btrim(status) <> ''
+      GROUP BY status
+      ORDER BY status
     `);
     res.json((result as any).rows);
   });

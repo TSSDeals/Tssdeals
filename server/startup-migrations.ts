@@ -313,6 +313,19 @@ export const STARTUP_MIGRATIONS: readonly VersionedMigration<StartupContext>[] =
       for (const statement of statements) await context.execute(sql.raw(statement));
     },
   },
+  {
+    ...STARTUP_MIGRATION_MANIFEST[4],
+    async up(context) {
+      const statements = [
+        `ALTER TABLE business_ledger_entries ADD COLUMN IF NOT EXISTS final_cog_cents INTEGER`,
+        `ALTER TABLE business_ledger_entries ADD COLUMN IF NOT EXISTS ebay_break_even_cents INTEGER`,
+        `ALTER TABLE business_ledger_entries ADD COLUMN IF NOT EXISTS in_person_minimum_cents INTEGER`,
+        `CREATE INDEX IF NOT EXISTS business_ledger_profit_idx ON business_ledger_entries(profit_cents)`,
+        `CREATE INDEX IF NOT EXISTS business_ledger_break_even_idx ON business_ledger_entries(ebay_break_even_cents)`,
+      ];
+      for (const statement of statements) await context.execute(sql.raw(statement));
+    },
+  },
 ] as const;
 
 const ledger: MigrationLedger<StartupContext> = {
