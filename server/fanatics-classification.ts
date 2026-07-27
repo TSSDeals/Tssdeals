@@ -4,6 +4,7 @@ import {
   type EquipmentTypeLike,
 } from "@shared/equipment-groups";
 import type { ImpactCatalogItem } from "./impact-api";
+import { classifyDeterministicProduct } from "./deterministic-product-classifier";
 
 const SPORT_KEYWORD_MAP: Record<string, string[]> = {
   baseball: ["baseball", "mlb"],
@@ -49,6 +50,23 @@ export function classifyFanaticsItem(
       return {
         sportId: memorabiliaType.sportId,
         equipmentTypeId: memorabiliaType.id,
+      };
+    }
+  }
+
+  const deterministic = classifyDeterministicProduct(
+    `${title} ${item.Category || ""} ${item.SubCategory || ""}`,
+  );
+  if (deterministic) {
+    const exists = allEquipmentTypes.some(
+      (equipmentType) =>
+        equipmentType.id === deterministic.equipmentTypeId
+        && equipmentType.sportId === deterministic.sportId,
+    );
+    if (exists) {
+      return {
+        sportId: deterministic.sportId,
+        equipmentTypeId: deterministic.equipmentTypeId,
       };
     }
   }
