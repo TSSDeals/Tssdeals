@@ -29,6 +29,7 @@
     "preview:baseball-glove-history": "tsx script/guarded-baseball-glove-history.ts",
     "preview:baseball-bat-history": "tsx script/guarded-baseball-bat-history.ts",
     "preview:protective-equipment-history": "tsx script/guarded-protective-equipment-history.ts",
+    "preview:softball-bat-history": "tsx script/guarded-softball-bat-history.ts",
     "preview:taxonomy-backfill": "tsx script/guarded-taxonomy-backfill.ts",
     "db:push": "drizzle-kit push"
   },
