@@ -31,6 +31,7 @@
     "preview:protective-equipment-history": "tsx script/guarded-protective-equipment-history.ts",
     "preview:softball-bat-history": "tsx script/guarded-softball-bat-history.ts",
     "preview:running-shoe-history": "tsx script/guarded-running-shoe-history.ts",
+    "preview:golf-wedge-history": "tsx script/guarded-golf-wedge-history.ts",
     "preview:taxonomy-backfill": "tsx script/guarded-taxonomy-backfill.ts",
     "db:push": "drizzle-kit push"
   },
