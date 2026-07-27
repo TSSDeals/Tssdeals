@@ -3,7 +3,9 @@ import test from "node:test";
 import * as XLSX from "xlsx";
 import {
   calculateWholesalePricing,
+  classifyWholesaleText,
   deriveSupplierRetailIdentity,
+  normalizeWholesaleSearchGroups,
   parseCatalogIdentityFile,
   parseLedgerWorkbook,
   parseWholesaleWorkbook,
@@ -106,6 +108,26 @@ test("ledger parser preserves the raw row and extracts operational fields", () =
   assert.equal(rows[0].ebayBreakEvenCents, 23_800);
   assert.equal(rows[0].inPersonMinimumCents, 22_000);
   assert.equal(rows[0].raw["Current Status"], "Sold");
+});
+
+test("wholesale search matches words independently and expands common shorthand", () => {
+  assert.deepEqual(normalizeWholesaleSearchGroups("Wilson 1786"), [["wilson"], ["1786"]]);
+  assert.deepEqual(normalizeWholesaleSearchGroups("wilson baseball glove"), [
+    ["wilson"],
+    ["baseball", "ball"],
+    ["glove", "gloves", "mitt", "mitts"],
+  ]);
+  assert.deepEqual(normalizeWholesaleSearchGroups("LHT A2000"), [["left", "lht"], ["a2000"]]);
+});
+
+test("wholesale categorization separates fielding gloves from batting gloves", () => {
+  assert.deepEqual(classifyWholesaleText("Wilson A2000 1786 11.5 baseball glove RHT"), {
+    sport: "Baseball",
+    sportSubcategory: "Baseball",
+    productType: "Fielding Gloves",
+  });
+  assert.equal(classifyWholesaleText("Youth baseball batting gloves").productType, "Batting Gloves");
+  assert.equal(classifyWholesaleText("2026 USSSA -10 baseball bat").productType, "Bats");
 });
 
 test("ledger sorting is restricted to the approved column list", () => {

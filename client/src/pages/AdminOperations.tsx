@@ -52,6 +52,11 @@ export default function AdminOperations() {
   const [tab, setTab] = useState<"wholesale" | "ledger">("wholesale");
   const [query, setQuery] = useState("");
   const [markup, setMarkup] = useState(25);
+  const [wholesaleCompany, setWholesaleCompany] = useState("");
+  const [wholesaleSport, setWholesaleSport] = useState("");
+  const [wholesaleSportSubcategory, setWholesaleSportSubcategory] = useState("");
+  const [wholesaleProductType, setWholesaleProductType] = useState("");
+  const [wholesaleIdentityStatus, setWholesaleIdentityStatus] = useState("");
   const [ledgerStatus, setLedgerStatus] = useState("");
   const [ledgerSort, setLedgerSort] = useState("date");
   const [ledgerDirection, setLedgerDirection] = useState<"asc" | "desc">("desc");
@@ -63,8 +68,24 @@ export default function AdminOperations() {
     enabled: isAuthenticated && isAdmin,
   });
   const wholesale = useQuery({
-    queryKey: ["/api/admin/operations/wholesale", query, markup],
-    queryFn: () => jsonFetch(`/api/admin/operations/wholesale?q=${encodeURIComponent(query)}&markup=${markup}`),
+    queryKey: ["/api/admin/operations/wholesale", query, markup, wholesaleCompany, wholesaleSport, wholesaleSportSubcategory, wholesaleProductType, wholesaleIdentityStatus],
+    queryFn: () => {
+      const params = new URLSearchParams({
+        q: query,
+        markup: String(markup),
+        company: wholesaleCompany,
+        sport: wholesaleSport,
+        sportSubcategory: wholesaleSportSubcategory,
+        productType: wholesaleProductType,
+        identityStatus: wholesaleIdentityStatus,
+      });
+      return jsonFetch(`/api/admin/operations/wholesale?${params.toString()}`);
+    },
+    enabled: isAuthenticated && isAdmin && tab === "wholesale",
+  });
+  const wholesaleFilters = useQuery({
+    queryKey: ["/api/admin/operations/wholesale-filters"],
+    queryFn: () => jsonFetch("/api/admin/operations/wholesale-filters"),
     enabled: isAuthenticated && isAdmin && tab === "wholesale",
   });
   const ledger = useQuery({
@@ -107,7 +128,7 @@ export default function AdminOperations() {
         queryClient.invalidateQueries({ queryKey: [`/api/admin/operations/${kind}`] }),
         ...(kind === "ledger"
           ? [queryClient.invalidateQueries({ queryKey: ["/api/admin/operations/ledger-statuses"] })]
-          : []),
+          : [queryClient.invalidateQueries({ queryKey: ["/api/admin/operations/wholesale-filters"] })]),
       ]);
       toast({
         title: kind === "wholesale" ? "Wholesale pricing imported" : "Ledger imported",
@@ -240,7 +261,32 @@ export default function AdminOperations() {
             )}
           </div>
           {tab === "wholesale" && (
-            <p className="mt-2 text-xs text-muted-foreground">Target price applies the 10% EID fee first, then your selected markup. Tax and shipping are not yet included.</p>
+            <>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                <WholesaleFilter label="Company / brand" value={wholesaleCompany} onChange={setWholesaleCompany} options={wholesaleFilters.data?.companies} />
+                <WholesaleFilter label="Sport" value={wholesaleSport} onChange={(value) => { setWholesaleSport(value); setWholesaleSportSubcategory(""); }} options={wholesaleFilters.data?.sports} />
+                <WholesaleFilter label="Sport detail" value={wholesaleSportSubcategory} onChange={setWholesaleSportSubcategory} options={wholesaleFilters.data?.sportSubcategories} />
+                <WholesaleFilter label="Product type" value={wholesaleProductType} onChange={setWholesaleProductType} options={wholesaleFilters.data?.productTypes} />
+                <WholesaleFilter label="Catalog status" value={wholesaleIdentityStatus} onChange={setWholesaleIdentityStatus} options={wholesaleFilters.data?.identityStatuses} />
+              </div>
+              {(wholesaleCompany || wholesaleSport || wholesaleSportSubcategory || wholesaleProductType || wholesaleIdentityStatus) && (
+                <Button
+                  className="mt-3"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setWholesaleCompany("");
+                    setWholesaleSport("");
+                    setWholesaleSportSubcategory("");
+                    setWholesaleProductType("");
+                    setWholesaleIdentityStatus("");
+                  }}
+                >
+                  Clear wholesale filters
+                </Button>
+              )}
+              <p className="mt-2 text-xs text-muted-foreground">Target price applies the 10% EID fee first, then your selected markup. Tax and shipping are not yet included.</p>
+            </>
           )}
         </section>
 
@@ -261,6 +307,29 @@ export default function AdminOperations() {
 
 function SummaryCard({ label, value }: { label: string; value: string }) {
   return <div className="rounded-2xl border bg-card p-4 shadow-sm"><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p><p className="mt-1 text-xl font-bold sm:text-2xl">{value}</p></div>;
+}
+
+function WholesaleFilter({ label, value, onChange, options = [] }: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options?: any[];
+}) {
+  return (
+    <select
+      aria-label={`Filter wholesale by ${label.toLowerCase()}`}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      className="h-10 min-w-0 rounded-md border border-input bg-background px-3 text-sm"
+    >
+      <option value="">All {label.toLowerCase()}</option>
+      {options.map((option: any) => (
+        <option key={option.value} value={option.value}>
+          {option.value} ({Number(option.count).toLocaleString()})
+        </option>
+      ))}
+    </select>
+  );
 }
 
 function WholesaleRow({ row }: { row: any }) {
