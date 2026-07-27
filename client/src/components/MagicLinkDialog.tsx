@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
+import { Link } from "wouter";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -333,14 +334,38 @@ function MagicLinkForm({ onSuccess, initialMethod = "email" }: { onSuccess: () =
       )}
 
       {!(method === "email" && usePassword) && (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
-          <span>
-            {method === "email"
-              ? "No password needed. We'll send a one-time code to your email."
-              : "No password needed. We'll text a one-time code to your phone."}
-          </span>
-        </div>
+        <>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
+            <span>
+              {method === "email"
+                ? "No password needed. We'll send a one-time code to your email."
+                : "No password needed. We'll text a one-time code to your phone."}
+            </span>
+          </div>
+          {method === "phone" ? (
+            <div
+              className="rounded-xl border border-border bg-muted/40 p-3 text-[11px] leading-relaxed text-muted-foreground"
+              data-testid="sms-login-disclosure"
+            >
+              By requesting a code, you agree to receive a one-time transactional text from TSSDeals.
+              Message and data rates may apply. Reply STOP to opt out or HELP for help. Consent is not
+              a condition of purchase. See our{" "}
+              <Link href="/privacy" className="font-medium text-primary underline underline-offset-2">
+                Privacy Policy
+              </Link>
+              ,{" "}
+              <Link href="/terms" className="font-medium text-primary underline underline-offset-2">
+                Terms
+              </Link>
+              , and{" "}
+              <Link href="/sms-terms" className="font-medium text-primary underline underline-offset-2">
+                SMS Terms
+              </Link>
+              .
+            </div>
+          ) : null}
+        </>
       )}
     </div>
   );

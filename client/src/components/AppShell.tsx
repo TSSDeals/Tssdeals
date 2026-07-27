@@ -208,6 +208,49 @@ export function AppShell({
                 );
               })}
             </nav>
+            {isGuest ? (
+              <div
+                className="mt-2 rounded-2xl border border-primary/20 bg-card/95 p-3 shadow-sm"
+                data-testid="mobile-guest-auth"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-bold">Save deals and get alerts</div>
+                    <div className="mt-0.5 text-xs text-muted-foreground">
+                      Sign in with email or receive a one-time code by text.
+                    </div>
+                  </div>
+                  <Link
+                    href="/notifications"
+                    className="shrink-0 text-xs font-semibold text-primary underline-offset-2 hover:underline"
+                  >
+                    SMS alerts
+                  </Link>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => openDialog("email")}
+                    className="ring-focus min-h-10 rounded-xl text-xs"
+                    data-testid="mobile-login-email-button"
+                  >
+                    <Mail className="mr-1.5 h-3.5 w-3.5" />
+                    Email sign in
+                  </Button>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => openDialog("phone")}
+                    className="ring-focus min-h-10 rounded-xl text-xs"
+                    data-testid="mobile-login-phone-button"
+                  >
+                    <Smartphone className="mr-1.5 h-3.5 w-3.5" />
+                    Text sign in
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </div>
           <div className="grid grid-cols-1 gap-4 py-4 lg:grid-cols-[280px_1fr] lg:gap-8 lg:py-6">
             {/* Sidebar */}
