@@ -526,7 +526,7 @@ export function registerAdminOperationsRoutes(app: Express, isAdmin: RequestHand
     const searchPredicate = searchGroups.length
       ? sql.join(searchGroups.map((group) => sql`(${sql.join(group.map((term) => {
           const pattern = `%${term.replace(/[%_]/g, "\\$&")}%`;
-          return sql`classified_search_text ILIKE ${pattern}`;
+          return sql`search_text ILIKE ${pattern}`;
         }), sql` OR `)})`), sql` AND `)
       : sql`TRUE`;
     const result = await db.execute(sql`
@@ -534,24 +534,21 @@ export function registerAdminOperationsRoutes(app: Express, isAdmin: RequestHand
         SELECT *, ${sql.raw(wholesaleClassificationSource)} AS wholesale_text,
                coalesce(nullif(retail_brand, ''), nullif(manufacturer, ''), supplier) AS company
         FROM wholesale_products
+        WHERE ${searchPredicate}
       ), sporting AS (
         SELECT *, ${sql.raw(wholesaleSportSql)} AS sport FROM source
       ), classified AS (
         SELECT *, ${sql.raw(wholesaleSubcategorySql)} AS sport_subcategory,
                ${sql.raw(wholesaleProductTypeSql)} AS product_type
         FROM sporting
-      ), searchable AS (
-        SELECT *, concat_ws(' ', search_text, company, sport, sport_subcategory, product_type) AS classified_search_text
-        FROM classified
       )
       SELECT id, supplier, manufacturer, category, sku, upc, name, size, color, hand,
              wholesale_cents, msrp_cents, map_cents, image_url, source_sheet, source_row,
              retail_name, retail_brand, retail_model, retail_category, identity_status,
              identity_confidence, identity_source, identity_source_ref,
              company, sport, sport_subcategory, product_type
-      FROM searchable
-      WHERE ${searchPredicate}
-        AND (${company} = '' OR company = ${company})
+      FROM classified
+      WHERE (${company} = '' OR company = ${company})
         AND (${sport} = '' OR sport = ${sport})
         AND (${sportSubcategory} = '' OR sport_subcategory = ${sportSubcategory})
         AND (${productType} = '' OR product_type = ${productType})
