@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
+import { buildWholesaleSuggestions } from "@/lib/wholesale-autocomplete";
 
 const money = (value: unknown) => {
   const cents = Number(value);
@@ -108,6 +109,10 @@ export default function AdminOperations() {
   });
 
   const rows = useMemo(() => tab === "wholesale" ? (wholesale.data ?? []) : (ledger.data ?? []), [tab, wholesale.data, ledger.data]);
+  const wholesaleSuggestions = useMemo(
+    () => buildWholesaleSuggestions(wholesale.data ?? [], query),
+    [wholesale.data, query],
+  );
 
   const uploadFiles = async (kind: "wholesale" | "ledger", files: FileList | null) => {
     if (!files?.length) return;
@@ -210,9 +215,18 @@ export default function AdminOperations() {
                 className="pl-9"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
+                list={tab === "wholesale" && wholesaleSuggestions.length ? "wholesale-search-suggestions" : undefined}
+                autoComplete="off"
                 placeholder={tab === "wholesale" ? "Search model, SKU, UPC, size, color…" : "Search inventory, supplier, SKU, status…"}
                 data-testid="operations-search"
               />
+              {tab === "wholesale" && wholesaleSuggestions.length > 0 && (
+                <datalist id="wholesale-search-suggestions" data-testid="wholesale-search-suggestions">
+                  {wholesaleSuggestions.map((suggestion) => (
+                    <option key={suggestion.value} value={suggestion.value}>{suggestion.label}</option>
+                  ))}
+                </datalist>
+              )}
             </div>
             {tab === "wholesale" && (
               <div>
