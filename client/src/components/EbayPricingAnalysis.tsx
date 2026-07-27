@@ -42,6 +42,8 @@ interface PricingReportItem {
   procurementCostCents: number | null;
   estimatedProfitCents: number | null;
   profitMarginPercent: number | null;
+  estimatedFeesCents: number | null;
+  pricingConfidence: "none" | "low" | "medium" | "high";
   competitiveness: "underpriced" | "competitive" | "slightly_high" | "overpriced" | "no_data";
 }
 
@@ -332,13 +334,10 @@ export default function EbayPricingAnalysis() {
                             My Price: <strong className="text-foreground">{formatCents(item.myPriceCents)}</strong>
                           </span>
                           <span className="text-muted-foreground">
-                            Avg Listed: <strong className="text-foreground">{formatCents(item.avgListedPriceCents)}</strong>
+                            Comparable Median: <strong className="text-foreground">{formatCents(item.medianListedPriceCents)}</strong>
                             {item.comparableCount > 0 && <span className="opacity-50"> ({item.comparableCount})</span>}
                           </span>
-                          <span className="text-muted-foreground">
-                            Market Avg: <strong className="text-foreground">{formatCents(item.avgSoldPriceCents)}</strong>
-                            {item.soldCount > 0 && <span className="opacity-50"> ({item.soldCount})</span>}
-                          </span>
+                          <span className="text-muted-foreground">Confidence: <strong className="capitalize text-foreground">{item.pricingConfidence || "none"}</strong></span>
                           {item.suggestedPriceCents && (
                             <span className="text-emerald-400">
                               Suggested: <strong>{formatCents(item.suggestedPriceCents)}</strong>
@@ -377,7 +376,7 @@ export default function EbayPricingAnalysis() {
                           />
                         </div>
                         <div>
-                          <span className="text-muted-foreground block">Est. Profit</span>
+                          <span className="text-muted-foreground block">Est. profit after eBay fees</span>
                           <strong className={`text-base ${(item.estimatedProfitCents || 0) > 0 ? "text-emerald-400" : (item.estimatedProfitCents || 0) < 0 ? "text-red-400" : ""}`}>
                             {item.estimatedProfitCents !== null ? formatCents(item.estimatedProfitCents) : "—"}
                             {item.profitMarginPercent !== null && (
@@ -406,19 +405,21 @@ export default function EbayPricingAnalysis() {
                           </span>
                         </div>
                         <div>
-                          <span className="text-muted-foreground block">Market Avg (All Sellers)</span>
-                          <span>{formatCents(item.avgSoldPriceCents)}</span>
-                          {item.soldCount > 0 && <span className="text-muted-foreground ml-1">({item.soldCount} listings)</span>}
+                          <span className="text-muted-foreground block">Estimated eBay fees</span>
+                          <span>{formatCents(item.estimatedFeesCents)}</span>
                         </div>
                         <div>
-                          <span className="text-muted-foreground block">Market Median</span>
-                          <span>{formatCents(item.medianSoldPriceCents)}</span>
+                          <span className="text-muted-foreground block">Evidence quality</span>
+                          <span className="capitalize">{item.pricingConfidence || "none"} · active listings only</span>
                         </div>
                         <div>
                           <span className="text-muted-foreground block">Category</span>
                           <span>{item.categoryName || "—"}</span>
                         </div>
                       </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        Estimates use relevant fixed-price active listings after condition/model filtering and outlier removal. Shipping, promoted-listing fees, and sold-price history are not included.
+                      </p>
 
                       <div className="flex items-center gap-2 pt-1">
                         <a
