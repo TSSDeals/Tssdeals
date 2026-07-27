@@ -12,12 +12,21 @@ test("wholesale autocomplete waits for meaningful input and deduplicates names",
   assert.deepEqual(buildWholesaleSuggestions(rows, "Rawlings"), []);
   assert.deepEqual(buildWholesaleSuggestions(rows, "Wilson"), [
     {
-      value: "Wilson A2000 1786 11.5-inch Glove",
-      label: "Wilson A2000 1786 11.5-inch Glove — Wilson · 1786 · SKU WBW100390",
-    },
-    {
       value: "Wilson A1000 1786",
       label: "Wilson A1000 1786 — Wilson · SKU WBW101443",
     },
+    {
+      value: "Wilson A2000 1786 11.5-inch Glove",
+      label: "Wilson A2000 1786 11.5-inch Glove — Wilson · 1786 · SKU WBW100390",
+    },
   ]);
+});
+
+test("brand and model matches rank above incidental word matches", () => {
+  const suggestions = buildWholesaleSuggestions([
+    { name: "Champro Wild Card Jersey", manufacturer: "Champro" },
+    { name: "Cotton Twill Cap", manufacturer: "Other" },
+    { name: "A2000 1786 Baseball Glove", manufacturer: "Wilson" },
+  ], "Wil");
+  assert.equal(suggestions[0].value, "A2000 1786 Baseball Glove");
 });
