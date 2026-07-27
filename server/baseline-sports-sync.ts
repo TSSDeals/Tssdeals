@@ -11,6 +11,7 @@ import {
   type ShopifyProduct,
   type ShopifyVariant,
 } from "./shopify-sync";
+import { classifyDeterministicProduct } from "./deterministic-product-classifier";
 
 export const BASELINE_SYNC_FEATURE_FLAG = "ENABLE_BASELINE_SPORTS_SYNC";
 
@@ -60,6 +61,13 @@ function productText(product: ShopifyProduct): string {
 function categoryFor(product: ShopifyProduct): { sportId: string; equipmentTypeId: string } | null {
   const text = productText(product);
   if (NON_PRODUCT_PATTERN.test(text)) return null;
+  const deterministic = classifyDeterministicProduct(text);
+  if (deterministic) {
+    return {
+      sportId: deterministic.sportId,
+      equipmentTypeId: deterministic.equipmentTypeId,
+    };
+  }
   return CATEGORY_RULES.find((rule) => rule.pattern.test(text)) ?? null;
 }
 

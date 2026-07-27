@@ -1,5 +1,6 @@
 import type { InsertDeal } from "@shared/schema";
 import { shopifyProductToDeal, type ShopifyProduct, type ShopifyVariant } from "./shopify-sync";
+import { classifyDeterministicProduct } from "./deterministic-product-classifier";
 
 export const SHOPIFY_COLLECTIVE_SOURCE_ID = "shopify-collective";
 export const SHOPIFY_COLLECTIVE_SOURCE_NAME = "Twin Seam Collective";
@@ -147,6 +148,13 @@ export function collectiveCategory(product: CollectiveProduct): { sportId: strin
   if (taxonomyRule) {
     const text = productText(product);
     if (EXCLUDED.test(text)) return null;
+    const deterministic = classifyDeterministicProduct(text);
+    if (deterministic) {
+      return {
+        sportId: deterministic.sportId,
+        equipmentTypeId: deterministic.equipmentTypeId,
+      };
+    }
     return { sportId: taxonomyRule.sportId, equipmentTypeId: taxonomyRule.equipmentTypeId };
   }
   // A populated Shopify category is stronger evidence than merchant wording.
@@ -155,6 +163,13 @@ export function collectiveCategory(product: CollectiveProduct): { sportId: strin
   if (category) return null;
   const text = [product.title, product.productType, ...(product.tags ?? [])].join(" ");
   if (EXCLUDED.test(text)) return null;
+  const deterministic = classifyDeterministicProduct(text);
+  if (deterministic) {
+    return {
+      sportId: deterministic.sportId,
+      equipmentTypeId: deterministic.equipmentTypeId,
+    };
+  }
   return CATEGORY_RULES.find((rule) => rule.pattern.test(text)) ?? null;
 }
 
