@@ -27,6 +27,7 @@
     "preflight:phase0": "tsx script/phase0-preflight.ts",
     "audit:taxonomy": "tsx script/phase1-taxonomy-audit.ts",
     "preview:baseball-glove-history": "tsx script/guarded-baseball-glove-history.ts",
+    "preview:baseball-bat-history": "tsx script/guarded-baseball-bat-history.ts",
     "preview:taxonomy-backfill": "tsx script/guarded-taxonomy-backfill.ts",
     "db:push": "drizzle-kit push"
   },
