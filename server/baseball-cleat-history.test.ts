@@ -28,6 +28,9 @@ test("approves explicitly labeled baseball cleats", () => {
   assert.equal(isApprovedHistoricalBaseballCleat(proposal(
     "Adidas Adizero Afterburner Running Baseball Cleats NWT",
   )), true);
+  assert.equal(isApprovedHistoricalBaseballCleat(proposal(
+    "Under Armour Baseball Cleats MLB Preowned UEC New Laces",
+  )), true);
 });
 
 test("rejects replacement parts, shoe accessories, and care products", () => {
