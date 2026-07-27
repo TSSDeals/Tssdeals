@@ -29,6 +29,9 @@ test("approves explicit fastpitch bats", () => {
   assert.equal(isApprovedHistoricalSoftballBat(proposal(
     'DeMarini Prism+ Fast Pitch Softball Bat 33/23',
   )), true);
+  assert.equal(isApprovedHistoricalSoftballBat(proposal(
+    'Easton Stealth Clarity Fastpitch Softball 33" 23oz -10',
+  )), true);
 });
 
 test("approves explicit slowpitch bats", () => {
@@ -39,6 +42,11 @@ test("approves explicit slowpitch bats", () => {
   )), true);
   assert.equal(isApprovedHistoricalSoftballBat(proposal(
     'Miken Psycho Slow Pitch Composite Softball Bat 34in',
+    "slowpitch-softball",
+    "sp-bats",
+  )), true);
+  assert.equal(isApprovedHistoricalSoftballBat(proposal(
+    'Miken Maniac Slowpitch Softball 34in 27oz Alloy',
     "slowpitch-softball",
     "sp-bats",
   )), true);

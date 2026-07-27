@@ -33,6 +33,9 @@ const SLOWPITCH_BAT = [
   /\b(?:softball\s+)?bat\b.{0,80}\b(?:slow\s*pitch|slowpitch)\b/i,
 ];
 
+const PLAYABLE_BAT_SIZE =
+  /\b\d{2}(?:\.\d+)?\s*(?:\/|x)\s*\d{2}(?:\.\d+)?\b|\b\d{2}(?:\.\d+)?\s*(?:in(?:ch(?:es)?)?|["”])\b.{0,30}\b\d{2}(?:\.\d+)?\s*oz\b|\b\d{2}(?:\.\d+)?\s*oz\b/i;
+
 export function isApprovedHistoricalSoftballBat(
   proposal: SoftballBatAuditProposal,
 ): boolean {
@@ -48,5 +51,9 @@ export function isApprovedHistoricalSoftballBat(
   const patterns = proposal.proposedSportId === "fastpitch-softball"
     ? FASTPITCH_BAT
     : SLOWPITCH_BAT;
-  return patterns.some((pattern) => pattern.test(proposal.title));
+  if (patterns.some((pattern) => pattern.test(proposal.title))) return true;
+  const pitchLabel = proposal.proposedSportId === "fastpitch-softball"
+    ? /\b(?:fast\s*pitch|fastpitch)\s+softball\b/i
+    : /\b(?:slow\s*pitch|slowpitch)\s+softball\b/i;
+  return pitchLabel.test(proposal.title) && PLAYABLE_BAT_SIZE.test(proposal.title);
 }
