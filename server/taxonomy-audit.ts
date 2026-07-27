@@ -5,6 +5,7 @@ import {
   type SearchableDeal,
 } from "./deal-search";
 import { TAXONOMY_ASSIGNMENT_PATHS } from "./taxonomy-assignment-paths";
+import { classifyDeterministicProduct } from "./deterministic-product-classifier";
 import {
   CANONICAL_BASEBALL_BAT_ID,
   CANONICAL_BASEBALL_GLOVE_ID,
@@ -548,7 +549,12 @@ function reviewPriority(input: {
   return { ...input, score, level };
 }
 
-type EvidenceSignalKind = "title" | "structured" | "identity-consensus" | "stored-taxonomy";
+type EvidenceSignalKind =
+  | "title"
+  | "structured"
+  | "deterministic"
+  | "identity-consensus"
+  | "stored-taxonomy";
 
 interface EvidenceSignal {
   kind: EvidenceSignalKind;
@@ -735,6 +741,31 @@ function collectDirectEvidence(deal: AuditDealRow, source?: AuditSourceRow): Map
       });
     }
   };
+
+  const deterministic = classifyDeterministicProduct([
+    deal.title,
+    deal.brand ?? "",
+    ...structured.map((item) => item.value),
+  ].join(" "));
+  if (deterministic) {
+    addCandidateSignal(candidates, {
+      sportId: deterministic.sportId,
+      equipmentTypeId: deterministic.equipmentTypeId,
+      family: deterministic.equipmentTypeId === "bb-gloves"
+        || deterministic.equipmentTypeId === "fp-gloves"
+        || deterministic.equipmentTypeId === "sp-gloves"
+        ? "fielding-glove"
+        : deterministic.equipmentTypeId.endsWith("-bats")
+          ? "bat"
+          : deterministic.equipmentTypeId === "run-shoes"
+            ? "footwear"
+            : deterministic.equipmentTypeId.replace(/^golf-/, "").replace(/s$/, ""),
+      priority: 150,
+    }, {
+      kind: "deterministic",
+      evidence: `strict deterministic product-form rule: ${deterministic.reason}`,
+    });
+  }
 
   const baseballBat = {
     sportId: "baseball", equipmentTypeId: CANONICAL_BASEBALL_BAT_ID, family: "bat", priority: 120,
@@ -1010,7 +1041,9 @@ function assessDealEvidence(
 
   const strongKeys = new Set(compatible
     .filter((candidate) => candidate.signals.some((signal) =>
-      signal.kind === "structured" || signal.kind === "identity-consensus"))
+      signal.kind === "structured"
+      || signal.kind === "deterministic"
+      || signal.kind === "identity-consensus"))
     .map(candidateKey));
   if (strongKeys.size > 1) {
     return { match: null, blockedReasons: [...blockedReasons, "conflicting structured or identifier evidence"] };
@@ -1033,14 +1066,27 @@ function assessDealEvidence(
   const signalKinds = new Set(selected.signals.map((signal) => signal.kind));
   const fanatics = /fanatics/i.test(`${deal.sourceId} ${source?.name ?? ""}`);
   const fanaticsMerchandise = protections.has("apparel") || protections.has("memorabilia");
-  if (fanatics && (fanaticsMerchandise || signalKinds.size < 2)) {
+  if (fanatics && (fanaticsMerchandise
+      || (signalKinds.size < 2 && !signalKinds.has("deterministic")))) {
     return {
       match: null,
       blockedReasons: [...blockedReasons, "Fanatics merchandise requires two non-conflicting independent signals"],
     };
   }
-  const confidence: AuditConfidence = signalKinds.size >= 2
-      && !storedConflict && competing.length === 0 ? "high" : "medium";
+  // Identifier-bearing rows retain the established consensus/quarantine rules;
+  // deterministic title evidence must never override a weak or scoped identity.
+  const deterministicHigh = signalKinds.has("deterministic")
+    && competing.length === 0
+    && identifierObservations(deal).length === 0;
+  const independentlyCorroborated = new Set(
+    selected.signals
+      .map((signal) => signal.kind)
+      .filter((kind) => kind !== "deterministic"),
+  ).size >= 2;
+  const confidence: AuditConfidence = deterministicHigh
+    || (independentlyCorroborated && !storedConflict && competing.length === 0)
+    ? "high"
+    : "medium";
   return { match: { ...selected, confidence }, blockedReasons };
 }
 

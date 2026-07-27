@@ -460,7 +460,7 @@ test("sport names never turn specific equipment into baseballs, basketballs, or 
   assert.equal(correctionFor(report, "fifa-football")?.status, "pending");
 });
 
-test("high-confidence proposals require two independent compatible signals", () => {
+test("high-confidence proposals require independent signals or a strict deterministic product-form rule", () => {
   const report = buildTaxonomyAuditReport(hardeningFixture([
     { id: "title-only-bat", sourceId: "ebay", title: "2026 Louisville Slugger Atlas BBCOR Baseball Bat", sportId: "baseball", equipmentTypeId: "bb-other" },
     { id: "structured-bat", sourceId: "ebay", title: "2026 Louisville Slugger Atlas BBCOR Baseball Bat", sportId: "baseball", equipmentTypeId: "bb-other", raw: { productType: "Baseball Bats" } },
@@ -468,8 +468,8 @@ test("high-confidence proposals require two independent compatible signals", () 
   ]));
   const titleOnly = correctionFor(report, "title-only-bat");
   assert.equal(titleOnly?.proposedCanonicalEquipmentTypeId, "bb-bats");
-  assert.equal(titleOnly?.confidence, "medium");
-  assert.equal(titleOnly?.humanApprovalRequired, true);
+  assert.equal(titleOnly?.confidence, "high");
+  assert.equal(titleOnly?.humanApprovalRequired, false);
   const structured = correctionFor(report, "structured-bat");
   assert.equal(structured?.confidence, "high");
   assert.equal(structured?.humanApprovalRequired, false);
