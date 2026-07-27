@@ -10,6 +10,14 @@ import {
   isEbayRateLimitError,
   type EbayBrowseBudget,
 } from "./ebay-browse-client";
+import {
+  calculateSuggestedPrice as auditedSuggestedPrice,
+  determineCompetitiveness as auditedCompetitiveness,
+  estimateEbayFees as auditedEbayFees,
+  extractSearchKeywords as auditedSearchKeywords,
+  isRelevantComparable as auditedComparableMatch,
+  summarizeComparablePrices as auditedPriceSummary,
+} from "./ebay-pricing-math";
 
 const EBAY_AUTH_URL = "https://api.ebay.com/identity/v1/oauth2/token";
 const EBAY_BROWSE_URL = "https://api.ebay.com/buy/browse/v1/item_summary/search";
@@ -62,6 +70,8 @@ export interface PricingReportItem {
   procurementCostCents: number | null;
   estimatedProfitCents: number | null;
   profitMarginPercent: number | null;
+  estimatedFeesCents: number | null;
+  pricingConfidence: "none" | "low" | "medium" | "high";
   competitiveness: "underpriced" | "competitive" | "slightly_high" | "overpriced" | "no_data";
 }
 
@@ -181,31 +191,108 @@ export async function fetchMyStoreListings(
   return allItems;
 }
 
-function extractSearchKeywords(title: string): string {
-  const stopWords = new Set([
-    "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for",
-    "of", "with", "by", "from", "is", "it", "this", "that", "was", "are",
-    "new", "used", "pre-owned", "nwt", "nib", "size", "sz", "mens", "womens",
-    "youth", "kids", "boys", "girls", "adult", "osfm", "osfa",
-  ]);
+const COMPARABLE_STOP_WORDS = new Set([
+  "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for",
+  "of", "with", "by", "from", "is", "it", "this", "that", "was", "are",
+  "new", "used", "pre-owned", "nwt", "nib", "size", "sz", "mens", "womens",
+  "youth", "kids", "boys", "girls", "adult", "osfm", "osfa", "ships", "ship",
+  "shipping", "free", "brand", "tags", "tag", "without", "w", "wo",
+]);
 
-  const words = title
-    .replace(/[^a-zA-Z0-9\s.-]/g, " ")
+function normalizedTitleWords(title: string): string[] {
+  return title
+    .toLowerCase()
+    .replace(/(\d)\s*["”]/g, "$1 inch ")
+    .replace(/[^a-z0-9.\s-]/g, " ")
     .split(/\s+/)
-    .filter(w => w.length > 1 && !stopWords.has(w.toLowerCase()))
-    .slice(0, 6);
+    .map((word) => word.replace(/^-+|-+$/g, ""))
+    .filter((word) => word.length > 1 && !COMPARABLE_STOP_WORDS.has(word));
+}
 
-  return words.join(" ");
+export function extractSearchKeywords(title: string): string {
+  const words = normalizedTitleWords(title);
+  const distinctive = words.filter((word) => /\d/.test(word) || word.length >= 4);
+  return Array.from(new Set([...distinctive, ...words])).slice(0, 9).join(" ");
+}
+
+type ComparableCandidate = Pick<EbayItemSummary, "title" | "condition" | "conditionId">;
+
+function equipmentFamily(title: string): string | null {
+  const value = ` ${title.toLowerCase()} `;
+  if (/\b(batting gloves?|batting mitts?)\b/.test(value)) return "batting-gloves";
+  if (/\b(first base mitt|catcher'?s? mitt|baseball glove|softball glove|fielding glove|a2000|a2k|heart of the hide|pro preferred)\b/.test(value)) return "fielding-gloves";
+  if (/\b(baseball bat|softball bat|fastpitch bat|slowpitch bat|bbcor|usssa)\b/.test(value)) return "bats";
+  if (/\b(cleats?|shoes?|footwear)\b/.test(value)) return "footwear";
+  if (/\b(helmet|catcher'?s? gear|chest protector|leg guards?)\b/.test(value)) return "protective";
+  return null;
+}
+
+function conditionGroup(condition: string | undefined): "new" | "used" | null {
+  const value = (condition || "").toLowerCase();
+  if (/\b(new|new other)\b/.test(value)) return "new";
+  if (/\b(used|pre-owned|preowned|refurbished)\b/.test(value)) return "used";
+  return null;
+}
+
+export function isRelevantComparable(source: ComparableCandidate, candidate: ComparableCandidate): boolean {
+  const sourceWords = new Set(normalizedTitleWords(source.title));
+  const candidateWords = new Set(normalizedTitleWords(candidate.title));
+  const sourceFamily = equipmentFamily(source.title);
+  const candidateFamily = equipmentFamily(candidate.title);
+  if (sourceFamily && candidateFamily && sourceFamily !== candidateFamily) return false;
+
+  const sourceCondition = conditionGroup(source.condition);
+  const candidateCondition = conditionGroup(candidate.condition);
+  if (sourceCondition && candidateCondition && sourceCondition !== candidateCondition) return false;
+
+  const sourceHand = /\b(lht|left hand throw|left-handed throw)\b/i.test(source.title) ? "lht"
+    : /\b(rht|right hand throw|right-handed throw)\b/i.test(source.title) ? "rht" : null;
+  const candidateHand = /\b(lht|left hand throw|left-handed throw)\b/i.test(candidate.title) ? "lht"
+    : /\b(rht|right hand throw|right-handed throw)\b/i.test(candidate.title) ? "rht" : null;
+  if (sourceHand && candidateHand && sourceHand !== candidateHand) return false;
+
+  const distinctive = [...sourceWords].filter((word) =>
+    /\d/.test(word) || word.length >= 5
+  );
+  const requiredOverlap = distinctive.length >= 3 ? 2 : 1;
+  const overlap = distinctive.filter((word) => candidateWords.has(word)).length;
+  return overlap >= requiredOverlap;
+}
+
+export function summarizeComparablePrices(prices: number[]) {
+  const sorted = prices.filter((price) => Number.isFinite(price) && price > 0).sort((a, b) => a - b);
+  if (!sorted.length) return { prices: [], average: null, median: null, lowest: null, highest: null };
+  const medianOf = (values: number[]) => {
+    const middle = Math.floor(values.length / 2);
+    return values.length % 2 ? values[middle] : Math.round((values[middle - 1] + values[middle]) / 2);
+  };
+  let retained = sorted;
+  if (sorted.length >= 5) {
+    const middle = Math.floor(sorted.length / 2);
+    const lower = sorted.slice(0, middle);
+    const upper = sorted.slice(sorted.length % 2 ? middle + 1 : middle);
+    const q1 = medianOf(lower);
+    const q3 = medianOf(upper);
+    const iqr = q3 - q1;
+    retained = sorted.filter((price) => price >= q1 - 1.5 * iqr && price <= q3 + 1.5 * iqr);
+  }
+  return {
+    prices: retained,
+    average: Math.round(retained.reduce((sum, price) => sum + price, 0) / retained.length),
+    median: medianOf(retained),
+    lowest: retained[0],
+    highest: retained[retained.length - 1],
+  };
 }
 
 async function findComparableActiveListings(
   token: string,
-  title: string,
+  sourceItem: EbayItemSummary,
   categoryId: string | null,
   budget: EbayBrowseBudget,
   cache: Map<string, Promise<EbaySearchResponse>>,
 ): Promise<{ items: EbayItemSummary[]; avgPriceCents: number | null; medianPriceCents: number | null; lowestPriceCents: number | null; highestPriceCents: number | null }> {
-  const keywords = extractSearchKeywords(title);
+  const keywords = auditedSearchKeywords(sourceItem.title);
   if (!keywords) return { items: [], avgPriceCents: null, medianPriceCents: null, lowestPriceCents: null, highestPriceCents: null };
 
   const params = new URLSearchParams({
@@ -228,23 +315,27 @@ async function findComparableActiveListings(
       cache.set(cacheKey, request);
     }
     const data = await request;
-    const items = (data.itemSummaries || []).filter(
-      item => item.seller?.username?.toLowerCase() !== MY_SELLER_USERNAME.toLowerCase()
+    const items = (data.itemSummaries || []).filter((item) =>
+      item.seller?.username?.toLowerCase() !== MY_SELLER_USERNAME.toLowerCase()
+      && auditedComparableMatch(sourceItem, item)
     );
 
     if (items.length === 0) {
       return { items: [], avgPriceCents: null, medianPriceCents: null, lowestPriceCents: null, highestPriceCents: null };
     }
 
-    const prices = items.map(i => Math.round(parseFloat(i.price.value) * 100)).filter(p => p > 0);
-    prices.sort((a, b) => a - b);
-
-    const avg = prices.length > 0 ? Math.round(prices.reduce((s, p) => s + p, 0) / prices.length) : null;
-    const median = prices.length > 0 ? prices[Math.floor(prices.length / 2)] : null;
-    const lowest = prices.length > 0 ? prices[0] : null;
-    const highest = prices.length > 0 ? prices[prices.length - 1] : null;
-
-    return { items, avgPriceCents: avg, medianPriceCents: median, lowestPriceCents: lowest, highestPriceCents: highest };
+    const summary = auditedPriceSummary(
+      items.map((item) => Math.round(parseFloat(item.price.value) * 100)),
+    );
+    const retainedPrices = new Set(summary.prices);
+    const retainedItems = items.filter((item) => retainedPrices.has(Math.round(parseFloat(item.price.value) * 100)));
+    return {
+      items: retainedItems,
+      avgPriceCents: summary.average,
+      medianPriceCents: summary.median,
+      lowestPriceCents: summary.lowest,
+      highestPriceCents: summary.highest,
+    };
   } catch (err: any) {
     if (isEbayRateLimitError(err)) throw err;
     log(`Comparable search failed for "${keywords}": ${err.message}`, "ebay-pricing");
@@ -252,13 +343,14 @@ async function findComparableActiveListings(
   }
 }
 
-function determineCompetitiveness(
+export function determineCompetitiveness(
   myPriceCents: number,
-  avgListedCents: number | null,
+  medianListedCents: number | null,
   avgSoldCents: number | null,
+  comparableCount = 0,
 ): "underpriced" | "competitive" | "slightly_high" | "overpriced" | "no_data" {
-  const referencePrice = avgSoldCents || avgListedCents;
-  if (!referencePrice) return "no_data";
+  const referencePrice = avgSoldCents || medianListedCents;
+  if (!referencePrice || (!avgSoldCents && comparableCount < 3)) return "no_data";
 
   const ratio = myPriceCents / referencePrice;
   if (ratio < 0.85) return "underpriced";
@@ -267,13 +359,15 @@ function determineCompetitiveness(
   return "overpriced";
 }
 
-function calculateSuggestedPrice(
+export function calculateSuggestedPrice(
   avgListedCents: number | null,
   medianListedCents: number | null,
   avgSoldCents: number | null,
   medianSoldCents: number | null,
   procurementCostCents: number | null,
+  comparableCount = 0,
 ): number | null {
+  if (!avgSoldCents && !medianSoldCents && comparableCount < 3) return null;
   const pricePoints: number[] = [];
   if (avgSoldCents) pricePoints.push(avgSoldCents);
   if (medianSoldCents) pricePoints.push(medianSoldCents);
@@ -301,6 +395,10 @@ function calculateSuggestedPrice(
   }
 
   return Math.round(suggested / 100) * 100;
+}
+
+export function estimateEbayFees(priceCents: number): number {
+  return Math.round(priceCents * 0.1325) + 40;
 }
 
 let reportGenerationInProgress = false;
@@ -346,7 +444,7 @@ export async function generatePricingReport(): Promise<string> {
 
       const comparables = await findComparableActiveListings(
         token,
-        item.title,
+        item,
         categoryId,
         browseBudget,
         comparableCache,
@@ -355,27 +453,35 @@ export async function generatePricingReport(): Promise<string> {
 
       const procurementCostCents = costMap.get(item.itemId) || null;
 
-      const suggestedPriceCents = calculateSuggestedPrice(
+      const suggestedPriceCents = auditedSuggestedPrice(
         comparables.avgPriceCents,
         comparables.medianPriceCents,
         null,
         null,
         procurementCostCents,
+        comparables.items.length,
       );
 
       let estimatedProfitCents: number | null = null;
       let profitMarginPercent: number | null = null;
       const priceForProfit = suggestedPriceCents || myPriceCents;
       if (procurementCostCents) {
-        estimatedProfitCents = priceForProfit - procurementCostCents;
+        const estimatedFeesCents = auditedEbayFees(priceForProfit);
+        estimatedProfitCents = priceForProfit - procurementCostCents - estimatedFeesCents;
         profitMarginPercent = Math.round((estimatedProfitCents / priceForProfit) * 100);
       }
 
-      const competitiveness = determineCompetitiveness(
+      const competitiveness = auditedCompetitiveness(
         myPriceCents,
-        comparables.avgPriceCents,
+        comparables.medianPriceCents,
         null,
+        comparables.items.length,
       );
+      const estimatedFeesCents = auditedEbayFees(priceForProfit);
+      const pricingConfidence = comparables.items.length >= 10 ? "high"
+        : comparables.items.length >= 5 ? "medium"
+        : comparables.items.length >= 3 ? "low"
+        : "none";
 
       reportItems.push({
         ebayItemId: item.itemId,
@@ -398,6 +504,8 @@ export async function generatePricingReport(): Promise<string> {
         procurementCostCents,
         estimatedProfitCents,
         profitMarginPercent,
+        estimatedFeesCents,
+        pricingConfidence,
         competitiveness,
       });
 
