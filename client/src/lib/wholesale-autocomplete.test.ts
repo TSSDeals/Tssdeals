@@ -9,6 +9,7 @@ test("wholesale autocomplete waits for meaningful input and deduplicates names",
     { name: "Wilson A1000 1786", manufacturer: "Wilson", sku: "WBW101443" },
   ];
   assert.deepEqual(buildWholesaleSuggestions(rows, "W"), []);
+  assert.deepEqual(buildWholesaleSuggestions(rows, "Rawlings"), []);
   assert.deepEqual(buildWholesaleSuggestions(rows, "Wilson"), [
     {
       value: "Wilson A2000 1786 11.5-inch Glove",
