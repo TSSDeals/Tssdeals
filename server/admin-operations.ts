@@ -69,6 +69,100 @@ const GENERIC_PRODUCT_WORDS = new Set([
   "large", "xl", "xxl", "glove", "bat", "ball", "helmet", "bag", "shoe",
 ]);
 
+const WHOLESALE_SEARCH_SYNONYMS: Record<string, string[]> = {
+  baseball: ["baseball", "ball"],
+  glove: ["glove", "gloves", "mitt", "mitts"],
+  gloves: ["glove", "gloves", "mitt", "mitts"],
+  mitt: ["glove", "gloves", "mitt", "mitts"],
+  mitts: ["glove", "gloves", "mitt", "mitts"],
+  left: ["left", "lht"],
+  lht: ["left", "lht"],
+  right: ["right", "rht"],
+  rht: ["right", "rht"],
+  bat: ["bat", "bats"],
+  bats: ["bat", "bats"],
+};
+
+export function normalizeWholesaleSearchGroups(query: unknown): string[][] {
+  const tokens = Array.from(new Set(key(query).split(" ").filter(Boolean)));
+  return tokens.map((token) => Array.from(new Set(WHOLESALE_SEARCH_SYNONYMS[token] ?? [token])));
+}
+
+export function classifyWholesaleText(value: unknown) {
+  const text = ` ${key(value)} `;
+  const has = (pattern: RegExp) => pattern.test(text);
+  const sport = has(/\b(fastpitch|slowpitch|softball)\b/) ? "Softball"
+    : has(/\b(baseball|bbcor|usssa|tee ball|t ball|umpire|a2000|a1000|ball glove|fielding glove|first base mitt|catchers mitt|catcher mitt)\b/) ? "Baseball"
+    : has(/\b(hockey|puck)\b/) ? "Hockey"
+    : has(/\b(golf|putter|wedge|fairway|driver)\b/) ? "Golf"
+    : has(/\b(soccer|futsal)\b/) ? "Soccer"
+    : has(/\b(football|gridiron)\b/) ? "Football"
+    : has(/\b(basketball)\b/) ? "Basketball"
+    : has(/\b(lacrosse)\b/) ? "Lacrosse"
+    : has(/\b(volleyball)\b/) ? "Volleyball"
+    : has(/\b(tennis|pickleball)\b/) ? "Racquet Sports"
+    : "General Sporting Goods";
+  const sportSubcategory = has(/\bfastpitch\b/) ? "Fastpitch Softball"
+    : has(/\bslowpitch\b/) ? "Slowpitch Softball"
+    : has(/\b(tee ball|t ball)\b/) ? "Tee Ball"
+    : has(/\bumpire\b/) ? "Umpire"
+    : sport;
+  const productType = has(/\b(batting glove|batting gloves)\b/) ? "Batting Gloves"
+    : has(/\b(catcher gear|catchers gear|chest protector|leg guard|catchers kit|catcher kit)\b/) ? "Catcher's Gear"
+    : has(/\b(glove|gloves|mitt|mitts|a2000|a1000)\b/) ? "Fielding Gloves"
+    : has(/\b(bbcor|usssa|baseball bat|softball bat|fastpitch bat|slowpitch bat)\b/) ? "Bats"
+    : has(/\b(helmet|helmets)\b/) ? "Helmets"
+    : has(/\b(cleat|cleats|shoe|shoes|footwear)\b/) ? "Cleats & Footwear"
+    : has(/\b(bag|bags|backpack)\b/) ? "Bags"
+    : has(/\b(ball|balls|baseball|softball|basketball|football|volleyball|puck)\b/) ? "Balls"
+    : has(/\b(chest protector|protective|guard|guards|mask)\b/) ? "Protective Gear"
+    : has(/\b(training|trainer|tee|net|rebounder)\b/) ? "Training Equipment"
+    : has(/\b(shirt|jersey|pant|pants|short|shorts|jacket|hoodie|apparel)\b/) ? "Apparel"
+    : "Other";
+  return { sport, sportSubcategory, productType };
+}
+
+const wholesaleClassificationSource = `
+  lower(concat_ws(' ',
+    coalesce(retail_name, name), coalesce(retail_brand, manufacturer),
+    coalesce(retail_model, ''), coalesce(retail_category, category),
+    coalesce(source_sheet, ''), coalesce(sku, ''), coalesce(size, ''),
+    coalesce(hand, ''), coalesce(color, '')
+  ))
+`;
+const wholesaleSportSql = `CASE
+  WHEN wholesale_text ~ '\\m(fastpitch|slowpitch|softball)\\M' THEN 'Softball'
+  WHEN wholesale_text ~ '\\m(baseball|bbcor|usssa|umpire|a2000|a1000)\\M'
+    OR wholesale_text ~ '(tee ball|t ball|ball glove|fielding glove|first base mitt|catcher.?s mitt)' THEN 'Baseball'
+  WHEN wholesale_text ~ '\\m(hockey|puck)\\M' THEN 'Hockey'
+  WHEN wholesale_text ~ '\\m(golf|putter|wedge|fairway|driver)\\M' THEN 'Golf'
+  WHEN wholesale_text ~ '\\m(soccer|futsal)\\M' THEN 'Soccer'
+  WHEN wholesale_text ~ '\\m(football|gridiron)\\M' THEN 'Football'
+  WHEN wholesale_text ~ '\\mbasketball\\M' THEN 'Basketball'
+  WHEN wholesale_text ~ '\\mlacrosse\\M' THEN 'Lacrosse'
+  WHEN wholesale_text ~ '\\mvolleyball\\M' THEN 'Volleyball'
+  WHEN wholesale_text ~ '\\m(tennis|pickleball)\\M' THEN 'Racquet Sports'
+  ELSE 'General Sporting Goods' END`;
+const wholesaleSubcategorySql = `CASE
+  WHEN wholesale_text ~ '\\mfastpitch\\M' THEN 'Fastpitch Softball'
+  WHEN wholesale_text ~ '\\mslowpitch\\M' THEN 'Slowpitch Softball'
+  WHEN wholesale_text ~ '(tee ball|t ball)' THEN 'Tee Ball'
+  WHEN wholesale_text ~ '\\mumpire\\M' THEN 'Umpire'
+  ELSE sport END`;
+const wholesaleProductTypeSql = `CASE
+  WHEN wholesale_text ~ '(batting glove|batting gloves)' THEN 'Batting Gloves'
+  WHEN wholesale_text ~ '(catcher.?s? gear|chest protector|leg guard|catcher.?s? kit)' THEN 'Catcher''s Gear'
+  WHEN wholesale_text ~ '\\m(glove|gloves|mitt|mitts|a2000|a1000)\\M' THEN 'Fielding Gloves'
+  WHEN wholesale_text ~ '\\m(bbcor|usssa)\\M' OR wholesale_text ~ '(baseball bat|softball bat|fastpitch bat|slowpitch bat)' THEN 'Bats'
+  WHEN wholesale_text ~ '\\m(helmet|helmets)\\M' THEN 'Helmets'
+  WHEN wholesale_text ~ '\\m(cleat|cleats|shoe|shoes|footwear)\\M' THEN 'Cleats & Footwear'
+  WHEN wholesale_text ~ '\\m(bag|bags|backpack)\\M' THEN 'Bags'
+  WHEN wholesale_text ~ '\\m(ball|balls|baseball|softball|basketball|football|volleyball|puck)\\M' THEN 'Balls'
+  WHEN wholesale_text ~ '\\m(protective|guard|guards|mask)\\M' THEN 'Protective Gear'
+  WHEN wholesale_text ~ '\\m(training|trainer|tee|net|rebounder)\\M' THEN 'Training Equipment'
+  WHEN wholesale_text ~ '\\m(shirt|jersey|pant|pants|short|shorts|jacket|hoodie|apparel)\\M' THEN 'Apparel'
+  ELSE 'Other' END`;
+
 export function deriveSupplierRetailIdentity(input: {
   name: string;
   manufacturer: string | null;
@@ -421,25 +515,87 @@ export function registerAdminOperationsRoutes(app: Express, isAdmin: RequestHand
 
   app.get("/api/admin/operations/wholesale", isAdmin, async (req, res) => {
     const query = clean(req.query.q);
-    const category = clean(req.query.category);
+    const company = clean(req.query.company);
+    const sport = clean(req.query.sport);
+    const sportSubcategory = clean(req.query.sportSubcategory);
+    const productType = clean(req.query.productType);
+    const identityStatus = clean(req.query.identityStatus);
     const markup = Math.min(500, Math.max(0, Number(req.query.markup) || 0));
     const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 50));
-    const pattern = `%${query.replace(/[%_]/g, "\\$&")}%`;
+    const searchGroups = normalizeWholesaleSearchGroups(query);
+    const searchPredicate = searchGroups.length
+      ? sql.join(searchGroups.map((group) => sql`(${sql.join(group.map((term) => {
+          const pattern = `%${term.replace(/[%_]/g, "\\$&")}%`;
+          return sql`search_text ILIKE ${pattern}`;
+        }), sql` OR `)})`), sql` AND `)
+      : sql`TRUE`;
     const result = await db.execute(sql`
+      WITH source AS (
+        SELECT *, ${sql.raw(wholesaleClassificationSource)} AS wholesale_text,
+               coalesce(nullif(retail_brand, ''), nullif(manufacturer, ''), supplier) AS company
+        FROM wholesale_products
+        WHERE ${searchPredicate}
+      ), sporting AS (
+        SELECT *, ${sql.raw(wholesaleSportSql)} AS sport FROM source
+      ), classified AS (
+        SELECT *, ${sql.raw(wholesaleSubcategorySql)} AS sport_subcategory,
+               ${sql.raw(wholesaleProductTypeSql)} AS product_type
+        FROM sporting
+      )
       SELECT id, supplier, manufacturer, category, sku, upc, name, size, color, hand,
              wholesale_cents, msrp_cents, map_cents, image_url, source_sheet, source_row,
              retail_name, retail_brand, retail_model, retail_category, identity_status,
-             identity_confidence, identity_source, identity_source_ref
-      FROM wholesale_products
-      WHERE (${query} = '' OR search_text ILIKE ${pattern})
-        AND (${category} = '' OR category = ${category})
-      ORDER BY manufacturer NULLS LAST, name
+             identity_confidence, identity_source, identity_source_ref,
+             company, sport, sport_subcategory, product_type
+      FROM classified
+      WHERE (${company} = '' OR company = ${company})
+        AND (${sport} = '' OR sport = ${sport})
+        AND (${sportSubcategory} = '' OR sport_subcategory = ${sportSubcategory})
+        AND (${productType} = '' OR product_type = ${productType})
+        AND (${identityStatus} = '' OR identity_status = ${identityStatus})
+      ORDER BY
+        CASE WHEN lower(coalesce(sku, '')) = lower(${query}) OR lower(coalesce(upc, '')) = lower(${query}) THEN 0 ELSE 1 END,
+        company NULLS LAST, coalesce(retail_name, name)
       LIMIT ${limit}
     `);
     res.json((result as any).rows.map((row: any) => ({
       ...row,
       ...calculateWholesalePricing(Number(row.wholesale_cents), 10, markup),
     })));
+  });
+
+  app.get("/api/admin/operations/wholesale-filters", isAdmin, async (_req, res) => {
+    const base = `WITH source AS (
+      SELECT *, ${wholesaleClassificationSource} AS wholesale_text,
+             coalesce(nullif(retail_brand, ''), nullif(manufacturer, ''), supplier) AS company
+      FROM wholesale_products
+    ), sporting AS (
+      SELECT *, ${wholesaleSportSql} AS sport FROM source
+    ), classified AS (
+      SELECT *, ${wholesaleSubcategorySql} AS sport_subcategory,
+             ${wholesaleProductTypeSql} AS product_type
+      FROM sporting
+    )`;
+    const optionQuery = (column: string) => db.execute(sql.raw(`${base}
+      SELECT ${column} AS value, count(*)::int AS count
+      FROM classified
+      WHERE ${column} IS NOT NULL AND btrim(${column}) <> ''
+      GROUP BY ${column}
+      ORDER BY ${column}`));
+    const [companies, sports, sportSubcategories, productTypes, identityStatuses] = await Promise.all([
+      optionQuery("company"),
+      optionQuery("sport"),
+      optionQuery("sport_subcategory"),
+      optionQuery("product_type"),
+      optionQuery("identity_status"),
+    ]);
+    res.json({
+      companies: (companies as any).rows,
+      sports: (sports as any).rows,
+      sportSubcategories: (sportSubcategories as any).rows,
+      productTypes: (productTypes as any).rows,
+      identityStatuses: (identityStatuses as any).rows,
+    });
   });
 
   app.get("/api/admin/operations/ledger", isAdmin, async (req, res) => {
