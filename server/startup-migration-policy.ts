@@ -35,6 +35,12 @@ export const STARTUP_MIGRATION_MANIFEST = [
     kind: "structural",
     description: "Evidence-backed retail identity fields for private wholesale products",
   },
+  {
+    id: "20260726_005_business_ledger_financial_fields",
+    checksum: "3d4955b05d6533b616650db739d4dc8fe0b5f606cf9276aef05d5d1dd82e5e88",
+    kind: "structural",
+    description: "Sortable ledger fields using workbook net profit and break-even values",
+  },
 ] as const;
 
 export type ApprovedSeedState = "empty" | "satisfied" | "partial";

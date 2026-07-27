@@ -7,6 +7,7 @@ import {
   parseCatalogIdentityFile,
   parseLedgerWorkbook,
   parseWholesaleWorkbook,
+  resolveLedgerSort,
 } from "./admin-operations";
 
 function workbookBuffer(sheets: Record<string, unknown[][]>): Buffer {
@@ -92,14 +93,30 @@ test("ledger parser preserves the raw row and extracts operational fields", () =
     "Tracking Sheet": [
       [],
       ["Data Entry"],
-      ["Item #", "Inventory Description", "Current Status", "Seller / Supplier", "Quantity", "Purchased Cost", "Delivered Cost", "Sale Price", "Total Revenue", "Total Profit"],
-      [42, "Wilson A2000 1786", "Sold", "Extra Innings Direct", 1, 180, 198, 275, 260, 62],
+      ["Item #", "Inventory Description", "Current Status", "Seller / Supplier", "Quantity", "Purchased Cost", "Delivered Cost", "Final COG", "Sale Price", "Total Revenue", "Total Profit", "Net Profit", "eBay Break Even Price (no ship profit)"],
+      [42, "Wilson A2000 1786", "Sold", "Extra Innings Direct", 1, 180, 198, 200, 275, 260, 999, 62, 238],
     ],
   });
   const rows = parseLedgerWorkbook(buffer);
   assert.equal(rows.length, 1);
   assert.equal(rows[0].itemNumber, "42");
   assert.equal(rows[0].deliveredCostCents, 19_800);
+  assert.equal(rows[0].finalCogCents, 20_000);
   assert.equal(rows[0].profitCents, 6_200);
+  assert.equal(rows[0].ebayBreakEvenCents, 23_800);
+  assert.equal(rows[0].inPersonMinimumCents, 22_000);
   assert.equal(rows[0].raw["Current Status"], "Sold");
+});
+
+test("ledger sorting is restricted to the approved column list", () => {
+  assert.deepEqual(resolveLedgerSort("netProfit", "asc"), {
+    sortBy: "netProfit",
+    column: "profit_cents",
+    direction: "ASC",
+  });
+  assert.deepEqual(resolveLedgerSort("profit_cents; DROP TABLE deals", "sideways"), {
+    sortBy: "date",
+    column: "coalesce(sale_date, purchase_date)",
+    direction: "DESC",
+  });
 });
