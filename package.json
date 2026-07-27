@@ -33,6 +33,7 @@
     "preview:running-shoe-history": "tsx script/guarded-running-shoe-history.ts",
     "preview:golf-wedge-history": "tsx script/guarded-golf-wedge-history.ts",
     "preview:golf-putter-history": "tsx script/guarded-golf-putter-history.ts",
+    "preview:baseball-cleat-history": "tsx script/guarded-baseball-cleat-history.ts",
     "preview:taxonomy-backfill": "tsx script/guarded-taxonomy-backfill.ts",
     "db:push": "drizzle-kit push"
   },
