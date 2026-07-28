@@ -216,11 +216,13 @@ export async function purgeEbayUserData(
     const reportRows = await tx
       .delete(scheduledReports)
       .where(
-        sql`exists (
-          select 1
-          from unnest(${identifiers}::text[]) as identifier
-          where position(lower(identifier) in lower(${scheduledReports.csvContent})) > 0
-        )`,
+        sql`(${sql.join(
+          normalized.map(
+            (identifier) =>
+              sql`position(${identifier} in lower(coalesce(${scheduledReports.csvContent}, ''))) > 0`,
+          ),
+          sql` or `,
+        )})`,
       )
       .returning({ id: scheduledReports.id });
 
