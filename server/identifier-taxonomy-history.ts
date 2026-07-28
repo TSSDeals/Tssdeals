@@ -30,7 +30,7 @@ export type IdentifierTaxonomyChange = {
 };
 
 const PROTECTED_MEMORABILIA_TITLE =
-  /\b(?:autograph(?:ed)?|signed|authenticated|relic|card|collage|display\s+case|vitrine|ticket|photo|piece\s+of|game[- ]used)\b/i;
+  /(?:\b(?:autograph(?:ed)?|signed|authenticated|relic|card|display\s+case|vitrine|ticket|photo|piece\s+of|game[- ]used)\b|collage)/i;
 
 function destinationIsSafeForTitle(
   title: string,

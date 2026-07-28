@@ -1640,7 +1640,7 @@ function titlesClearlyUnrelated(records: AuditDealRow[]): boolean {
 }
 
 const TRANSLATED_REFERENCE_MEMORABILIA_PATTERN =
-  /\b(?:autograph(?:ed)?|signed|authenticated|relic|card|collage|display\s+case|vitrine|ticket|photo|piece\s+of|game[- ]used|limited\s+edition)\b/i;
+  /(?:\b(?:autograph(?:ed)?|signed|authenticated|relic|card|display\s+case|vitrine|ticket|photo|piece\s+of|game[- ]used|limited\s+edition)\b|collage)/i;
 
 function translatedReferenceSupportsStoredTaxonomy(record: AuditDealRow): boolean {
   if (TRANSLATED_REFERENCE_MEMORABILIA_PATTERN.test(record.title)) return false;

@@ -99,7 +99,7 @@ test("never approves memorabilia titles into playable equipment", () => {
       },
       {
         dealId: "translated",
-        title: "Collage panoramico con un trozo de beisbol usado en el juego",
+        title: "Detroit Tigers Gerahmte Stadion-Panoramacollage mit einem Baseball",
         currentSportId: "baseball",
         currentEquipmentTypeId: "bb-other",
       },
