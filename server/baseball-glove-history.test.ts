@@ -23,6 +23,14 @@ test("accepts explicit fielding gloves and established glove families", () => {
   assert.equal(isApprovedHistoricalBaseballGlove(proposal(
     'Wilson 2025 Tennis A2000 1786SS 11.5" Infield Baseball Glove',
   )), true);
+  for (const title of [
+    "Mizuno Pro CustomMade Hardball Glove (Infield Model) Leather From Japan",
+    "ZETT CustomMade Hardball Glove (Outfield) Genuine Leather Baseball From Japan",
+    "Mizuno Pro Hardball Infielder's Glove Leather Baseball From Japan",
+    "Wilson 9227 Pro Style Jim Catfish Hunter Baseball Left Handed Throw Glove 10",
+  ]) {
+    assert.equal(isApprovedHistoricalBaseballGlove(proposal(title)), true, title);
+  }
 });
 
 test("rejects accessories, protective liners, other sports, training forms, and memorabilia", () => {
@@ -33,8 +41,9 @@ test("rejects accessories, protective liners, other sports, training forms, and 
     "Wilson A2000 Training Pancake/Paddle Baseball Glove",
     "Signed Gold Glove Logo",
     "Tennis Oven Mitt",
+    "Tourna Hot Glove Tennis Mitt",
+    "Dale Murphy signed Baseball with Gold Glove Logo",
   ]) {
     assert.equal(isApprovedHistoricalBaseballGlove(proposal(title)), false, title);
   }
 });
-
