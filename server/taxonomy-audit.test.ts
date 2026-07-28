@@ -957,6 +957,34 @@ test("three source-item translations inherit one unambiguous directly supported 
   assert.ok((review.supportedRecommendation?.directEvidence.length ?? 0) >= 2);
 });
 
+test("translated memorabilia does not inherit a misleading equipment destination", () => {
+  const report = buildTaxonomyAuditReport(phase14Fixture([
+    {
+      id: "relic-en", sourceId: "fanatics",
+      title: "Johnny Bench Autographed Legendary Lumberjacks Bat Relic Card",
+      sportId: "baseball", equipmentTypeId: "bb-bats",
+      raw: { itemNumber: "RELIC-TRANSLATION-1" },
+    },
+    {
+      id: "relic-fr", sourceId: "fanatics",
+      title: "Johnny Bench carte relique batte Legendary Lumberjacks autographiée",
+      sportId: "baseball", equipmentTypeId: "bb-other",
+      raw: { itemNumber: "RELIC-TRANSLATION-1" },
+    },
+    {
+      id: "relic-de", sourceId: "fanatics",
+      title: "Johnny Bench signierte Legendary Lumberjacks Bat Relic Karte",
+      sportId: "baseball", equipmentTypeId: "bb-other",
+      raw: { itemNumber: "RELIC-TRANSLATION-1" },
+    },
+  ]));
+
+  const quarantined = report.reviewPacket.identifierQuarantine.find((row) =>
+    row.identifierValue === "RELIC-TRANSLATION-1");
+  assert.ok(quarantined);
+  assert.equal(quarantined.supportedRecommendation, null);
+});
+
 test("review packet expands correction cohorts into prioritized per-deal exports", () => {
   const report = buildTaxonomyAuditReport(phase14Fixture([
     {

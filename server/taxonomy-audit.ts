@@ -1639,6 +1639,23 @@ function titlesClearlyUnrelated(records: AuditDealRow[]): boolean {
   return true;
 }
 
+const TRANSLATED_REFERENCE_MEMORABILIA_PATTERN =
+  /\b(?:autograph(?:ed)?|signed|authenticated|relic|card|collage|display\s+case|vitrine|ticket|photo|piece\s+of|game[- ]used|limited\s+edition)\b/i;
+
+function translatedReferenceSupportsStoredTaxonomy(record: AuditDealRow): boolean {
+  if (TRANSLATED_REFERENCE_MEMORABILIA_PATTERN.test(record.title)) return false;
+  const destination = `${record.sportId}/${record.equipmentTypeId}`;
+  const patterns: Record<string, RegExp> = {
+    "baseball/bb-shoes-apparel": /\b(?:jersey|shirt|hoodie|sweatshirt|jacket|coat|cap|hat|beanie|shorts|pants|socks|polo|pullover|apparel)\b/i,
+    "baseball/bb-drip": /\b(?:sunglasses|eyewear)\b/i,
+    "tennis/ten-accessories": /\b(?:tennis|racquet|racket|string|strings|reel|spool|overgrip|grip|dampener)\b/i,
+    "tennis/ten-shoes": /\btennis\b.{0,30}\b(?:shoe|shoes|footwear)\b|\b(?:shoe|shoes|footwear)\b.{0,30}\btennis\b/i,
+    "basketball/bk-balls": /\bbasketball\b/i,
+    "football/fb-balls": /\bfootball\b/i,
+  };
+  return patterns[destination]?.test(record.title) ?? false;
+}
+
 function supportedIdentifierRecommendation(
   records: AuditDealRow[],
   sourcesById: Map<string, AuditSourceRow>,
@@ -1688,6 +1705,7 @@ function supportedIdentifierRecommendation(
       && new Set(records.map((record) => record.sourceId)).size === 1
       && resolvedAssignments.size === 1
       && resolvedRecords.length >= 1
+      && resolvedRecords.every(translatedReferenceSupportsStoredTaxonomy)
       && records.every((record) =>
         resolvedAssignments.has(`${record.sportId}/${record.equipmentTypeId}`)
         || !record.equipmentTypeId
