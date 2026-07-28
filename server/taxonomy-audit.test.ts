@@ -602,6 +602,41 @@ test("canonical stored sport equipment families are compatible no-action records
   assert.equal(report.summary.proposedRecords, 0);
 });
 
+test("audit suppresses accessories, novelty items, and adjacent products that only mention equipment", () => {
+  const base = phase14Fixture([]);
+  const dataset: TaxonomyAuditDataset = {
+    ...base,
+    equipmentTypes: [
+      ...base.equipmentTypes,
+      { id: "golf-drivers", name: "Drivers", sportId: "golf", userCreated: false },
+      { id: "golf-putters", name: "Putters", sportId: "golf", userCreated: false },
+    ],
+    deals: [
+    { id: "safe-t-ball", sourceId: "ebay", title: "Markwort Safe-T-Ball Baseballs 12-Pack", sportId: "other", equipmentTypeId: "other-other" },
+    { id: "vented-ball", sourceId: "ebay", title: "Champro Plastic Vented Baseballs: CBB51D", sportId: "other", equipmentTypeId: "other-other" },
+    { id: "blank-ball", sourceId: "ebay", title: "6 Pack Blank Baseballs Solid Cork Core Unmarked Autograph Baseball Balls", sportId: "other", equipmentTypeId: "other-other" },
+    { id: "mini-bat", sourceId: "ebay", title: "2 Williamsport Little League World Series wooden mini baseball bats", sportId: "other", equipmentTypeId: "other-other" },
+    { id: "bat-weight", sourceId: "ebay", title: "Varo COR Bat Training Weight 20oz for Baseball", sportId: "other", equipmentTypeId: "other-other" },
+    { id: "pine-tar", sourceId: "ebay", title: "Bruce Bolt Premium Pine Tar Push Up Stick", sportId: "other", equipmentTypeId: "other-other", raw: { productType: "Baseball Bats" } },
+    { id: "tee-popper", sourceId: "ebay", title: "Sports Baseball Training Mini Tee Popper Hitting Tee for Perfect Swings", sportId: "other", equipmentTypeId: "other-other", raw: { productType: "Baseball Bats" } },
+    { id: "tennis-mitt", sourceId: "ebay", title: "Tourna Hot Glove Tennis Mitt", sportId: "other", equipmentTypeId: "other-other", raw: { productType: "Baseball Gloves" } },
+    { id: "goalie-glove", sourceId: "ebay", title: "Bauer Intermediate GSX Hockey Goalie Catcher Glove", sportId: "other", equipmentTypeId: "other-other", raw: { productType: "Baseball Gloves" } },
+    { id: "glove-locks", sourceId: "ebay", title: "60 Pcs Glove Locks Baseball Glove Locks Needle Stoppers Baseball Glove Accessories", sportId: "other", equipmentTypeId: "other-other" },
+    { id: "inner-glove", sourceId: "ebay", title: "All-Star Adult Fingers Baseball Catcher's Inner Protective Glove", sportId: "other", equipmentTypeId: "other-other" },
+    { id: "pancake-glove", sourceId: "ebay", title: "Wilson A2000 Infield Training Pancake/Paddle Baseball Glove", sportId: "other", equipmentTypeId: "other-other" },
+    { id: "signed-ball", sourceId: "ebay", title: "Dale Murphy signed Baseball with Gold Glove Logo", sportId: "other", equipmentTypeId: "other-other", raw: { productType: "Baseball Gloves" } },
+    { id: "mirror", sourceId: "ebay", title: "Fit System Driver Side Heated Mirror Glass with Backing Driver Side LH", sportId: "other", equipmentTypeId: "other-other", raw: { productType: "Golf Drivers" } },
+    { id: "logo-driver", sourceId: "ebay", title: "Hometown Brands St. Louis Cardinals Team Logo Driver", sportId: "other", equipmentTypeId: "other-other", raw: { productType: "Golf Drivers" } },
+    { id: "putter-holder", sourceId: "ebay", title: "Ball Marker Magnetic Putter Grip Golf Ball Marker Holder", sportId: "other", equipmentTypeId: "other-other", raw: { productType: "Golf Putters" } },
+    { id: "goggle-case", sourceId: "ebay", title: "Nike Swim Goggle Case", sportId: "other", equipmentTypeId: "other-other", raw: { productType: "Swimming Goggles" } },
+    ],
+  };
+
+  const report = buildTaxonomyAuditReport(dataset);
+  const proposedIds = new Set(report.reviewPacket.proposedCorrections.map((record) => record.dealId));
+  for (const deal of dataset.deals) assert.equal(proposedIds.has(deal.id), false, deal.title);
+});
+
 test("genuine stored conflicts remain review outcomes", () => {
   const report = buildTaxonomyAuditReport(phase12Fixture([
     { id: "fanatics-apparel-in-bats", sourceId: "fanatics", title: "USA Baseball Stadium Jersey", sportId: "baseball", equipmentTypeId: "bb-bats" },
