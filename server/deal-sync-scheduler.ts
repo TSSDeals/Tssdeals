@@ -1228,6 +1228,22 @@ export async function runFullSync(storage: IStorage): Promise<FullSyncResult | n
       }
     }
 
+    // Refresh today's read-only Demand Brain observation after a completed
+    // feed pass. Proposed identity links are counted as coverage gaps but only
+    // approved links are allowed into market snapshots.
+    if (!stopRequestedSince(stopEpoch)) {
+      try {
+        const { captureDailyDemandSnapshot } = await import("./demand-brain");
+        const snapshot = await captureDailyDemandSnapshot();
+        log(
+          `Demand snapshot ${snapshot.snapshotDate}: ${snapshot.trustedListings} trusted listings, ${snapshot.proposedListings} awaiting identity review`,
+          "demand-brain",
+        );
+      } catch (err: any) {
+        log(`Demand snapshot error: ${err.message}`, "demand-brain");
+      }
+    }
+
     return {
       totalCreated,
       totalUpdated,

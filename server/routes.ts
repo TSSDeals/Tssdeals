@@ -2288,6 +2288,24 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/admin/demand-brain/summary", isAdmin, async (req: any, res) => {
+    try {
+      const { getDemandBrainSummary, marketWindowDays } = await import("./demand-brain");
+      res.json(await getDemandBrainSummary(marketWindowDays(req.query.days)));
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/admin/demand-brain/capture", isAdmin, async (_req: any, res) => {
+    try {
+      const { captureDailyDemandSnapshot } = await import("./demand-brain");
+      res.json(await captureDailyDemandSnapshot());
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.get("/api/admin/product-identities/review", isAdmin, async (req: any, res) => {
     try {
       const { db } = await import("./db");

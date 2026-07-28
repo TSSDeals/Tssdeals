@@ -370,6 +370,46 @@ export const STARTUP_MIGRATIONS: readonly VersionedMigration<StartupContext>[] =
       for (const statement of statements) await context.execute(sql.raw(statement));
     },
   },
+  {
+    ...STARTUP_MIGRATION_MANIFEST[6],
+    async up(context) {
+      const statements = [
+        `CREATE TABLE IF NOT EXISTS demand_snapshot_runs (
+          id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+          snapshot_date DATE NOT NULL UNIQUE,
+          status VARCHAR(20) NOT NULL DEFAULT 'complete',
+          trusted_listings INTEGER NOT NULL DEFAULT 0,
+          proposed_listings INTEGER NOT NULL DEFAULT 0,
+          identity_variants INTEGER NOT NULL DEFAULT 0,
+          source_count INTEGER NOT NULL DEFAULT 0,
+          captured_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )`,
+        `CREATE INDEX IF NOT EXISTS demand_snapshot_runs_date_idx
+          ON demand_snapshot_runs(snapshot_date)`,
+        `CREATE TABLE IF NOT EXISTS demand_market_snapshots (
+          id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+          snapshot_date DATE NOT NULL,
+          product_identity_id VARCHAR NOT NULL REFERENCES product_identities(id) ON DELETE CASCADE,
+          source_id VARCHAR NOT NULL,
+          active_listings INTEGER NOT NULL,
+          priced_listings INTEGER NOT NULL,
+          min_price_cents INTEGER,
+          median_price_cents INTEGER,
+          average_price_cents INTEGER,
+          max_price_cents INTEGER,
+          new_listings INTEGER NOT NULL DEFAULT 0,
+          preowned_listings INTEGER NOT NULL DEFAULT 0,
+          captured_at TIMESTAMP NOT NULL DEFAULT NOW(),
+          UNIQUE(snapshot_date, product_identity_id, source_id)
+        )`,
+        `CREATE INDEX IF NOT EXISTS demand_market_snapshot_date_idx
+          ON demand_market_snapshots(snapshot_date)`,
+        `CREATE INDEX IF NOT EXISTS demand_market_snapshot_identity_idx
+          ON demand_market_snapshots(product_identity_id)`,
+      ];
+      for (const statement of statements) await context.execute(sql.raw(statement));
+    },
+  },
 ] as const;
 
 const ledger: MigrationLedger<StartupContext> = {
