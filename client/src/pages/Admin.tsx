@@ -884,6 +884,29 @@ export default function AdminPage() {
     enabled: !!isAdmin,
   });
 
+  const productIdentityRunQuery = useQuery<any>({
+    queryKey: ["/api/admin/product-identities/run-status"],
+    enabled: !!isAdmin,
+    refetchInterval: (query) => query.state.data?.running ? 2000 : false,
+  });
+
+  const runProductIdentity = async (mode: "preview" | "apply") => {
+    try {
+      await apiRequest("POST", "/api/admin/product-identities/run", { mode });
+      await productIdentityRunQuery.refetch();
+      toast({
+        title: mode === "apply" ? "Safe proposal run started" : "Identity preview started",
+        description: "This runs in the background. The panel will update automatically.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Could not start Product Identity Brain",
+        description: error?.message ?? "Unknown error",
+        variant: "destructive",
+      });
+    }
+  };
+
   const reviewProductIdentity = async (dealId: string, decision: "approved" | "rejected") => {
     try {
       await apiRequest("POST", `/api/admin/product-identities/review/${encodeURIComponent(dealId)}/${decision}`);
@@ -2295,6 +2318,34 @@ export default function AdminPage() {
             </div>
 
             <div className="mt-5 space-y-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant="outline"
+                  disabled={!!productIdentityRunQuery.data?.running}
+                  onClick={() => runProductIdentity("preview")}
+                >
+                  Preview safe matches
+                </Button>
+                <Button
+                  disabled={!!productIdentityRunQuery.data?.running}
+                  onClick={() => runProductIdentity("apply")}
+                >
+                  Store safe proposals
+                </Button>
+                {productIdentityRunQuery.data?.running && (
+                  <span className="text-sm text-muted-foreground">
+                    {productIdentityRunQuery.data.phase === "storing"
+                      ? `Storing ${Number(productIdentityRunQuery.data.storedProposals ?? 0).toLocaleString()} proposals…`
+                      : `Scanning ${Number(productIdentityRunQuery.data.scannedDeals ?? 0).toLocaleString()} listings…`}
+                  </span>
+                )}
+                {!productIdentityRunQuery.data?.running && productIdentityRunQuery.data?.message && (
+                  <span className="text-sm text-muted-foreground">
+                    {productIdentityRunQuery.data.message}
+                  </span>
+                )}
+              </div>
+
               {productIdentitySummaryQuery.data ? (
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3" data-testid="product-identity-stats">
                   {[

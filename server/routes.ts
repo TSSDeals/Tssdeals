@@ -2249,6 +2249,18 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/admin/product-identities/run-status", isAdmin, async (_req: any, res) => {
+    const { getProductIdentityRunStatus } = await import("./product-identity-runner");
+    res.json(getProductIdentityRunStatus());
+  });
+
+  app.post("/api/admin/product-identities/run", isAdmin, async (req: any, res) => {
+    const mode = req.body?.mode === "apply" ? "apply" : "preview";
+    const { startProductIdentityRun } = await import("./product-identity-runner");
+    const result = startProductIdentityRun(mode);
+    res.status(result.started ? 202 : 409).json(result);
+  });
+
   app.post("/api/admin/product-identities/review/:dealId/:decision", isAdmin, async (req: any, res) => {
     try {
       const decision = String(req.params.decision);
