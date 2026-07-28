@@ -37,6 +37,7 @@
     "preview:swimming-goggle-history": "tsx script/guarded-swimming-goggle-history.ts",
     "preview:golf-driver-history": "tsx script/guarded-golf-driver-history.ts",
     "preview:baseball-ball-history": "tsx script/guarded-baseball-ball-history.ts",
+    "preview:baseball-training-history": "tsx script/guarded-baseball-training-history.ts",
     "preview:taxonomy-backfill": "tsx script/guarded-taxonomy-backfill.ts",
     "db:push": "drizzle-kit push"
   },
