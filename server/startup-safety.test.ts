@@ -54,6 +54,14 @@ test("restart applies each versioned startup operation once", async () => {
   assert.equal(mutationCalls, 1);
 });
 
+test("product identity audit is review-first and never affects shopper results implicitly", () => {
+  const source = readFileSync(join(process.cwd(), "script", "product-identity-audit.ts"), "utf8");
+  assert.match(source, /const apply = process\.argv\.includes\("--apply"\)/);
+  assert.match(source, /BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY/);
+  assert.match(source, /status[^]*'proposed'/);
+  assert.doesNotMatch(source, /UPDATE\s+deals|DELETE\s+FROM\s+deals/i);
+});
+
 test("startup list contains only structural and approved static seed operations", () => {
   assert.ok(STARTUP_MIGRATION_MANIFEST.some((migration) => migration.kind === "approved-seed"));
   for (const migration of STARTUP_MIGRATION_MANIFEST) {

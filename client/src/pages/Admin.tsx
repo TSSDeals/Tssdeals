@@ -54,6 +54,7 @@ const ADMIN_SECTIONS: { id: string; label: string }[] = [
   { id: "promo-codes", label: "Promo Codes & Coupons" },
   { id: "sms-blast", label: "SMS Deal Blast" },
   { id: "featured-deals", label: "Featured Deals" },
+  { id: "product-identity", label: "Product Identity Brain" },
   { id: "ai-classification", label: "AI Classification" },
   { id: "msrp", label: "MSRP Verification" },
   { id: "deal-validation", label: "Deal Validation" },
@@ -864,6 +865,41 @@ export default function AdminPage() {
     queryKey: ["/api/admin/ai-classification/stats"],
     enabled: !!isAdmin,
   });
+
+  const productIdentitySummaryQuery = useQuery<{
+    variants: number;
+    families: number;
+    linked_deals: number;
+    proposed: number;
+    approved: number;
+    high_confidence: number;
+    medium_confidence: number;
+  }>({
+    queryKey: ["/api/admin/product-identities/summary"],
+    enabled: !!isAdmin,
+  });
+
+  const productIdentityReviewQuery = useQuery<any[]>({
+    queryKey: ["/api/admin/product-identities/review"],
+    enabled: !!isAdmin,
+  });
+
+  const reviewProductIdentity = async (dealId: string, decision: "approved" | "rejected") => {
+    try {
+      await apiRequest("POST", `/api/admin/product-identities/review/${encodeURIComponent(dealId)}/${decision}`);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/product-identities/summary"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/product-identities/review"] }),
+      ]);
+      toast({ title: decision === "approved" ? "Product identity approved" : "Product identity rejected" });
+    } catch (error: any) {
+      toast({
+        title: "Could not save review",
+        description: error?.message ?? "Unknown error",
+        variant: "destructive",
+      });
+    }
+  };
 
   const aiReviewQueueQuery = useQuery<ClassificationReviewItem[]>({
     queryKey: ["/api/admin/ai-classification/review"],
@@ -2241,6 +2277,75 @@ export default function AdminPage() {
                   <div className="mt-2 text-xs text-emerald-600 dark:text-emerald-400 font-medium" data-testid="recalc-result">{recalcResult}</div>
                 )}
               </div>
+            </div>
+          </section>
+
+          <section id="section-product-identity" style={sectionStyle("product-identity")} className="card-elevated animate-float-in p-5 md:p-6 relative" data-testid="product-identity-panel">
+            <CollapseButton id="product-identity" collapsed={collapsedSections} onToggle={toggleSection} onArrange={() => setArrangeOpen(true)} />
+            <div className="flex items-start gap-3">
+              <div className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-blue-700 to-slate-500 shadow-lg shadow-blue-700/20">
+                <Database className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <div className="font-display text-xl font-bold">Product Identity Brain</div>
+                <div className="mt-1 text-sm text-muted-foreground">
+                  Groups equivalent retailer listings into product families while preserving exact size, hand, drop, certification, and condition variants. Proposed links remain review-only and do not change shopper results.
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-5 space-y-4">
+              {productIdentitySummaryQuery.data ? (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3" data-testid="product-identity-stats">
+                  {[
+                    ["Product families", productIdentitySummaryQuery.data.families],
+                    ["Exact variants", productIdentitySummaryQuery.data.variants],
+                    ["Linked listings", productIdentitySummaryQuery.data.linked_deals],
+                    ["Awaiting review", productIdentitySummaryQuery.data.proposed],
+                  ].map(([label, value]) => (
+                    <div key={String(label)} className="rounded-xl border border-border bg-background/60 p-3 text-center">
+                      <div className="text-2xl font-bold text-blue-700 dark:text-blue-300">
+                        {Number(value ?? 0).toLocaleString()}
+                      </div>
+                      <div className="text-xs text-muted-foreground">{label}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground">Identity tables will initialize with the next deployment.</div>
+              )}
+
+              {(productIdentityReviewQuery.data ?? []).length > 0 ? (
+                <div className="space-y-2">
+                  <div className="text-sm font-semibold">Priority review sample</div>
+                  {(productIdentityReviewQuery.data ?? []).slice(0, 8).map((item: any) => (
+                    <div key={item.deal_id} className="rounded-xl border border-border bg-background/60 p-3">
+                      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-semibold">{item.title}</div>
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            {item.canonical_brand} · {item.product_family}
+                            {item.model_code ? ` · ${item.model_code}` : ""}
+                            {" · "}{item.confidence} confidence
+                          </div>
+                        </div>
+                        <div className="flex gap-2 shrink-0">
+                          <Button size="sm" variant="outline" onClick={() => reviewProductIdentity(item.deal_id, "rejected")}>
+                            <X className="mr-1 h-3.5 w-3.5" /> Reject
+                          </Button>
+                          <Button size="sm" onClick={() => reviewProductIdentity(item.deal_id, "approved")}>
+                            <Check className="mr-1 h-3.5 w-3.5" /> Approve
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">
+                  No product identity proposals have been generated yet. The first production run will be previewed before proposals are stored.
+                </div>
+              )}
             </div>
           </section>
 

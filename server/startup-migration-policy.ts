@@ -41,6 +41,12 @@ export const STARTUP_MIGRATION_MANIFEST = [
     kind: "structural",
     description: "Sortable ledger fields using workbook net profit and break-even values",
   },
+  {
+    id: "20260728_006_product_identity_foundation",
+    checksum: "1356a1df06c892bda17cbb43184f85956079bc0348183543b21c182dcff08d7e",
+    kind: "structural",
+    description: "Persistent review-first product family and exact variant identities",
+  },
 ] as const;
 
 export type ApprovedSeedState = "empty" | "satisfied" | "partial";

@@ -26,6 +26,7 @@
     "maintenance:phase0": "tsx script/phase0-maintenance.ts",
     "preflight:phase0": "tsx script/phase0-preflight.ts",
     "audit:taxonomy": "tsx script/phase1-taxonomy-audit.ts",
+    "audit:product-identities": "tsx script/product-identity-audit.ts",
     "preview:baseball-glove-history": "tsx script/guarded-baseball-glove-history.ts",
     "preview:baseball-bat-history": "tsx script/guarded-baseball-bat-history.ts",
     "preview:protective-equipment-history": "tsx script/guarded-protective-equipment-history.ts",
