@@ -38,6 +38,9 @@ test("rejects safety, plastic, and other training-ball products", () => {
     "Markwort Safe-T-Ball Baseballs 12-Pack",
   )), false);
   assert.equal(isApprovedHistoricalBaseballBall(proposal(
+    "Baden Safety T-Ball Baseballs 12-Pack",
+  )), false);
+  assert.equal(isApprovedHistoricalBaseballBall(proposal(
     "Champro Safe-T-Soft Baseballs: CBB61",
   )), false);
   assert.equal(isApprovedHistoricalBaseballBall(proposal(

@@ -13,7 +13,7 @@ const NON_PLAYABLE_BASEBALLS = [
   /\b(?:signed|autograph(?:ed|s)?|signature|facsimile)\b/i,
   /\b(?:display|holder|cube|case|stand|rack|basket|bag|bucket)\b/i,
   /\b(?:novelty|souvenir|ornament|keychain|toy|miniature|replica)\b/i,
-  /\b(?:safe[- ]?t(?:[- ]?ball)?|safe[- ]?t[- ]?soft|plastic|vented|foam|wiffle)\b/i,
+  /\b(?:safe[- ]?t(?:[- ]?ball)?|safe[- ]?t[- ]?soft|safety\s+t[- ]?ball|plastic|vented|foam|wiffle)\b/i,
   /\b(?:training|reaction|weighted|pitching machine)\b.*\b(?:base)?balls?\b/i,
   /\b(?:blank|unmarked)\b.*\bautog/i,
 ];
