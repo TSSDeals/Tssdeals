@@ -17,6 +17,7 @@ const includeMedium = process.argv.includes("--include-medium");
 const outputPath = resolve(valueAfter("--output") ?? "./product-identity-audit.json");
 const pageSize = 5_000;
 const proposals: ProductIdentityProposal[] = [];
+const sourceTitles = new Map<string, string>();
 let scanned = 0;
 let cursor = "";
 
@@ -43,7 +44,10 @@ try {
     scanned += result.rows.length;
     for (const row of result.rows) {
       const proposal = proposeProductIdentity(row);
-      if (proposal) proposals.push(proposal);
+      if (proposal) {
+        proposals.push(proposal);
+        sourceTitles.set(proposal.dealId, row.title);
+      }
     }
     cursor = result.rows[result.rows.length - 1].id;
   }
@@ -122,7 +126,10 @@ try {
     storageCandidates: storageCandidates.length,
     multiSellerFamilies: Array.from(families.values()).filter((items) =>
       new Set(items.map((item) => item.dealId)).size >= 2).length,
-    sample: proposals.slice(0, 50),
+    sample: proposals.slice(0, 50).map((proposal) => ({
+      sourceTitle: sourceTitles.get(proposal.dealId) ?? "",
+      ...proposal,
+    })),
   };
   await writeFile(outputPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
   console.log(JSON.stringify({ ...report, sample: undefined, outputPath }, null, 2));

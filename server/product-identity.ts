@@ -37,22 +37,24 @@ export type ProductIdentityProposal = {
   evidence: string[];
 };
 
-const FAMILY_PATTERNS: Array<[RegExp, string]> = [
-  [/\ba\s?2000\b/i, "A2000"],
-  [/\ba\s?2k\b/i, "A2K"],
-  [/\ba\s?1000\b/i, "A1000"],
-  [/\ba\s?500\b/i, "A500"],
-  [/\ba\s?450\b/i, "A450"],
-  [/\bheart of (?:the )?hide\b|\bhoh\b/i, "Heart of the Hide"],
-  [/\bpro preferred\b/i, "Pro Preferred"],
-  [/\bencore\b/i, "Encore"],
-  [/\br9\b/i, "R9"],
-  [/\bhype[\s-]?fire\b/i, "Hype Fire"],
-  [/\bsupra\b/i, "Supra"],
-  [/\bcat[\s-]?x2?\b/i, "CAT X"],
-  [/\brawlings icon\b|\bicon\b/i, "Icon"],
-  [/\bmeta\b/i, "Meta"],
-  [/\batlas\b/i, "Atlas"],
+type FamilyKind = "glove" | "bat" | "any";
+
+const FAMILY_PATTERNS: Array<[RegExp, string, FamilyKind]> = [
+  [/\ba\s?2000\b/i, "A2000", "glove"],
+  [/\ba\s?2k\b/i, "A2K", "glove"],
+  [/\ba\s?1000\b/i, "A1000", "glove"],
+  [/\ba\s?500\b/i, "A500", "glove"],
+  [/\ba\s?450\b/i, "A450", "glove"],
+  [/\bheart of (?:the )?hide\b|\bhoh\b/i, "Heart of the Hide", "glove"],
+  [/\bpro preferred\b/i, "Pro Preferred", "glove"],
+  [/\bencore\b/i, "Encore", "glove"],
+  [/\br9\b/i, "R9", "glove"],
+  [/\bhype[\s-]?fire\b/i, "Hype Fire", "bat"],
+  [/\bsupra\b/i, "Supra", "bat"],
+  [/\bcat[\s-]?x2?\b/i, "CAT X", "bat"],
+  [/\brawlings icon\b|\bicon\b/i, "Icon", "bat"],
+  [/\bmeta\b/i, "Meta", "bat"],
+  [/\batlas\b/i, "Atlas", "bat"],
 ];
 
 const GENERIC_MODEL_WORDS = new Set([
@@ -93,6 +95,7 @@ function fingerprint(parts: unknown[]): string {
 function identifyFamily(title: string, raw: Record<string, unknown>): {
   family: string;
   evidence: string;
+  kind: FamilyKind;
 } | null {
   const structured = firstRaw(raw, [
     "productFamily", "modelName", "model", "product_model", "styleName",
@@ -104,11 +107,13 @@ function identifyFamily(title: string, raw: Record<string, unknown>): {
       .join(" ")
       .trim();
     if (cleaned.length >= 2 && cleaned.length <= 100) {
-      return { family: cleaned, evidence: "structured model or product-family field" };
+      return { family: cleaned, evidence: "structured model or product-family field", kind: "any" };
     }
   }
-  for (const [pattern, family] of FAMILY_PATTERNS) {
-    if (pattern.test(title)) return { family, evidence: `recognized ${family} model family in title` };
+  for (const [pattern, family, kind] of FAMILY_PATTERNS) {
+    if (pattern.test(title)) {
+      return { family, evidence: `recognized ${family} model family in title`, kind };
+    }
   }
   return null;
 }
@@ -117,10 +122,15 @@ function modelCode(title: string, raw: Record<string, unknown>, family: string):
   const structured = firstRaw(raw, [
     "modelNumber", "model_number", "mpn", "styleNumber", "style_number",
   ]);
-  if (structured && structured.length <= 80) return structured.toUpperCase();
+  if (
+    structured
+    && structured.length <= 80
+    && canonicalToken(structured) !== canonicalToken(family)
+  ) return structured.toUpperCase();
   if (/^A(?:2000|2K|1000|500|450)$/i.test(family)) {
     const match = title.match(/\b(?:1[5-9]\d{2}|2[5-9]\d{2}|[A-Z]{1,4}\d{3,}[A-Z0-9-]*)\b/i);
-    return match?.[0]?.toUpperCase() ?? null;
+    const candidate = match?.[0]?.toUpperCase() ?? null;
+    return candidate && canonicalToken(candidate) !== canonicalToken(family) ? candidate : null;
   }
   return null;
 }
@@ -157,6 +167,8 @@ export function proposeProductIdentity(input: ProductIdentityInput): ProductIden
   const familyMatch = identifyFamily(title, raw);
   if (!canonicalBrand || !sportId || !equipmentTypeId || !familyMatch) return null;
   if (/(?:^|-)other(?:-\d+)?$/i.test(equipmentTypeId)) return null;
+  if (familyMatch.kind === "glove" && !equipmentTypeId.includes("glove")) return null;
+  if (familyMatch.kind === "bat" && !equipmentTypeId.includes("bat")) return null;
 
   const family = familyMatch.family;
   const code = modelCode(title, raw, family);

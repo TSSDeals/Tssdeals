@@ -82,3 +82,33 @@ test("structured model evidence supports less famous product families", () => {
   assert.equal(proposal.modelCode, "GPS1-600R");
   assert.equal(proposal.confidence, "high");
 });
+
+test("recognized families must match their equipment kind", () => {
+  assert.equal(proposeProductIdentity({
+    id: "batting-glove",
+    title: "Wilson A2000 Adult Batting Gloves",
+    brand: "Wilson",
+    sportId: "baseball",
+    equipmentTypeId: "bb-accessories",
+  }), null);
+  assert.equal(proposeProductIdentity({
+    id: "meta-shirt",
+    title: "Louisville Slugger Meta Graphic Shirt",
+    brand: "Louisville Slugger",
+    sportId: "baseball",
+    equipmentTypeId: "bb-apparel",
+  }), null);
+});
+
+test("family name alone is never promoted to a style code", () => {
+  const proposal = proposeProductIdentity({
+    id: "a2000-family-only",
+    title: "Wilson A2000 11.5 Baseball Glove RHT",
+    brand: "Wilson",
+    sportId: "baseball",
+    equipmentTypeId: "bb-gloves",
+    sizeNumber: "11.5",
+  });
+  assert.equal(proposal?.productFamily, "A2000");
+  assert.equal(proposal?.modelCode, null);
+});
