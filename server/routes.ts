@@ -31,6 +31,13 @@ import {
   queueEbayPublicSync,
 } from "./deal-sync-scheduler";
 import { createEbayBrowseBudget, isEbayRateLimitError } from "./ebay-browse-client";
+import {
+  createEbayChallengeResponse,
+  DEFAULT_EBAY_NOTIFICATION_ENDPOINT,
+  parseEbayAccountDeletionPayload,
+  purgeEbayUserData,
+  verifyEbayNotificationSignature,
+} from "./ebay-account-deletion";
 import { getStopEpoch, stopRequestedSince, requestStopAll, getLastStopAt } from "./process-control";
 import { configurePush, getVapidPublicKey, isPushConfigured, sendPushToUser } from "./push-notifications";
 import { configureSms, isSmsConfigured, sendSms, sendWelcomeSms, sendSmsBatch } from "./sms-notifications";
@@ -2541,25 +2548,47 @@ export async function registerRoutes(
 
   // eBay Marketplace Account Deletion Notification endpoint
   const EBAY_VERIFICATION_TOKEN = process.env.EBAY_VERIFICATION_TOKEN || "TwinSeam_eBay_2026_EventNotice_ReplitApp";
-  const EBAY_NOTIFICATION_ENDPOINT = "https://deal-scout-twinseamsports.replit.app/api/ebay/account-deletion";
+  const EBAY_NOTIFICATION_ENDPOINT =
+    process.env.EBAY_NOTIFICATION_ENDPOINT || DEFAULT_EBAY_NOTIFICATION_ENDPOINT;
 
   app.get("/api/ebay/account-deletion", (req, res) => {
     const challengeCode = req.query.challenge_code as string;
     if (!challengeCode) {
       return res.status(400).json({ message: "Missing challenge_code" });
     }
-    const hash = crypto
-      .createHash("sha256")
-      .update(challengeCode)
-      .update(EBAY_VERIFICATION_TOKEN)
-      .update(EBAY_NOTIFICATION_ENDPOINT)
-      .digest("hex");
+    const hash = createEbayChallengeResponse(
+      challengeCode,
+      EBAY_VERIFICATION_TOKEN,
+      EBAY_NOTIFICATION_ENDPOINT,
+    );
     res.status(200).json({ challengeResponse: hash });
   });
 
-  app.post("/api/ebay/account-deletion", (req, res) => {
-    console.log("eBay account deletion notification received:", JSON.stringify(req.body));
-    res.status(200).json({ message: "Notification received" });
+  app.post("/api/ebay/account-deletion", async (req, res) => {
+    try {
+      const signature = req.header("x-ebay-signature");
+      if (!signature || !Buffer.isBuffer(req.rawBody)) {
+        return res.status(400).json({ message: "Missing signed notification payload" });
+      }
+
+      const payload = parseEbayAccountDeletionPayload(req.body);
+      const verified = await verifyEbayNotificationSignature(signature, req.rawBody);
+      if (!verified) {
+        return res.status(412).json({ message: "Notification signature verification failed" });
+      }
+
+      const deleted = await purgeEbayUserData(payload);
+      console.info("[ebay-account-deletion]", {
+        notificationId: payload.notification.notificationId,
+        deleted,
+      });
+      return res.status(204).end();
+    } catch (error) {
+      console.error("[ebay-account-deletion] processing failed", {
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+      return res.status(500).json({ message: "Unable to process deletion notification" });
+    }
   });
 
   // eBay OAuth2 user authorization flow
