@@ -12,6 +12,7 @@ export type GloveAuditProposal = {
 const EXCLUDED_PRODUCT_FORMS = [
   /\bbatting gloves?\b/i,
   /\bgolf gloves?\b/i,
+  /\bhockey\b/i,
   /\b(?:work|rain|winter|football|goalie|hockey|boxing|garden|cycling|ski|snow)\s+gloves?\b/i,
   /\b(?:oven mitt|hot glove tennis mitt)\b/i,
   /\binner protective glove\b/i,
@@ -23,7 +24,7 @@ const EXCLUDED_PRODUCT_FORMS = [
 ];
 
 const EXPLICIT_FIELDING_FORM =
-  /\b(?:baseball\s+(?:fielding\s+)?glove|fielding\s+glove|infield(?:er)?\s+glove|outfield(?:er)?\s+glove|first[- ]base\s+mitt|catcher(?:'s)?\s+mitt)\b/i;
+  /\b(?:baseball\b.*\bglove|hardball\b.*\bglove|fielding\s+glove|infield(?:er)?(?:'s)?\s+glove|outfield(?:er)?(?:'s)?\s+glove|first[- ]base\s+mitt|catcher(?:'s)?\s+mitt)\b/i;
 
 const ESTABLISHED_GLOVE_FAMILY =
   /\b(?:a2000|a2k|heart of the hide|pro preferred|pro select|rawlings r9|r9 series|glovesmith field commander)\b/i;
@@ -38,4 +39,3 @@ export function isApprovedHistoricalBaseballGlove(proposal: GloveAuditProposal):
   return EXPLICIT_FIELDING_FORM.test(proposal.title)
     || ESTABLISHED_GLOVE_FAMILY.test(proposal.title);
 }
-
