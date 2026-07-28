@@ -138,25 +138,32 @@ async function getNotificationPublicKey(
 
 export async function verifyEbayNotificationSignature(
   signatureHeader: string,
-  rawBody: Buffer,
+  message: unknown,
   fetchImpl: typeof fetch = fetch,
 ): Promise<boolean> {
   const envelope = decodeSignatureHeader(signatureHeader);
   const publicKey = await getNotificationPublicKey(envelope.kid, fetchImpl);
-  const digest = (envelope.digest || "SHA1").replace(/[^a-z0-9]/gi, "").toLowerCase();
-  if (digest !== "sha1" && digest !== "sha256") {
+  const digest = (envelope.digest || "ssl3-sha1")
+    .replace(/[^a-z0-9-]/gi, "")
+    .toLowerCase();
+  if (digest !== "sha1" && digest !== "sha256" && digest !== "ssl3-sha1") {
     throw new Error("Unsupported eBay notification digest");
   }
-  const key = publicKey.includes("BEGIN PUBLIC KEY")
-    ? publicKey
+
+  const pemMatch = publicKey.match(
+    /-----BEGIN PUBLIC KEY-----\s*([\s\S]*?)\s*-----END PUBLIC KEY-----/,
+  );
+  const key = pemMatch
+    ? `-----BEGIN PUBLIC KEY-----\n${pemMatch[1].replace(/\s+/g, "")}\n-----END PUBLIC KEY-----`
     : crypto.createPublicKey({
         key: Buffer.from(publicKey, "base64"),
         format: "der",
         type: "spki",
       });
+
   return crypto.verify(
     digest,
-    rawBody,
+    Buffer.from(JSON.stringify(message)),
     key,
     Buffer.from(envelope.signature, "base64"),
   );
