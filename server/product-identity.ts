@@ -167,6 +167,10 @@ export function proposeProductIdentity(input: ProductIdentityInput): ProductIden
   const familyMatch = identifyFamily(title, raw);
   if (!canonicalBrand || !sportId || !equipmentTypeId || !familyMatch) return null;
   if (/(?:^|-)other(?:-\d+)?$/i.test(equipmentTypeId)) return null;
+  if (
+    sportId === "baseball"
+    && /\b(?:fastpitch|slowpitch|softball)\b/i.test(title)
+  ) return null;
   if (familyMatch.kind === "glove" && !equipmentTypeId.includes("glove")) return null;
   if (familyMatch.kind === "bat" && !equipmentTypeId.includes("bat")) return null;
 
