@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  date,
   index,
   integer,
   jsonb,
@@ -263,6 +264,54 @@ export const dealProductIdentities = pgTable(
 
 export type ProductIdentity = typeof productIdentities.$inferSelect;
 export type DealProductIdentity = typeof dealProductIdentities.$inferSelect;
+
+// Demand Brain observations are immutable-by-day market summaries. They only
+// use approved identity links; proposed matches remain visible as coverage
+// gaps but cannot become market intelligence until reviewed.
+export const demandSnapshotRuns = pgTable(
+  "demand_snapshot_runs",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    snapshotDate: date("snapshot_date").notNull().unique(),
+    status: varchar("status", { length: 20 }).notNull().default("complete"),
+    trustedListings: integer("trusted_listings").notNull().default(0),
+    proposedListings: integer("proposed_listings").notNull().default(0),
+    identityVariants: integer("identity_variants").notNull().default(0),
+    sourceCount: integer("source_count").notNull().default(0),
+    capturedAt: timestamp("captured_at").notNull().defaultNow(),
+  },
+  (t) => [index("demand_snapshot_runs_date_idx").on(t.snapshotDate)],
+);
+
+export const demandMarketSnapshots = pgTable(
+  "demand_market_snapshots",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    snapshotDate: date("snapshot_date").notNull(),
+    productIdentityId: varchar("product_identity_id")
+      .notNull()
+      .references(() => productIdentities.id, { onDelete: "cascade" }),
+    sourceId: varchar("source_id").notNull(),
+    activeListings: integer("active_listings").notNull(),
+    pricedListings: integer("priced_listings").notNull(),
+    minPriceCents: integer("min_price_cents"),
+    medianPriceCents: integer("median_price_cents"),
+    averagePriceCents: integer("average_price_cents"),
+    maxPriceCents: integer("max_price_cents"),
+    newListings: integer("new_listings").notNull().default(0),
+    preownedListings: integer("preowned_listings").notNull().default(0),
+    capturedAt: timestamp("captured_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("demand_market_snapshot_identity_source_date_idx")
+      .on(t.snapshotDate, t.productIdentityId, t.sourceId),
+    index("demand_market_snapshot_date_idx").on(t.snapshotDate),
+    index("demand_market_snapshot_identity_idx").on(t.productIdentityId),
+  ],
+);
+
+export type DemandSnapshotRun = typeof demandSnapshotRuns.$inferSelect;
+export type DemandMarketSnapshot = typeof demandMarketSnapshots.$inferSelect;
 
 // deal_sub_filters: many-to-many join between deals and equipment_sub_filters.
 // A deal can carry multiple sub-filter tags (e.g. a glove can be both "Infield"

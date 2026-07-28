@@ -47,6 +47,12 @@ export const STARTUP_MIGRATION_MANIFEST = [
     kind: "structural",
     description: "Persistent review-first product family and exact variant identities",
   },
+  {
+    id: "20260728_007_demand_brain_foundation",
+    checksum: "fa05fb1ef08bed341de39ca39dfd74f647a3d44f2c8365e53abaed714169b99e",
+    kind: "structural",
+    description: "Daily approved-identity market observations for rolling demand intelligence",
+  },
 ] as const;
 
 export type ApprovedSeedState = "empty" | "satisfied" | "partial";

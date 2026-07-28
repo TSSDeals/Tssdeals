@@ -55,6 +55,7 @@ const ADMIN_SECTIONS: { id: string; label: string }[] = [
   { id: "sms-blast", label: "SMS Deal Blast" },
   { id: "featured-deals", label: "Featured Deals" },
   { id: "product-identity", label: "Product Identity Brain" },
+  { id: "demand-brain", label: "Demand Brain" },
   { id: "taxonomy-status", label: "Taxonomy Status" },
   { id: "ai-classification", label: "AI Classification" },
   { id: "msrp", label: "MSRP Verification" },
@@ -906,6 +907,40 @@ export default function AdminPage() {
     enabled: !!isAdmin,
     refetchInterval: (query) => query.state.data?.running ? 2000 : false,
   });
+
+  const [demandWindowDays, setDemandWindowDays] = useState<5 | 10 | 30 | 90>(30);
+  const [capturingDemand, setCapturingDemand] = useState(false);
+  const demandBrainQuery = useQuery<any>({
+    queryKey: ["/api/admin/demand-brain/summary", demandWindowDays],
+    queryFn: async () => {
+      const response = await fetch(`/api/admin/demand-brain/summary?days=${demandWindowDays}`, {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Could not load Demand Brain");
+      return response.json();
+    },
+    enabled: !!isAdmin,
+  });
+
+  const captureDemandSnapshot = async () => {
+    setCapturingDemand(true);
+    try {
+      await apiRequest("POST", "/api/admin/demand-brain/capture");
+      await demandBrainQuery.refetch();
+      toast({
+        title: "Market snapshot captured",
+        description: "Only approved product identities were included in trusted metrics.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Snapshot failed",
+        description: error?.message ?? "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setCapturingDemand(false);
+    }
+  };
 
   useEffect(() => {
     if (productIdentityRunQuery.data?.phase !== "complete"
@@ -2423,6 +2458,106 @@ export default function AdminPage() {
               ) : (
                 <div className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">
                   No product identity proposals have been generated yet. The first production run will be previewed before proposals are stored.
+                </div>
+              )}
+            </div>
+          </section>
+
+          <section id="section-demand-brain" style={sectionStyle("demand-brain")} className="card-elevated animate-float-in p-5 md:p-6 relative" data-testid="demand-brain-panel">
+            <CollapseButton id="demand-brain" collapsed={collapsedSections} onToggle={toggleSection} onArrange={() => setArrangeOpen(true)} />
+            <div className="flex items-start gap-3">
+              <div className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-indigo-700 to-slate-500 shadow-lg shadow-indigo-700/20">
+                <TrendingUp className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <div className="font-display text-xl font-bold">Demand Brain</div>
+                <div className="mt-1 text-sm text-muted-foreground">
+                  Daily supply and pricing observations grouped by approved product identity. Proposed matches remain outside trusted market metrics.
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-5 space-y-4">
+              <div className="flex flex-wrap items-center gap-2">
+                {([5, 10, 30, 90] as const).map((days) => (
+                  <Button
+                    key={days}
+                    size="sm"
+                    variant={demandWindowDays === days ? "default" : "outline"}
+                    onClick={() => setDemandWindowDays(days)}
+                  >
+                    {days} days
+                  </Button>
+                ))}
+                <Button
+                  className="ml-auto"
+                  size="sm"
+                  variant="outline"
+                  disabled={capturingDemand}
+                  onClick={captureDemandSnapshot}
+                >
+                  {capturingDemand ? "Capturing…" : "Capture today"}
+                </Button>
+              </div>
+
+              {demandBrainQuery.data?.latest ? (
+                <>
+                  <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                    {[
+                      ["Trusted listings", demandBrainQuery.data.latest.trusted_listings],
+                      ["Awaiting review", demandBrainQuery.data.latest.proposed_listings],
+                      ["Tracked variants", demandBrainQuery.data.latest.identity_variants],
+                      ["Market sources", demandBrainQuery.data.latest.source_count],
+                    ].map(([label, value]) => (
+                      <div key={String(label)} className="rounded-xl border border-border bg-background/60 p-3 text-center">
+                        <div className="text-2xl font-bold text-indigo-700 dark:text-indigo-300">
+                          {Number(value ?? 0).toLocaleString()}
+                        </div>
+                        <div className="text-xs text-muted-foreground">{label}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {(demandBrainQuery.data.families ?? []).length > 0 ? (
+                    <div className="overflow-x-auto rounded-xl border border-border">
+                      <table className="w-full min-w-[680px] text-sm">
+                        <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
+                          <tr>
+                            <th className="p-3">Product family</th>
+                            <th className="p-3 text-right">Current listings</th>
+                            <th className="p-3 text-right">Sources</th>
+                            <th className="p-3 text-right">Median observed</th>
+                            <th className="p-3 text-right">Observed days</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(demandBrainQuery.data.families ?? []).map((family: any) => (
+                            <tr key={family.family_fingerprint} className="border-t border-border">
+                              <td className="p-3">
+                                <div className="font-semibold">{family.canonical_brand} {family.product_family}</div>
+                                <div className="text-xs text-muted-foreground">{family.sport_id} · {family.equipment_type_id}</div>
+                              </td>
+                              <td className="p-3 text-right">{Number(family.current_listings ?? 0).toLocaleString()}</td>
+                              <td className="p-3 text-right">{Number(family.sources ?? 0).toLocaleString()}</td>
+                              <td className="p-3 text-right">
+                                {family.median_price_cents == null ? "—" : `$${(Number(family.median_price_cents) / 100).toFixed(2)}`}
+                              </td>
+                              <td className="p-3 text-right">{Number(family.observed_days ?? 0)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">
+                      No trusted families yet. Approve product identity links, then capture today’s snapshot.
+                    </div>
+                  )}
+                  <div className="text-xs text-muted-foreground">{demandBrainQuery.data.caveat}</div>
+                </>
+              ) : (
+                <div className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">
+                  No market snapshot has been captured yet. The first one will run after a completed feed sync, or you can capture it here.
                 </div>
               )}
             </div>
