@@ -707,7 +707,7 @@ function equipmentFamilyConflictsWithTitle(
 ): boolean {
   const title = deal.title;
   if (candidate.family === "ball" && candidate.sportId === "baseball") {
-    return /\b(?:safe(?:ty)?[- ]?t[- ]?balls?|plastic\s+vented\s+baseballs?|blank\s+baseballs?|unmarked\s+(?:autograph\s+)?baseballs?)\b/i.test(title);
+    return /\b(?:safe(?:ty)?[- ]?t[- ]?(?:soft[- ]?)?balls?|plastic\s+vented\s+baseballs?|blank\s+baseballs?|unmarked\s+(?:autograph\s+)?baseballs?)\b/i.test(title);
   }
   if (candidate.family === "bat") {
     return /\b(?:mini(?:ature)?|souvenir|novelty)\b.{0,60}\b(?:baseball\s+)?bats?\b/i.test(title)
