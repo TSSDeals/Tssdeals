@@ -59,8 +59,9 @@ test("notification signature is verified with eBay's public-key response", async
   const { publicKey, privateKey } = crypto.generateKeyPairSync("ec", {
     namedCurve: "prime256v1",
   });
-  const rawBody = Buffer.from(JSON.stringify(samplePayload));
-  const signature = crypto.sign("sha256", rawBody, privateKey).toString("base64");
+  const signature = crypto
+    .sign("sha256", Buffer.from(JSON.stringify(samplePayload)), privateKey)
+    .toString("base64");
   const signatureHeader = Buffer.from(
     JSON.stringify({
       alg: "ECC",
@@ -93,10 +94,59 @@ test("notification signature is verified with eBay's public-key response", async
 
   try {
     assert.equal(
-      await verifyEbayNotificationSignature(signatureHeader, rawBody, fetchImpl),
+      await verifyEbayNotificationSignature(signatureHeader, samplePayload, fetchImpl),
       true,
     );
     assert.equal(calls.length, 2);
+  } finally {
+    if (originalClientId === undefined) delete process.env.EBAY_CLIENT_ID;
+    else process.env.EBAY_CLIENT_ID = originalClientId;
+    if (originalClientSecret === undefined) delete process.env.EBAY_CLIENT_SECRET;
+    else process.env.EBAY_CLIENT_SECRET = originalClientSecret;
+  }
+});
+
+test("one-line PEM keys and parsed JSON follow eBay's reference validator", async () => {
+  const { publicKey, privateKey } = crypto.generateKeyPairSync("ec", {
+    namedCurve: "prime256v1",
+  });
+  const signature = crypto
+    .sign("ssl3-sha1", Buffer.from(JSON.stringify(samplePayload)), privateKey)
+    .toString("base64");
+  const signatureHeader = Buffer.from(
+    JSON.stringify({
+      alg: "ECC",
+      kid: `one-line-pem-${Date.now()}`,
+      signature,
+    }),
+  ).toString("base64");
+  const oneLinePem = publicKey
+    .export({ type: "spki", format: "pem" })
+    .toString()
+    .replace(/\r?\n/g, "");
+
+  const originalClientId = process.env.EBAY_CLIENT_ID;
+  const originalClientSecret = process.env.EBAY_CLIENT_SECRET;
+  process.env.EBAY_CLIENT_ID = "client";
+  process.env.EBAY_CLIENT_SECRET = "secret";
+  const fetchImpl = (async (url: string | URL | Request) => {
+    if (String(url).includes("/identity/v1/oauth2/token")) {
+      return new Response(JSON.stringify({ access_token: "application-token" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    return new Response(JSON.stringify({ key: oneLinePem }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }) as typeof fetch;
+
+  try {
+    assert.equal(
+      await verifyEbayNotificationSignature(signatureHeader, samplePayload, fetchImpl),
+      true,
+    );
   } finally {
     if (originalClientId === undefined) delete process.env.EBAY_CLIENT_ID;
     else process.env.EBAY_CLIENT_ID = originalClientId;

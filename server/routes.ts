@@ -2572,7 +2572,7 @@ export async function registerRoutes(
       }
 
       const payload = parseEbayAccountDeletionPayload(req.body);
-      const verified = await verifyEbayNotificationSignature(signature, req.rawBody);
+        const verified = await verifyEbayNotificationSignature(signature, req.body);
       if (!verified) {
         return res.status(412).json({ message: "Notification signature verification failed" });
       }
