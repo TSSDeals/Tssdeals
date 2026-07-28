@@ -3819,25 +3819,35 @@ export async function registerRoutes(
       const dataUrl = `data:${mimeType};base64,${base64}`;
 
       const response = await openai.chat.completions.create({
-        model: "gpt-4o",
-        max_tokens: 300,
+        model: process.env.PHOTO_SEARCH_MODEL || "gpt-4o",
+        max_tokens: 500,
+        response_format: { type: "json_object" },
         messages: [
           {
             role: "system",
-            content: `You are a sporting goods expert. Identify the sporting goods item in the photo and extract search details.
-Return ONLY a JSON object with these fields (no markdown, no extra text):
+            content: `You are a sporting-goods product identification expert. Inspect logos, printed or stamped model codes, size markings, certification marks, shape, web pattern, and other visible construction details. Never invent a model or identifier that is not visible or strongly supported by the item design.
+Return one JSON object with exactly these fields:
 {
-  "q": "search query string — brand + model + product type (e.g. 'Rawlings Heart of the Hide first base mitt')",
-  "sport": "sport name in lowercase (e.g. 'baseball', 'basketball', 'soccer', 'golf', 'tennis', 'hockey', 'football', 'running', 'cycling', etc.) or empty string if unclear",
-  "brand": "brand name or empty string if unclear",
-  "identified": "short human-readable label of what you see (e.g. 'Rawlings baseball glove')"
+  "sport": "lowercase sport or empty string",
+  "brand": "brand or empty string",
+  "productType": "specific product form such as baseball glove, catcher's mitt, baseball bat, cleat, helmet, or empty string",
+  "model": "commercial model family such as A2000, Heart of the Hide, Hype Fire, or empty string",
+  "modelNumber": "visible style/model code such as 1786, PRO204, or empty string",
+  "size": "visible glove size, bat length/weight, shoe size, or empty string",
+  "throwHand": "LHT, RHT, or empty string",
+  "drop": "bat drop such as -10 or empty string",
+  "certification": "BBCOR, USSSA, USA Baseball, or other visible certification; otherwise empty string",
+  "visibleText": ["up to 12 useful words or codes actually visible in the photo"],
+  "identified": "short human-readable description",
+  "confidence": "high, medium, or low"
 }
-If you cannot identify a sporting goods item, return { "q": "", "sport": "", "brand": "", "identified": "Unable to identify a sporting goods item" }.`,
+Use high confidence only when the brand and product form are clear and the model/model number is visible or visually distinctive. Use medium when the product form and brand are clear but variant details are incomplete. Use low for guesses. If this is not sporting goods, leave all identity fields empty and use low confidence.`,
           },
           {
             role: "user",
             content: [
-              { type: "image_url", image_url: { url: dataUrl, detail: "low" } },
+              { type: "text", text: "Identify this item for a product search. Read all visible labels and model markings carefully." },
+              { type: "image_url", image_url: { url: dataUrl, detail: "high" } },
             ],
           },
         ],
@@ -3846,14 +3856,15 @@ If you cannot identify a sporting goods item, return { "q": "", "sport": "", "br
       const text = response.choices[0]?.message?.content || "";
       const cleaned = text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
 
-      let result: { q: string; sport: string; brand: string; identified: string };
+      let parsed: unknown;
       try {
-        result = JSON.parse(cleaned);
+        parsed = JSON.parse(cleaned);
       } catch {
-        result = { q: "", sport: "", brand: "", identified: "Could not parse response" };
+        parsed = {};
       }
 
-      res.json(result);
+      const { normalizePhotoIdentification } = await import("./photo-identification");
+      res.json(normalizePhotoIdentification(parsed));
     } catch (err: any) {
       console.error("Photo search error:", err.message);
       res.status(500).json({ message: err.message });
