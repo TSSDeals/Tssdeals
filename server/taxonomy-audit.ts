@@ -705,9 +705,26 @@ function equipmentFamilyConflictsWithTitle(
   deal: AuditDealRow,
   candidate: Pick<CandidateEvidence, "sportId" | "family">,
 ): boolean {
+  const title = deal.title;
+  if (candidate.family === "ball" && candidate.sportId === "baseball") {
+    return /\b(?:safe(?:ty)?[- ]?t[- ]?balls?|plastic\s+vented\s+baseballs?|blank\s+baseballs?|unmarked\s+(?:autograph\s+)?baseballs?)\b/i.test(title);
+  }
+  if (candidate.family === "bat") {
+    return /\b(?:mini(?:ature)?|souvenir|novelty)\b.{0,60}\b(?:baseball\s+)?bats?\b/i.test(title)
+      || /\b(?:bat\s+(?:training\s+)?weights?|pine\s+tar|tee\s+popper)\b/i.test(title);
+  }
+  if (candidate.family === "driver") {
+    return /\bdriver[\s-]*side\b|\bteam\s+logo\s+driver\b/i.test(title);
+  }
+  if (candidate.family === "putter") {
+    return /\b(?:ball\s+marker|marker\s+holder|putter\s+grip)\b/i.test(title);
+  }
+  if (candidate.family === "goggles") {
+    return /\b(?:goggle|goggles)\s+(?:case|cover|holder|strap|replacement)\b/i.test(title);
+  }
   if (candidate.family !== "fielding-glove") return false;
-  const nonFielding = /\b(?:batting|golf|boxing|work|winter)\b|\b(?:glove|mitt)\s+(?:laces?|repair\s+kits?|care|accessor(?:y|ies))\b/i;
-  if (nonFielding.test(deal.title)) return true;
+  const nonFielding = /\b(?:batting|golf|boxing|work|winter|tennis|hockey|goalie)\b|\b(?:glove|mitt)\s+(?:laces?|locks?|repair\s+kits?|care|accessor(?:y|ies))\b|\bcatcher(?:'s)?\s+inner\s+protective\s+glove\b|\b(?:pancake|paddle)\b.{0,30}\b(?:training\s+)?(?:glove|mitt)\b|\bsigned\b.{0,40}\bbaseball\b|\bsignierter\s+baseball\b/i;
+  if (nonFielding.test(title)) return true;
   if (candidate.sportId === "baseball") return SOFTBALL_TITLE_PATTERN.test(deal.title);
   if (candidate.sportId === "fastpitch-softball") return /\bslow\s*pitch\b|\bbaseball\b/i.test(deal.title);
   if (candidate.sportId === "slowpitch-softball") return /\bfast\s*pitch\b|\bbaseball\b/i.test(deal.title);
