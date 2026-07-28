@@ -613,6 +613,7 @@ test("audit suppresses accessories, novelty items, and adjacent products that on
     ],
     deals: [
     { id: "safe-t-ball", sourceId: "ebay", title: "Markwort Safe-T-Ball Baseballs 12-Pack", sportId: "other", equipmentTypeId: "other-other" },
+    { id: "safe-t-soft-ball", sourceId: "ebay", title: "Champro Safe-T-Soft Baseballs: CBB61", sportId: "other", equipmentTypeId: "other-other" },
     { id: "vented-ball", sourceId: "ebay", title: "Champro Plastic Vented Baseballs: CBB51D", sportId: "other", equipmentTypeId: "other-other" },
     { id: "blank-ball", sourceId: "ebay", title: "6 Pack Blank Baseballs Solid Cork Core Unmarked Autograph Baseball Balls", sportId: "other", equipmentTypeId: "other-other" },
     { id: "mini-bat", sourceId: "ebay", title: "2 Williamsport Little League World Series wooden mini baseball bats", sportId: "other", equipmentTypeId: "other-other" },
