@@ -40,6 +40,7 @@
     "preview:baseball-training-history": "tsx script/guarded-baseball-training-history.ts",
     "preview:fastpitch-glove-history": "tsx script/guarded-fastpitch-glove-history.ts",
     "preview:remaining-taxonomy-history": "tsx script/guarded-remaining-taxonomy-history.ts",
+    "preview:identifier-taxonomy-history": "tsx script/guarded-identifier-taxonomy-history.ts",
     "preview:taxonomy-backfill": "tsx script/guarded-taxonomy-backfill.ts",
     "db:push": "drizzle-kit push"
   },
