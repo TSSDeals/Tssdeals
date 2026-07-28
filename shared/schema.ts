@@ -211,6 +211,59 @@ export const deals = pgTable(
   ]
 );
 
+// Product Identity Brain: a product family connects equivalent models across
+// sellers; a variant identity preserves shopper-meaningful differences.
+// Deal links begin as proposals and cannot affect shopper results until reviewed.
+export const productIdentities = pgTable(
+  "product_identities",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    familyFingerprint: varchar("family_fingerprint", { length: 64 }).notNull(),
+    variantFingerprint: varchar("variant_fingerprint", { length: 64 }).notNull().unique(),
+    canonicalBrand: text("canonical_brand").notNull(),
+    productFamily: text("product_family").notNull(),
+    modelCode: text("model_code"),
+    sportId: varchar("sport_id").notNull(),
+    equipmentTypeId: varchar("equipment_type_id").notNull(),
+    variant: jsonb("variant").notNull().default(sql`'{}'::jsonb`),
+    confidence: varchar("confidence", { length: 16 }).notNull(),
+    status: varchar("status", { length: 24 }).notNull().default("proposed"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("product_identities_family_idx").on(t.familyFingerprint),
+    index("product_identities_status_idx").on(t.status),
+    index("product_identities_brand_family_idx").on(t.canonicalBrand, t.productFamily),
+  ],
+);
+
+export const dealProductIdentities = pgTable(
+  "deal_product_identities",
+  {
+    dealId: varchar("deal_id")
+      .primaryKey()
+      .references(() => deals.id, { onDelete: "cascade" }),
+    productIdentityId: varchar("product_identity_id")
+      .notNull()
+      .references(() => productIdentities.id, { onDelete: "cascade" }),
+    confidence: varchar("confidence", { length: 16 }).notNull(),
+    status: varchar("status", { length: 24 }).notNull().default("proposed"),
+    matchMethod: varchar("match_method", { length: 32 }).notNull().default("deterministic"),
+    evidence: jsonb("evidence").notNull().default(sql`'[]'::jsonb`),
+    assignedAt: timestamp("assigned_at").notNull().defaultNow(),
+    reviewedBy: varchar("reviewed_by"),
+    reviewedAt: timestamp("reviewed_at"),
+  },
+  (t) => [
+    index("deal_product_identities_product_idx").on(t.productIdentityId),
+    index("deal_product_identities_status_idx").on(t.status),
+  ],
+);
+
+export type ProductIdentity = typeof productIdentities.$inferSelect;
+export type DealProductIdentity = typeof dealProductIdentities.$inferSelect;
+
 // deal_sub_filters: many-to-many join between deals and equipment_sub_filters.
 // A deal can carry multiple sub-filter tags (e.g. a glove can be both "Infield"
 // and "11.5"). The legacy `deals.sub_filter_id` column is kept in sync with the

@@ -326,6 +326,50 @@ export const STARTUP_MIGRATIONS: readonly VersionedMigration<StartupContext>[] =
       for (const statement of statements) await context.execute(sql.raw(statement));
     },
   },
+  {
+    ...STARTUP_MIGRATION_MANIFEST[5],
+    async up(context) {
+      const statements = [
+        `CREATE TABLE IF NOT EXISTS product_identities (
+          id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+          family_fingerprint VARCHAR(64) NOT NULL,
+          variant_fingerprint VARCHAR(64) NOT NULL UNIQUE,
+          canonical_brand TEXT NOT NULL,
+          product_family TEXT NOT NULL,
+          model_code TEXT,
+          sport_id VARCHAR NOT NULL,
+          equipment_type_id VARCHAR NOT NULL,
+          variant JSONB NOT NULL DEFAULT '{}'::jsonb,
+          confidence VARCHAR(16) NOT NULL,
+          status VARCHAR(24) NOT NULL DEFAULT 'proposed',
+          created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )`,
+        `CREATE INDEX IF NOT EXISTS product_identities_family_idx
+          ON product_identities(family_fingerprint)`,
+        `CREATE INDEX IF NOT EXISTS product_identities_status_idx
+          ON product_identities(status)`,
+        `CREATE INDEX IF NOT EXISTS product_identities_brand_family_idx
+          ON product_identities(canonical_brand, product_family)`,
+        `CREATE TABLE IF NOT EXISTS deal_product_identities (
+          deal_id VARCHAR PRIMARY KEY REFERENCES deals(id) ON DELETE CASCADE,
+          product_identity_id VARCHAR NOT NULL REFERENCES product_identities(id) ON DELETE CASCADE,
+          confidence VARCHAR(16) NOT NULL,
+          status VARCHAR(24) NOT NULL DEFAULT 'proposed',
+          match_method VARCHAR(32) NOT NULL DEFAULT 'deterministic',
+          evidence JSONB NOT NULL DEFAULT '[]'::jsonb,
+          assigned_at TIMESTAMP NOT NULL DEFAULT NOW(),
+          reviewed_by VARCHAR,
+          reviewed_at TIMESTAMP
+        )`,
+        `CREATE INDEX IF NOT EXISTS deal_product_identities_product_idx
+          ON deal_product_identities(product_identity_id)`,
+        `CREATE INDEX IF NOT EXISTS deal_product_identities_status_idx
+          ON deal_product_identities(status)`,
+      ];
+      for (const statement of statements) await context.execute(sql.raw(statement));
+    },
+  },
 ] as const;
 
 const ledger: MigrationLedger<StartupContext> = {

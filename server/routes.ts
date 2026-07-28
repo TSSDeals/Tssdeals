@@ -2204,6 +2204,75 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/admin/product-identities/summary", isAdmin, async (_req: any, res) => {
+    try {
+      const { db } = await import("./db");
+      const { sql } = await import("drizzle-orm");
+      const result = await db.execute(sql.raw(`
+        SELECT
+          (SELECT count(*)::int FROM product_identities) AS variants,
+          (SELECT count(DISTINCT family_fingerprint)::int FROM product_identities) AS families,
+          (SELECT count(*)::int FROM deal_product_identities) AS linked_deals,
+          (SELECT count(*)::int FROM deal_product_identities WHERE status='proposed') AS proposed,
+          (SELECT count(*)::int FROM deal_product_identities WHERE status='approved') AS approved,
+          (SELECT count(*)::int FROM deal_product_identities WHERE confidence='high') AS high_confidence,
+          (SELECT count(*)::int FROM deal_product_identities WHERE confidence='medium') AS medium_confidence
+      `));
+      res.json((result as any).rows?.[0] ?? {});
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.get("/api/admin/product-identities/review", isAdmin, async (req: any, res) => {
+    try {
+      const { db } = await import("./db");
+      const { sql } = await import("drizzle-orm");
+      const limit = Math.max(1, Math.min(200, Number(req.query.limit) || 50));
+      const result = await db.execute(sql.raw(`
+        SELECT dpi.deal_id, dpi.confidence, dpi.status, dpi.evidence, dpi.assigned_at,
+               d.title, d.source_id, d.image_url, d.price_cents,
+               pi.id AS product_identity_id, pi.canonical_brand, pi.product_family,
+               pi.model_code, pi.sport_id, pi.equipment_type_id, pi.variant,
+               pi.family_fingerprint, pi.variant_fingerprint
+          FROM deal_product_identities dpi
+          JOIN product_identities pi ON pi.id=dpi.product_identity_id
+          JOIN deals d ON d.id=dpi.deal_id
+         WHERE dpi.status='proposed'
+         ORDER BY CASE dpi.confidence WHEN 'high' THEN 0 ELSE 1 END,
+                  dpi.assigned_at DESC
+         LIMIT ${limit}
+      `));
+      res.json((result as any).rows ?? []);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/admin/product-identities/review/:dealId/:decision", isAdmin, async (req: any, res) => {
+    try {
+      const decision = String(req.params.decision);
+      if (!["approved", "rejected"].includes(decision)) {
+        return res.status(400).json({ message: "Decision must be approved or rejected" });
+      }
+      const { db } = await import("./db");
+      const { sql } = await import("drizzle-orm");
+      const dealId = String(req.params.dealId);
+      const reviewer = String(req.user?.id ?? req.user?.claims?.sub ?? "admin");
+      const result = await db.execute(sql`
+        UPDATE deal_product_identities
+           SET status=${decision}, reviewed_by=${reviewer}, reviewed_at=NOW()
+         WHERE deal_id=${dealId} AND status='proposed'
+         RETURNING deal_id, status, reviewed_at
+      `);
+      const row = (result as any).rows?.[0];
+      if (!row) return res.status(404).json({ message: "Proposed identity not found" });
+      res.json(row);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.post("/api/admin/ai-classification/run", isAdmin, async (req: any, res) => {
     try {
       const { startBackgroundClassify } = await import("./ai-classifier");
