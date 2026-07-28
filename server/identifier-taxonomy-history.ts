@@ -29,6 +29,18 @@ export type IdentifierTaxonomyChange = {
   after: { sportId: string; equipmentTypeId: string };
 };
 
+const PROTECTED_MEMORABILIA_TITLE =
+  /\b(?:autograph(?:ed)?|signed|authenticated|relic|card|collage|display\s+case|vitrine|ticket|photo|piece\s+of|game[- ]used)\b/i;
+
+function destinationIsSafeForTitle(
+  title: string,
+  sportId: string,
+  equipmentTypeId: string,
+): boolean {
+  if (!PROTECTED_MEMORABILIA_TITLE.test(title)) return true;
+  return sportId === "memorabilia" || equipmentTypeId.includes("memorabilia");
+}
+
 export function approvedIdentifierTaxonomyChanges(
   reviews: IdentifierTaxonomyReview[],
 ): IdentifierTaxonomyChange[] {
@@ -58,6 +70,13 @@ export function approvedIdentifierTaxonomyChanges(
     const recommendation = review.supportedRecommendation!;
     for (const record of review.records) {
       if ((destinationsByDeal.get(record.dealId)?.size ?? 0) !== 1) continue;
+      if (!destinationIsSafeForTitle(
+        record.title,
+        recommendation.sportId,
+        recommendation.canonicalEquipmentTypeId,
+      )) {
+        continue;
+      }
       if (record.currentSportId === recommendation.sportId
           && record.currentEquipmentTypeId === recommendation.canonicalEquipmentTypeId) {
         continue;

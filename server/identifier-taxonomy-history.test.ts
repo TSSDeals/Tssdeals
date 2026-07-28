@@ -87,3 +87,30 @@ test("deduplicates agreeing identifiers and rejects conflicting destinations for
   });
   assert.deepEqual(approvedIdentifierTaxonomyChanges([review(), conflicting]), []);
 });
+
+test("never approves memorabilia titles into playable equipment", () => {
+  const candidate = review({
+    records: [
+      {
+        dealId: "reference",
+        title: "Minnesota Twins Game-Used Baseball Panorama Collage",
+        currentSportId: "baseball",
+        currentEquipmentTypeId: "bb-balls",
+      },
+      {
+        dealId: "translated",
+        title: "Collage panoramico con un trozo de beisbol usado en el juego",
+        currentSportId: "baseball",
+        currentEquipmentTypeId: "bb-other",
+      },
+    ],
+    supportedRecommendation: {
+      sportId: "baseball",
+      canonicalEquipmentTypeId: "bb-balls",
+      supportingDealIds: ["reference", "translated"],
+      directEvidence: ["reference evidence", "translated evidence"],
+    },
+  });
+
+  assert.deepEqual(approvedIdentifierTaxonomyChanges([candidate]), []);
+});
