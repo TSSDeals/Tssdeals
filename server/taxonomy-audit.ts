@@ -1642,6 +1642,8 @@ function titlesClearlyUnrelated(records: AuditDealRow[]): boolean {
 function supportedIdentifierRecommendation(
   records: AuditDealRow[],
   sourcesById: Map<string, AuditSourceRow>,
+  equipmentById: Map<string, AuditEquipmentRow>,
+  observation?: IdentifierObservation,
 ): IdentifierRecommendation | null {
   const supported = new Map<string, {
     candidate: CandidateEvidence;
@@ -1672,9 +1674,69 @@ function supportedIdentifierRecommendation(
     }
     supported.set(key, entry);
   }
+  if (supported.size === 0) {
+    const resolvedRecords = records.filter((record) =>
+      !!record.sportId
+      && !!record.equipmentTypeId
+      && !/(?:^|-)other(?:-\d+)?$/.test(record.equipmentTypeId));
+    const resolvedAssignments = new Set(resolvedRecords.map((record) =>
+      `${record.sportId}/${record.equipmentTypeId}`));
+    const sourceScopedTranslationSet =
+      observation?.type === "itemNumber"
+      && observation.scope.startsWith("source:")
+      && records.length >= 3
+      && new Set(records.map((record) => record.sourceId)).size === 1
+      && resolvedAssignments.size === 1
+      && resolvedRecords.length >= 1
+      && records.every((record) =>
+        resolvedAssignments.has(`${record.sportId}/${record.equipmentTypeId}`)
+        || !record.equipmentTypeId
+        || /(?:^|-)other(?:-\d+)?$/.test(record.equipmentTypeId))
+      && titlesLikelyDescribeSameProduct(records)
+      && sharedIdentityTitleTokens(records).size >= 3;
+    if (!sourceScopedTranslationSet) return null;
+
+    const reference = resolvedRecords[0];
+    const equipment = equipmentById.get(reference.equipmentTypeId!);
+    if (!equipment || equipment.sportId !== reference.sportId) return null;
+    return {
+      sportId: reference.sportId!,
+      canonicalEquipmentTypeId: reference.equipmentTypeId!,
+      equipmentFamily: semanticTaxonomyLabel(equipment.name) || equipment.name,
+      supportingDealIds: records.map((record) => record.id).sort(),
+      directEvidence: [
+        `${reference.id}: existing specific taxonomy ${reference.sportId}/${reference.equipmentTypeId}`,
+        `${records[0].id}: source-scoped item number links ${records.length} title-compatible language variants`,
+      ],
+    };
+  }
   if (supported.size !== 1) return null;
   const entry = Array.from(supported.values())[0];
-  if (entry.dealIds.size < 2) return null;
+  if (entry.dealIds.size < 2) {
+    const destination = `${entry.candidate.sportId}/${entry.candidate.equipmentTypeId}`;
+    const resolvedAssignments = new Set(records
+      .map((record) => `${record.sportId ?? "null"}/${record.equipmentTypeId ?? "null"}`)
+      .filter((assignment) => !/(?:^|\/)(?:null|other|[^/]*-other)$/.test(assignment)));
+    const sourceScopedTranslationSet =
+      observation?.type === "itemNumber"
+      && observation.scope.startsWith("source:")
+      && records.length >= 3
+      && new Set(records.map((record) => record.sourceId)).size === 1
+      && entry.dealIds.size === 1
+      && resolvedAssignments.size === 1
+      && resolvedAssignments.has(destination)
+      && titlesLikelyDescribeSameProduct(records)
+      && sharedIdentityTitleTokens(records).size >= 3;
+    if (!sourceScopedTranslationSet) return null;
+
+    // The source-scoped item number plus three mutually compatible translated
+    // titles supplies identity cohesion; direct taxonomy still comes from the
+    // one independently classifiable language variant.
+    entry.evidence.add(
+      `${records[0].id}: source-scoped item number links ${records.length} title-compatible language variants`,
+    );
+    for (const record of records) entry.dealIds.add(record.id);
+  }
   return {
     sportId: entry.candidate.sportId,
     canonicalEquipmentTypeId: entry.candidate.equipmentTypeId,
@@ -1706,6 +1768,7 @@ function buildFieldInventories(dataset: TaxonomyAuditDataset): {
   }>();
   const sourceNames = new Map(dataset.sources.map((source) => [source.id, source.name]));
   const sourcesById = new Map(dataset.sources.map((source) => [source.id, source]));
+  const equipmentById = new Map(dataset.equipmentTypes.map((equipment) => [equipment.id, equipment]));
 
   const touchCoverage = (field: string, values: string[], malformed = false) => {
     const entry = coverage.get(field) ?? { present: 0, malformed: 0, values: new Set<string>() };
@@ -1872,7 +1935,7 @@ function buildFieldInventories(dataset: TaxonomyAuditDataset): {
     identifierFindings.push(finding);
 
     const recommendation = kind === "likely-same-product-conflict"
-      ? supportedIdentifierRecommendation(records, sourcesById)
+      ? supportedIdentifierRecommendation(records, sourcesById, equipmentById, observation)
       : null;
     const quarantineReason = recommendation
       ? null

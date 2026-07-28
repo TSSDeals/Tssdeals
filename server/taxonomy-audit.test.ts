@@ -922,6 +922,41 @@ test("review packet recommends identifier destinations only with matching direct
   assert.match(directConflict.quarantineReason ?? "", /direct product-family evidence/i);
 });
 
+test("three source-item translations inherit one unambiguous directly supported destination", () => {
+  const report = buildTaxonomyAuditReport(phase14Fixture([
+    {
+      id: "fanatics-jersey-en", sourceId: "fanatics",
+      title: "Women's Nike Powder Blue Atlanta Braves 2026 City Connect Stadium Jersey",
+      sportId: "baseball", equipmentTypeId: "bb-shoes-apparel",
+      raw: { itemNumber: "1009398959" },
+    },
+    {
+      id: "fanatics-jersey-fr", sourceId: "fanatics",
+      title: "Maillot Nike bleu Atlanta Braves 2026 City Connect Stadium pour femme",
+      sportId: "baseball", equipmentTypeId: "bb-other",
+      raw: { itemNumber: "1009398959" },
+    },
+    {
+      id: "fanatics-jersey-de", sourceId: "fanatics",
+      title: "Nike Damen Trikot Atlanta Braves 2026 City Connect Stadium",
+      sportId: "baseball", equipmentTypeId: "bb-other",
+      raw: { itemNumber: "1009398959" },
+    },
+  ]));
+
+  const review = report.reviewPacket.likelySameProductConflicts.find((row) =>
+    row.identifierValue === "1009398959");
+  assert.ok(review);
+  assert.equal(review.supportedRecommendation?.sportId, "baseball");
+  assert.equal(review.supportedRecommendation?.canonicalEquipmentTypeId, "bb-shoes-apparel");
+  assert.deepEqual(review.supportedRecommendation?.supportingDealIds, [
+    "fanatics-jersey-de",
+    "fanatics-jersey-en",
+    "fanatics-jersey-fr",
+  ]);
+  assert.ok((review.supportedRecommendation?.directEvidence.length ?? 0) >= 2);
+});
+
 test("review packet expands correction cohorts into prioritized per-deal exports", () => {
   const report = buildTaxonomyAuditReport(phase14Fixture([
     {

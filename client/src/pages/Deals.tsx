@@ -169,9 +169,20 @@ export default function DealsPage() {
       formData.append("photo", file);
       const res = await fetch("/api/deals/search-by-photo", { method: "POST", body: formData });
       if (!res.ok) throw new Error("Photo search is temporarily unavailable. Please try again.");
-      const data: { q: string; sport: string; brand: string; identified: string } = await res.json();
+      const data: {
+        q: string;
+        sport: string;
+        brand: string;
+        identified: string;
+        confidence: "high" | "medium" | "low";
+        needsConfirmation: boolean;
+      } = await res.json();
 
-      setPhotoIdentified(data.identified || null);
+      setPhotoIdentified(
+        data.identified
+          ? `${data.identified}${data.needsConfirmation ? " — check the search details" : ""}`
+          : null,
+      );
 
       if (!data.q && !data.sport) {
         toast({ title: "Couldn't identify item", description: data.identified || "Try a clearer photo of the product.", variant: "destructive" });

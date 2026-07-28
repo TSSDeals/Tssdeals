@@ -32,6 +32,7 @@ const BRAND_CANONICAL: Record<string, string> = {
   "under armor": "Under Armour",
 
   // Louisville Slugger
+  "louisville": "Louisville Slugger",
   "louisville slugger": "Louisville Slugger",
   "louisville sluggers": "Louisville Slugger",
 
