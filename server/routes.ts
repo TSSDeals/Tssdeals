@@ -2204,6 +2204,63 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/admin/taxonomy-status", isAdmin, async (_req: any, res) => {
+    try {
+      const { db } = await import("./db");
+      const { sql } = await import("drizzle-orm");
+      const result = await db.execute(sql.raw(`
+        WITH pending_review AS (
+          SELECT DISTINCT deal_id
+          FROM classification_review_queue
+          WHERE status = 'pending'
+        ),
+        classified AS (
+          SELECT
+            d.id,
+            CASE
+              WHEN pr.deal_id IS NOT NULL THEN 'pending_review'
+              WHEN d.classification_source = 'ai'
+                   AND (d.sport_id IS NULL OR d.equipment_type_id IS NULL OR d.equipment_type_id LIKE '%-other')
+                THEN 'needs_correction'
+              WHEN d.classification_source IS DISTINCT FROM 'ai'
+                   AND (d.sport_id IS NULL OR d.equipment_type_id IS NULL OR d.equipment_type_id LIKE '%-other')
+                THEN 'pending_classification'
+              WHEN d.classification_source = 'ai' THEN 'confirmed_ai'
+              ELSE 'source_assigned'
+            END AS taxonomy_status
+          FROM deals d
+          LEFT JOIN pending_review pr ON pr.deal_id = d.id
+        )
+        SELECT
+          count(*)::int AS total,
+          count(*) FILTER (WHERE taxonomy_status IN ('confirmed_ai', 'source_assigned'))::int AS valid,
+          count(*) FILTER (WHERE taxonomy_status = 'confirmed_ai')::int AS confirmed_ai,
+          count(*) FILTER (WHERE taxonomy_status = 'source_assigned')::int AS source_assigned,
+          count(*) FILTER (WHERE taxonomy_status = 'pending_classification')::int AS pending_classification,
+          count(*) FILTER (WHERE taxonomy_status = 'pending_review')::int AS pending_review,
+          count(*) FILTER (WHERE taxonomy_status = 'needs_correction')::int AS needs_correction,
+          (SELECT count(*)::int FROM deal_product_identities WHERE status = 'proposed') AS product_identity_proposed,
+          (SELECT count(*)::int FROM deal_product_identities WHERE status = 'approved') AS product_identity_approved
+        FROM classified
+      `));
+      const row = ((result as any).rows?.[0] ?? {}) as Record<string, unknown>;
+      res.json({
+        total: Number(row.total) || 0,
+        valid: Number(row.valid) || 0,
+        confirmedAi: Number(row.confirmed_ai) || 0,
+        sourceAssigned: Number(row.source_assigned) || 0,
+        pendingClassification: Number(row.pending_classification) || 0,
+        pendingReview: Number(row.pending_review) || 0,
+        needsCorrection: Number(row.needs_correction) || 0,
+        productIdentityProposed: Number(row.product_identity_proposed) || 0,
+        productIdentityApproved: Number(row.product_identity_approved) || 0,
+        generatedAt: new Date().toISOString(),
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.get("/api/admin/product-identities/summary", isAdmin, async (_req: any, res) => {
     try {
       const { db } = await import("./db");

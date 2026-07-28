@@ -53,7 +53,7 @@ test("snapshot preservation wording distinguishes recorded success from legacy i
   assert.match(adminSource, /ebaySnapshot\.lastSuccessfulAt[\s\S]{0,300}Existing eBay inventory remains visible, but no successful public eBay snapshot has been recorded/);
 });
 
-test("partial Browse retrieval does not publish and preserves the last successful snapshot", async () => {
+test("ordinary incomplete Browse retrieval does not publish and preserves the last successful snapshot", async () => {
   const saved: EbayPublicSyncStatus[] = [];
   let publishCalls = 0;
 
@@ -79,6 +79,39 @@ test("partial Browse retrieval does not publish and preserves the last successfu
   assert.equal(saved.at(-1)?.lastSuccessfulAt, "2026-07-22T12:00:00.000Z");
   assert.equal(saved.at(-1)?.lastSuccessfulItemCount, 38);
   assert.equal(saved.at(-1)?.preserveLastKnownGood, true);
+});
+
+test("rate-limited Browse retrieval publishes useful pages and preserves older inventory", async () => {
+  const saved: EbayPublicSyncStatus[] = [];
+  const published: InsertDeal[] = [];
+
+  const result = await runEbayPublicSnapshotSync({
+    loadStatus: async () => previousSuccess(),
+    saveStatus: async (status) => { saved.push(status); },
+    collect: async () => ({
+      deals: [
+        ebayDeal("https://www.ebay.com/itm/partial-1"),
+        ebayDeal("https://www.ebay.com/itm/partial-2"),
+      ],
+      errors: 1,
+      requestsAttempted: 4,
+      requestsSucceeded: 3,
+      stopped: true,
+      failureKind: "rate_limited",
+    }),
+    publish: async (deals) => {
+      published.push(...deals);
+      return { created: deals.length, updated: 0 };
+    },
+    now: () => new Date("2026-07-23T12:00:00.000Z"),
+  });
+
+  assert.deepEqual(result, { created: 2, updated: 0, errors: 1 });
+  assert.equal(published.length, 2);
+  assert.equal(saved.at(-1)?.state, "partial");
+  assert.equal(saved.at(-1)?.lastSuccessfulItemCount, 2);
+  assert.equal(saved.at(-1)?.preserveLastKnownGood, true);
+  assert.match(saved.at(-1)?.message ?? "", /published 2 eBay items/i);
 });
 
 test("zero-item Browse retrieval is a failed attempt, never an empty successful snapshot", async () => {
