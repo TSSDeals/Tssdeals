@@ -890,6 +890,13 @@ export default function AdminPage() {
     refetchInterval: (query) => query.state.data?.running ? 2000 : false,
   });
 
+  useEffect(() => {
+    if (productIdentityRunQuery.data?.phase !== "complete"
+        || !productIdentityRunQuery.data?.finishedAt) return;
+    void queryClient.invalidateQueries({ queryKey: ["/api/admin/product-identities/summary"] });
+    void queryClient.invalidateQueries({ queryKey: ["/api/admin/product-identities/review"] });
+  }, [productIdentityRunQuery.data?.finishedAt, productIdentityRunQuery.data?.phase]);
+
   const runProductIdentity = async (mode: "preview" | "apply") => {
     try {
       await apiRequest("POST", "/api/admin/product-identities/run", { mode });
