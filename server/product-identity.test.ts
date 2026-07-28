@@ -112,3 +112,14 @@ test("family name alone is never promoted to a style code", () => {
   assert.equal(proposal?.productFamily, "A2000");
   assert.equal(proposal?.modelCode, null);
 });
+
+test("explicit softball language cannot inherit a stale baseball identity", () => {
+  assert.equal(proposeProductIdentity({
+    id: "stale-baseball",
+    title: "Rawlings Heart of the Hide 12 inch Fastpitch Softball Glove",
+    brand: "Rawlings",
+    sportId: "baseball",
+    equipmentTypeId: "bb-gloves",
+    sizeNumber: "12",
+  }), null);
+});
