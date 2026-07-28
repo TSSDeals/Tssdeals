@@ -55,6 +55,7 @@ const ADMIN_SECTIONS: { id: string; label: string }[] = [
   { id: "sms-blast", label: "SMS Deal Blast" },
   { id: "featured-deals", label: "Featured Deals" },
   { id: "product-identity", label: "Product Identity Brain" },
+  { id: "taxonomy-status", label: "Taxonomy Status" },
   { id: "ai-classification", label: "AI Classification" },
   { id: "msrp", label: "MSRP Verification" },
   { id: "deal-validation", label: "Deal Validation" },
@@ -866,6 +867,22 @@ export default function AdminPage() {
     enabled: !!isAdmin,
   });
 
+  const taxonomyStatusQuery = useQuery<{
+    total: number;
+    valid: number;
+    confirmedAi: number;
+    sourceAssigned: number;
+    pendingClassification: number;
+    pendingReview: number;
+    needsCorrection: number;
+    productIdentityProposed: number;
+    productIdentityApproved: number;
+    generatedAt: string;
+  }>({
+    queryKey: ["/api/admin/taxonomy-status"],
+    enabled: !!isAdmin,
+  });
+
   const productIdentitySummaryQuery = useQuery<{
     variants: number;
     families: number;
@@ -1235,7 +1252,7 @@ export default function AdminPage() {
     running: boolean;
     startedAt: string | null;
     ebayPublicSnapshot: {
-      state: "never_run" | "running" | "success" | "failed";
+      state: "never_run" | "running" | "success" | "partial" | "failed";
       lastAttemptCompletedAt: string | null;
       lastSuccessfulAt: string | null;
       lastSuccessfulItemCount: number | null;
@@ -1458,7 +1475,7 @@ export default function AdminPage() {
             <div
               className={cn(
                 "mt-5 rounded-2xl border px-4 py-3 text-sm",
-                ebaySnapshot?.state === "failed"
+                ebaySnapshot?.state === "failed" || ebaySnapshot?.state === "partial"
                   ? "border-amber-500/40 bg-amber-500/10"
                   : ebaySnapshot?.state === "success"
                     ? "border-emerald-500/30 bg-emerald-500/10"
@@ -1469,14 +1486,16 @@ export default function AdminPage() {
               <div className="flex items-center gap-2 font-semibold">
                 {ebaySnapshot?.state === "running" ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
-                ) : ebaySnapshot?.state === "failed" ? (
+                ) : ebaySnapshot?.state === "failed" || ebaySnapshot?.state === "partial" ? (
                   <AlertTriangle className="h-4 w-4 text-amber-600" />
                 ) : (
                   <Check className="h-4 w-4 text-emerald-600" />
                 )}
                 Public eBay feed: {ebaySnapshot?.state === "success"
                   ? "last snapshot succeeded"
-                  : ebaySnapshot?.state === "failed"
+                  : ebaySnapshot?.state === "partial"
+                    ? "partial update published"
+                    : ebaySnapshot?.state === "failed"
                     ? "latest attempt failed"
                     : ebaySnapshot?.state === "running"
                       ? "retrieval in progress"
@@ -1506,7 +1525,9 @@ export default function AdminPage() {
               </div>
               {ebaySnapshot?.preserveLastKnownGood && (
                 <div className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-400">
-                  {ebaySnapshot.lastSuccessfulAt
+                  {ebaySnapshot.state === "partial"
+                    ? "Newly retrieved eBay items were saved, and older eBay inventory remains protected until a complete refresh succeeds."
+                    : ebaySnapshot.lastSuccessfulAt
                     ? "Customer search is using the last recorded successful eBay snapshot; this failed attempt did not replace or deactivate it."
                     : "Existing eBay inventory remains visible, but no successful public eBay snapshot has been recorded."}
                 </div>
@@ -2405,6 +2426,65 @@ export default function AdminPage() {
                 </div>
               )}
             </div>
+          </section>
+
+          <section id="section-taxonomy-status" style={sectionStyle("taxonomy-status")} className="card-elevated animate-float-in p-5 md:p-6 relative" data-testid="taxonomy-status-panel">
+              <CollapseButton id="taxonomy-status" collapsed={collapsedSections} onToggle={toggleSection} onArrange={() => setArrangeOpen(true)} />
+              <div className="flex items-start gap-3">
+                <div className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-slate-700 to-blue-600 shadow-lg shadow-blue-600/20">
+                  <Database className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <div className="font-display text-xl font-bold">Unified Taxonomy Status</div>
+                  <div className="mt-1 text-sm text-muted-foreground">
+                    One mutually exclusive accounting of every deal. The five status buckets add exactly to Total items.
+                  </div>
+                </div>
+              </div>
+
+              {taxonomyStatusQuery.data ? (
+                <div className="mt-5 space-y-4">
+                  <div className="grid grid-cols-2 gap-3 md:grid-cols-4" data-testid="taxonomy-status-summary">
+                    <div className="rounded-xl border border-border bg-background/60 p-3 text-center">
+                      <div className="text-2xl font-bold">{taxonomyStatusQuery.data.total.toLocaleString()}</div>
+                      <div className="text-xs text-muted-foreground">Total items</div>
+                    </div>
+                    <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-center">
+                      <div className="text-2xl font-bold text-emerald-700 dark:text-emerald-400">{taxonomyStatusQuery.data.valid.toLocaleString()}</div>
+                      <div className="text-xs text-muted-foreground">Valid taxonomy</div>
+                    </div>
+                    <div className="rounded-xl border border-blue-500/30 bg-blue-500/10 p-3 text-center">
+                      <div className="text-2xl font-bold text-blue-700 dark:text-blue-400">{taxonomyStatusQuery.data.confirmedAi.toLocaleString()}</div>
+                      <div className="text-xs text-muted-foreground">AI confirmed</div>
+                    </div>
+                    <div className="rounded-xl border border-fuchsia-500/30 bg-fuchsia-500/10 p-3 text-center">
+                      <div className="text-2xl font-bold text-fuchsia-700 dark:text-fuchsia-400">{taxonomyStatusQuery.data.pendingReview.toLocaleString()}</div>
+                      <div className="text-xs text-muted-foreground">Pending review</div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+                    {[
+                      ["AI confirmed", taxonomyStatusQuery.data.confirmedAi],
+                      ["Source/rule assigned", taxonomyStatusQuery.data.sourceAssigned],
+                      ["Pending classification", taxonomyStatusQuery.data.pendingClassification],
+                      ["Pending review", taxonomyStatusQuery.data.pendingReview],
+                      ["Needs correction", taxonomyStatusQuery.data.needsCorrection],
+                    ].map(([label, value]) => (
+                      <div key={String(label)} className="rounded-xl border border-border bg-background/60 p-3">
+                        <div className="text-lg font-bold">{Number(value).toLocaleString()}</div>
+                        <div className="text-xs text-muted-foreground">{label}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
+                    <span>Product identities awaiting review: <strong className="text-foreground">{taxonomyStatusQuery.data.productIdentityProposed.toLocaleString()}</strong></span>
+                    <span>Product identities approved: <strong className="text-foreground">{taxonomyStatusQuery.data.productIdentityApproved.toLocaleString()}</strong></span>
+                    <span>Updated: {new Date(taxonomyStatusQuery.data.generatedAt).toLocaleString()}</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-5 text-sm text-muted-foreground">Loading unified taxonomy totals…</div>
+              )}
           </section>
 
           <section id="section-ai-classification" style={sectionStyle("ai-classification")} className="card-elevated animate-float-in p-5 md:p-6 relative" data-testid="ai-classification-panel">
@@ -3560,7 +3640,7 @@ export default function AdminPage() {
                   <div
                     className={cn(
                       "rounded-lg border px-3 py-2 text-xs",
-                      ebaySnapshot.state === "failed"
+                      ebaySnapshot.state === "failed" || ebaySnapshot.state === "partial"
                         ? "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300"
                         : "border-border bg-background/60 text-muted-foreground",
                     )}

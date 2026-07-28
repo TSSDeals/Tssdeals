@@ -3,7 +3,7 @@ import type { InsertDeal } from "@shared/schema";
 export const EBAY_PUBLIC_SYNC_STATUS_KEY = "ebay_public_sync_status";
 export const EBAY_PUBLIC_SYNC_RUNNING_LEASE_MS = 5 * 60 * 1000;
 
-export type EbayPublicSyncState = "never_run" | "running" | "success" | "failed";
+export type EbayPublicSyncState = "never_run" | "running" | "success" | "partial" | "failed";
 
 export interface EbayPublicSyncStatus {
   state: EbayPublicSyncState;
@@ -208,6 +208,44 @@ export async function runEbayPublicSnapshotSync(
     collection.requestsSucceeded !== collection.requestsAttempted;
 
   if (incomplete || candidates.length === 0) {
+    // Browse is a quota-limited discovery feed, while publishing is an
+    // idempotent URL upsert. If eBay returns useful pages before a 429, keep
+    // those discoveries instead of throwing the entire batch away. Existing
+    // rows remain protected because partial runs never authorize stale cleanup.
+    if (
+      candidates.length > 0 &&
+      collection.failureKind === "rate_limited" &&
+      collection.requestsSucceeded > 0
+    ) {
+      try {
+        const published = await dependencies.publish(candidates);
+        const completedAt = now().toISOString();
+        await dependencies.saveStatus({
+          ...previous,
+          state: "partial",
+          lastAttemptStartedAt: startedAt,
+          lastAttemptCompletedAt: completedAt,
+          lastSuccessfulAt: completedAt,
+          lastSuccessfulItemCount: candidates.length,
+          lastAttemptItemCount: candidates.length,
+          lastAttemptErrorCount: Math.max(1, collection.errors),
+          message: `Published ${candidates.length} eBay items from ${collection.requestsSucceeded} successful Browse requests before the daily quota stopped the refresh. Existing eBay inventory was preserved.`,
+          preserveLastKnownGood: true,
+        });
+        return { ...published, errors: Math.max(1, collection.errors) };
+      } catch {
+        await dependencies.saveStatus(failedStatus(
+          previous,
+          startedAt,
+          now().toISOString(),
+          candidates.length,
+          1,
+          `eBay partial refresh publishing failed. ${preservedEbayInventoryDescription(previous)}`,
+        ));
+        return { created: 0, updated: 0, errors: 1 };
+      }
+    }
+
     const reason = collection.failureKind === "rate_limited"
       ? `eBay Browse quota is exhausted. No further requests were attempted. ${preservedEbayInventoryDescription(previous)}`
       : collection.stopped
