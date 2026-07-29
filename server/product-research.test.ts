@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildProductResearchUrl,
+  buildLedgerResearchKey,
   productResearchObservationInput,
   productResearchWindow,
 } from "./product-research";
@@ -95,6 +96,17 @@ test("product-level observations require an approved identity reference", () => 
     observationType: "product_identity",
     researchKey: "identity:test",
   }).success, false);
+});
+
+test("recent ledger glove models receive stable research keys", () => {
+  assert.equal(
+    buildLedgerResearchKey("Wilson", "A2000 1786 11.5\""),
+    "ledger-model:wilson:a2000-1786-11-5",
+  );
+  assert.equal(
+    buildLedgerResearchKey(" Rawlings ", "Heart of the Hide"),
+    "ledger-model:rawlings:heart-of-the-hide",
+  );
 });
 
 test("recent sold ledger models can be recorded without a product identity", () => {
