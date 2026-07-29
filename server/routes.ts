@@ -2331,6 +2331,81 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/admin/product-identities/safe-batch", isAdmin, async (req: any, res) => {
+    try {
+      const { db } = await import("./db");
+      const { sql } = await import("drizzle-orm");
+      const { safeIdentityApprovalBatch } = await import("./product-identity-review");
+      const limit = Math.max(1, Math.min(25, Number(req.query.limit) || 10));
+      const result = await db.execute(sql.raw(`
+        SELECT dpi.deal_id, dpi.confidence, dpi.evidence, d.title,
+               d.sport_id AS deal_sport_id, d.equipment_type_id AS deal_equipment_type_id,
+               pi.canonical_brand, pi.product_family, pi.model_code,
+               pi.sport_id, pi.equipment_type_id, pi.confidence AS identity_confidence,
+               pi.variant
+          FROM deal_product_identities dpi
+          JOIN product_identities pi ON pi.id=dpi.product_identity_id
+          JOIN deals d ON d.id=dpi.deal_id
+         WHERE dpi.status='proposed'
+           AND dpi.confidence='high'
+           AND pi.confidence='high'
+         ORDER BY dpi.assigned_at DESC
+         LIMIT 1000
+      `));
+      res.json({
+        limit,
+        items: safeIdentityApprovalBatch((result as any).rows ?? [], limit),
+        policy: "Title-recognized model family plus model code or two exact variant facts; matching stored sport and equipment required.",
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/admin/product-identities/safe-batch/approve", isAdmin, async (req: any, res) => {
+    try {
+      const requestedIds = Array.isArray(req.body?.dealIds)
+        ? [...new Set(req.body.dealIds
+            .map((value: unknown) => String(value))
+            .filter((value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)))]
+            .slice(0, 25)
+        : [];
+      if (!requestedIds.length) return res.status(400).json({ message: "No previewed deal IDs supplied" });
+
+      const { db } = await import("./db");
+      const { sql } = await import("drizzle-orm");
+      const { safeIdentityApprovalBatch } = await import("./product-identity-review");
+      const quotedIds = requestedIds.map((id) => `'${id.replace(/'/g, "''")}'`).join(",");
+      const candidates = await db.execute(sql.raw(`
+        SELECT dpi.deal_id, dpi.confidence, dpi.evidence, d.title,
+               d.sport_id AS deal_sport_id, d.equipment_type_id AS deal_equipment_type_id,
+               pi.canonical_brand, pi.product_family, pi.model_code,
+               pi.sport_id, pi.equipment_type_id, pi.confidence AS identity_confidence,
+               pi.variant
+          FROM deal_product_identities dpi
+          JOIN product_identities pi ON pi.id=dpi.product_identity_id
+          JOIN deals d ON d.id=dpi.deal_id
+         WHERE dpi.status='proposed' AND dpi.deal_id IN (${quotedIds})
+      `));
+      const safeRows = safeIdentityApprovalBatch((candidates as any).rows ?? [], 25)
+        .filter((row) => requestedIds.includes(String(row.deal_id)));
+      const reviewer = String(req.user?.id ?? req.user?.claims?.sub ?? "admin");
+      const approved: string[] = [];
+      for (const row of safeRows) {
+        const updated = await db.execute(sql`
+          UPDATE deal_product_identities
+             SET status='approved', reviewed_by=${reviewer}, reviewed_at=NOW()
+           WHERE deal_id=${String(row.deal_id)} AND status='proposed'
+           RETURNING deal_id
+        `);
+        if ((updated as any).rows?.[0]?.deal_id) approved.push(String(row.deal_id));
+      }
+      res.json({ requested: requestedIds.length, approved: approved.length, dealIds: approved });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.get("/api/admin/product-identities/run-status", isAdmin, async (_req: any, res) => {
     const { getProductIdentityRunStatus } = await import("./product-identity-runner");
     res.json(getProductIdentityRunStatus());
