@@ -12,7 +12,10 @@ export function productResearchWindow(value: unknown): ProductResearchWindow {
 }
 
 const optionalNonnegative = z.number().int().nonnegative().nullable().optional();
-const optionalPercent = z.number().int().min(0).max(100).nullable().optional();
+const optionalPercent = z.number().min(0).max(100)
+  .transform((value) => Math.round(value))
+  .nullable()
+  .optional();
 
 export const productResearchObservationInput = z.object({
   observationType: z.enum(["category", "product_identity"]),

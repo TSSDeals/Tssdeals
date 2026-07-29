@@ -26,6 +26,24 @@ test("Product Research accepts supported demand and baseline windows", () => {
   assert.equal(productResearchWindow("not-a-window"), 30);
 });
 
+test("Product Research accepts decimal eBay percentages and stores database-safe values", () => {
+  const parsed = productResearchObservationInput.parse({
+    observationType: "category",
+    researchKey: "category:baseball-fielding-gloves",
+    label: "Baseball Fielding Gloves & Mitts",
+    marketplace: "EBAY_US",
+    windowDays: 5,
+    periodStart: "2026-07-24",
+    periodEnd: "2026-07-29",
+    freeShippingPercent: 25.6,
+    sellThroughPercent: 11.37,
+    sourceUrl: "https://www.ebay.com/sh/research?keywords=Baseball+Gloves",
+  });
+
+  assert.equal(parsed.freeShippingPercent, 26);
+  assert.equal(parsed.sellThroughPercent, 11);
+});
+
 test("Product Research URLs are prefilled without scraping private result rows", () => {
   const url = new URL(buildProductResearchUrl({
     queryText: "Wilson A2000 1786",
