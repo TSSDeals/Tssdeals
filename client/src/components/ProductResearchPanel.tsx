@@ -81,11 +81,11 @@ export default function ProductResearchPanel() {
     },
   });
   const targets = useMemo(() => [
-    ...(query.data?.categories ?? []).map((item: any) => ({ ...item, observationType: "category" })),
     ...(query.data?.ledgerModels ?? []).map((item: any) => ({
       ...item,
       observationType: "ledger_model",
     })),
+    ...(query.data?.categories ?? []).map((item: any) => ({ ...item, observationType: "category" })),
     ...(query.data?.identities ?? []).map((item: any) => ({
       ...item,
       observationType: "product_identity",
@@ -187,11 +187,40 @@ export default function ProductResearchPanel() {
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
         <div className="space-y-3">
+          {(query.data?.ledgerProgress?.total ?? 0) > 0 && (
+            <div
+              className="grid grid-cols-3 gap-2 rounded-xl border border-blue-200 bg-blue-50/60 p-3 text-center dark:border-blue-900 dark:bg-blue-950/30"
+              data-testid="ledger-research-progress"
+            >
+              <div>
+                <div className="text-lg font-bold">{query.data.ledgerProgress.total}</div>
+                <div className="text-[10px] text-muted-foreground">90-day models</div>
+              </div>
+              <div>
+                <div className="text-lg font-bold text-emerald-700 dark:text-emerald-400">{query.data.ledgerProgress.researched}</div>
+                <div className="text-[10px] text-muted-foreground">Researched</div>
+              </div>
+              <div>
+                <div className="text-lg font-bold text-amber-700 dark:text-amber-400">{query.data.ledgerProgress.remaining}</div>
+                <div className="text-[10px] text-muted-foreground">Remaining</div>
+              </div>
+            </div>
+          )}
           <div>
             <Label>Research category or model</Label>
             <Select value={targetKey} onValueChange={setTargetKey}>
               <SelectTrigger className="mt-1"><SelectValue placeholder="Choose research target" /></SelectTrigger>
               <SelectContent>
+                {(query.data?.ledgerModels ?? []).length > 0 && (
+                  <>
+                    <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">Recently sold by Twin Seam (90 days)</div>
+                    {(query.data?.ledgerModels ?? []).map((item: any) => (
+                      <SelectItem key={item.researchKey} value={item.researchKey}>
+                        {item.lastObserved ? "✓ " : ""}{item.label} · {item.sold_count} sold
+                      </SelectItem>
+                    ))}
+                  </>
+                )}
                 <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">Priority categories</div>
                 {(query.data?.categories ?? []).map((item: any) => (
                   <SelectItem key={item.researchKey} value={item.researchKey}>{item.label}</SelectItem>
@@ -203,6 +232,20 @@ export default function ProductResearchPanel() {
               </SelectContent>
             </Select>
           </div>
+          {target?.observationType === "ledger_model" && (
+            <div className="rounded-xl border border-border bg-background/70 p-3 text-xs" data-testid="selected-ledger-model">
+              <div className="font-semibold">{target.label}</div>
+              <div className="mt-1 text-muted-foreground">
+                Sold {Number(target.sold_count ?? 0).toLocaleString()} time{Number(target.sold_count ?? 0) === 1 ? "" : "s"} in your ledger
+                {target.last_sold ? ` · last sold ${String(target.last_sold).slice(0, 10)}` : ""}
+              </div>
+              <div className={target.lastObserved ? "mt-1 text-emerald-700 dark:text-emerald-400" : "mt-1 text-amber-700 dark:text-amber-400"}>
+                {target.lastObserved
+                  ? `${windowDays}-day research recorded through ${String(target.lastObserved).slice(0, 10)}`
+                  : `${windowDays}-day research still needed`}
+              </div>
+            </div>
+          )}
           {target?.researchUrl && (
             <Button asChild variant="outline" className="w-full">
               <a href={target.researchUrl} target="_blank" rel="noreferrer">

@@ -118,6 +118,15 @@ export function buildProductResearchUrl(input: {
   return `https://www.ebay.com/sh/research?${params.toString()}`;
 }
 
+export function buildLedgerResearchKey(brand: unknown, model: unknown) {
+  return `ledger-model:${String(brand ?? "").trim()}:${String(model ?? "").trim()}`
+    .toLowerCase()
+    .replace(/[^a-z0-9:]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/-+$/g, "")
+    .slice(0, 160);
+}
+
 export async function saveProductResearchObservation(
   rawInput: unknown,
   recordedBy?: string,
@@ -200,7 +209,7 @@ export async function getProductResearchWorkspace(windowDays: ProductResearchWin
           LEFT JOIN product_identities pi ON pi.id=o.product_identity_id
          WHERE o.window_days=$1
          ORDER BY o.period_end DESC, o.observed_at DESC
-         LIMIT 100
+         LIMIT 500
       `, [windowDays]),
       client.query(`
         SELECT pi.id, pi.family_fingerprint, pi.canonical_brand, pi.product_family,
@@ -232,6 +241,28 @@ export async function getProductResearchWorkspace(windowDays: ProductResearchWin
          LIMIT 80
       `),
     ]);
+    const observationsByKey = new Map<string, any>();
+    for (const observation of observations.rows) {
+      if (!observationsByKey.has(observation.research_key)) {
+        observationsByKey.set(observation.research_key, observation);
+      }
+    }
+    const recentLedgerModels = ledgerModels.rows.map((model) => {
+      const label = `${model.brand} ${model.model}`;
+      const researchKey = buildLedgerResearchKey(model.brand, model.model);
+      const latestObservation = observationsByKey.get(researchKey);
+      return {
+        ...model,
+        researchKey,
+        label,
+        queryText: label,
+        lastObserved: latestObservation?.period_end ?? null,
+        researchUrl: buildProductResearchUrl({
+          queryText: label,
+          windowDays,
+        }),
+      };
+    });
     return {
       windowDays,
       categories: PRODUCT_RESEARCH_CATEGORIES.map((category) => ({
@@ -252,24 +283,12 @@ export async function getProductResearchWorkspace(windowDays: ProductResearchWin
           windowDays,
         }),
       })),
-      ledgerModels: ledgerModels.rows.map((model) => {
-        const label = `${model.brand} ${model.model}`;
-        const researchKey = `ledger-model:${model.brand}:${model.model}`
-          .toLowerCase()
-          .replace(/[^a-z0-9:]+/g, "-")
-          .replace(/-+/g, "-")
-          .slice(0, 160);
-        return {
-          ...model,
-          researchKey,
-          label,
-          queryText: label,
-          researchUrl: buildProductResearchUrl({
-            queryText: label,
-            windowDays,
-          }),
-        };
-      }),
+      ledgerModels: recentLedgerModels,
+      ledgerProgress: {
+        total: recentLedgerModels.length,
+        researched: recentLedgerModels.filter((model) => model.lastObserved != null).length,
+        remaining: recentLedgerModels.filter((model) => model.lastObserved == null).length,
+      },
       observations: observations.rows,
     };
   } finally {
