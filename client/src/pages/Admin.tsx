@@ -908,6 +908,58 @@ export default function AdminPage() {
     refetchInterval: (query) => query.state.data?.running ? 2000 : false,
   });
 
+  const [safeIdentityBatch, setSafeIdentityBatch] = useState<any[] | null>(null);
+  const [loadingSafeIdentityBatch, setLoadingSafeIdentityBatch] = useState(false);
+  const [approvingSafeIdentityBatch, setApprovingSafeIdentityBatch] = useState(false);
+
+  const previewSafeIdentityBatch = async () => {
+    setLoadingSafeIdentityBatch(true);
+    try {
+      const response = await fetch("/api/admin/product-identities/safe-batch?limit=25", {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Could not preview safe identity batch");
+      const data = await response.json();
+      setSafeIdentityBatch(data.items ?? []);
+    } catch (error: any) {
+      toast({
+        title: "Safe batch preview failed",
+        description: error?.message ?? "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingSafeIdentityBatch(false);
+    }
+  };
+
+  const approveSafeIdentityBatch = async () => {
+    if (!safeIdentityBatch?.length) return;
+    setApprovingSafeIdentityBatch(true);
+    try {
+      const result = await apiRequest("POST", "/api/admin/product-identities/safe-batch/approve", {
+        dealIds: safeIdentityBatch.map((item) => item.deal_id),
+      });
+      const data = await result.json();
+      setSafeIdentityBatch(null);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/product-identities/summary"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/product-identities/review"] }),
+      ]);
+      toast({
+        title: `${Number(data.approved ?? 0)} product identities approved`,
+        description: "Every row was rechecked against the strict policy immediately before approval.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Safe batch approval failed",
+        description: error?.message ?? "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setApprovingSafeIdentityBatch(false);
+    }
+  };
+
   const [demandWindowDays, setDemandWindowDays] = useState<5 | 10 | 30 | 90>(30);
   const [capturingDemand, setCapturingDemand] = useState(false);
   const demandBrainQuery = useQuery<any>({
@@ -2406,6 +2458,56 @@ export default function AdminPage() {
                   <span className="text-sm text-muted-foreground">
                     {productIdentityRunQuery.data.message}
                   </span>
+                )}
+              </div>
+
+              <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-4 dark:border-blue-900 dark:bg-blue-950/20">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold">Strict approval batch</div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      Preview-only until approved. Requires a title-recognized model, matching sport and equipment,
+                      and either a model code or two exact variant facts. Maximum 25.
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      disabled={loadingSafeIdentityBatch || approvingSafeIdentityBatch}
+                      onClick={previewSafeIdentityBatch}
+                    >
+                      {loadingSafeIdentityBatch ? "Checking..." : "Preview strict batch"}
+                    </Button>
+                    {safeIdentityBatch !== null && (
+                      <Button
+                        disabled={!safeIdentityBatch.length || approvingSafeIdentityBatch}
+                        onClick={approveSafeIdentityBatch}
+                      >
+                        {approvingSafeIdentityBatch
+                          ? "Rechecking..."
+                          : `Approve ${safeIdentityBatch.length} strict matches`}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                {safeIdentityBatch !== null && (
+                  <div className="mt-3 space-y-1 text-xs">
+                    {safeIdentityBatch.length ? (
+                      safeIdentityBatch.slice(0, 5).map((item) => (
+                        <div key={item.deal_id} className="truncate">
+                          <span className="font-semibold">{item.canonical_brand} {item.product_family}</span>
+                          {" — "}{item.title}
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-muted-foreground">No proposals currently meet the strict policy.</div>
+                    )}
+                    {safeIdentityBatch.length > 5 && (
+                      <div className="text-muted-foreground">
+                        +{safeIdentityBatch.length - 5} more strict matches
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
 
