@@ -2201,6 +2201,25 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/admin/sync/ball-glove-blueprint", isAdmin, async (_req: any, res) => {
+    try {
+      const { syncBallGloveBlueprintDeals } = await import("./deal-sync-scheduler");
+      const result = await syncBallGloveBlueprintDeals(storage);
+      if (result.disabled) {
+        return res.status(409).json({
+          message: "Ball Glove Blueprint sync is installed but not enabled. Set ENABLE_BALL_GLOVE_BLUEPRINT_SYNC=true, then run it again.",
+          ...result,
+        });
+      }
+      res.json({
+        message: `Ball Glove Blueprint sync complete: ${result.accepted ?? 0} premium glove listings accepted from ${result.fetched ?? 0} products`,
+        ...result,
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   // --- AI deal classification (daily-gated; manual trigger here) ---
   app.get("/api/admin/ai-classification/stats", isAdmin, async (_req: any, res) => {
     try {

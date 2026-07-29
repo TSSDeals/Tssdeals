@@ -117,6 +117,76 @@ function CategoryCard({
   );
 }
 
+function EliteGloveCorner({
+  onOpen,
+}: {
+  onOpen: () => void;
+}) {
+  const preview = useCategoryDeals("elite-baseball-gloves");
+  const sources = useSources();
+  const sourceById = useMemo(() => {
+    const map = new Map<string, any>();
+    ((sources.data ?? []) as any[]).forEach((source: any) => map.set(source.id, source));
+    return map;
+  }, [sources.data]);
+  const deals = (preview.data?.deals ?? []).slice(0, 6);
+
+  return (
+    <section
+      className="overflow-hidden rounded-[1.75rem] border border-primary/20 bg-gradient-to-br from-slate-950 via-slate-900 to-primary/80 p-5 text-white shadow-xl shadow-primary/10 md:p-7"
+      data-testid="elite-glove-corner"
+    >
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="max-w-2xl">
+          <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.14em]">
+            <Sparkles className="h-3.5 w-3.5" />
+            Premium fielding gloves only
+          </div>
+          <h2 className="font-display text-2xl font-bold sm:text-3xl">Elite Glove Corner</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-200">
+            Pro-grade and specialty-maker gloves from trusted sellers, screened to exclude batting gloves, sliding mitts, trainers, and memorabilia.
+          </p>
+        </div>
+        <Button
+          type="button"
+          onClick={onOpen}
+          className="shrink-0 rounded-xl bg-white text-slate-950 hover:bg-slate-100"
+          data-testid="button-open-elite-gloves"
+        >
+          Explore elite gloves
+          <ChevronRight className="ml-1 h-4 w-4" />
+        </Button>
+      </div>
+
+      {deals.length > 0 ? (
+        <div className="mt-5 flex snap-x gap-4 overflow-x-auto pb-2 scrollbar-hide" data-testid="elite-glove-preview">
+          {deals.map((deal: any, idx: number) => {
+            const source = sourceById.get(deal.sourceId);
+            return (
+              <div key={deal.id} className="w-[88%] shrink-0 snap-start text-foreground sm:w-[390px]">
+                <DealCard
+                  deal={deal}
+                  sourceName={source?.name}
+                  ourStore={source?.isOurStore}
+                  data-testid={`elite-preview-card-${idx}`}
+                />
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={onOpen}
+          className="mt-5 w-full rounded-2xl border border-dashed border-white/30 bg-white/5 px-4 py-5 text-left text-sm text-slate-200 hover:bg-white/10"
+        >
+          The collection is ready. Open it to see which verified listings currently meet the Elite standard.
+        </button>
+      )}
+    </section>
+  );
+}
+
 function CategoryDetail({
   slug,
   categories,
@@ -237,6 +307,14 @@ export default function TopDealsPage() {
     () => (categories.data ?? []).filter((c: any) => c.isDynamic),
     [categories.data]
   );
+  const eliteCategory = useMemo(
+    () => predefined.find((category: any) => category.slug === "elite-baseball-gloves"),
+    [predefined],
+  );
+  const standardPredefined = useMemo(
+    () => predefined.filter((category: any) => category.slug !== "elite-baseball-gloves"),
+    [predefined],
+  );
 
   const handleSelectCategory = (slug: string) => {
     setLocation(`/app/top-deals/${slug}`);
@@ -259,6 +337,12 @@ export default function TopDealsPage() {
         />
       ) : (
         <div className="space-y-8">
+          {eliteCategory ? (
+            <EliteGloveCorner
+              onOpen={() => handleSelectCategory(eliteCategory.slug)}
+            />
+          ) : null}
+
           <section data-testid="curated-categories">
             <div className="mb-4 flex items-center gap-2">
               <div className="grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-primary to-primary/70 shadow-lg shadow-primary/20">
@@ -280,7 +364,7 @@ export default function TopDealsPage() {
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                {predefined.map((cat: any) => (
+                {standardPredefined.map((cat: any) => (
                   <CategoryCard
                     key={cat.id}
                     category={cat}
