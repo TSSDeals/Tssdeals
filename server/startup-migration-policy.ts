@@ -59,6 +59,12 @@ export const STARTUP_MIGRATION_MANIFEST = [
     kind: "structural",
     description: "Aggregate-only authenticated product research observations",
   },
+  {
+    id: "20260729_009_product_research_reviews",
+    checksum: "640cd1ba097a70f24d5e3bbfbf27bbf2ba9418204e2b0c4d845ea67c9bce83f4",
+    kind: "structural",
+    description: "Reviewed Product Research targets with insufficient trustworthy market data",
+  },
 ] as const;
 
 export type ApprovedSeedState = "empty" | "satisfied" | "partial";

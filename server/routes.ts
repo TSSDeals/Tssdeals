@@ -2350,6 +2350,22 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/admin/product-research/reviews", isAdmin, async (req: any, res) => {
+    try {
+      const { saveProductResearchReview } = await import("./product-research");
+      const userId = req.user?.claims?.sub ?? req.user?.id;
+      res.json(await saveProductResearchReview(req.body, userId));
+    } catch (err: any) {
+      if (err?.name === "ZodError") {
+        return res.status(400).json({
+          message: err.issues?.[0]?.message ?? "Invalid Product Research review",
+          issues: err.issues,
+        });
+      }
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.get("/api/admin/product-identities/review", isAdmin, async (req: any, res) => {
     try {
       const { db } = await import("./db");

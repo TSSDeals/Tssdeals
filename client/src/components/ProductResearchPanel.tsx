@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ExternalLink, Save } from "lucide-react";
+import { ExternalLink, Save, SearchX } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -70,6 +70,7 @@ export default function ProductResearchPanel() {
   const [targetKey, setTargetKey] = useState("");
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
   const query = useQuery<any>({
     queryKey: ["/api/admin/product-research/workspace", windowDays],
     queryFn: async () => {
@@ -158,6 +159,36 @@ export default function ProductResearchPanel() {
     }
   };
 
+  const markInsufficientData = async () => {
+    if (!target) return;
+    setReviewing(true);
+    try {
+      await apiRequest("POST", "/api/admin/product-research/reviews", {
+        researchKey: target.researchKey,
+        label: target.label,
+        windowDays,
+        outcome: "insufficient_data",
+        notes: form.notes.trim()
+          || "Exact-model eBay Product Research returned no trustworthy aggregate sold-market sample.",
+        sourceUrl: form.sourceUrl || target.researchUrl || null,
+      });
+      setForm(emptyForm());
+      await query.refetch();
+      toast({
+        title: "Review completed",
+        description: "This model is recorded as reviewed with insufficient trustworthy market data.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Review was not saved",
+        description: error?.message ?? "Check the values and try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setReviewing(false);
+    }
+  };
+
   return (
     <div className="rounded-2xl border border-indigo-200 bg-indigo-50/40 p-4 dark:border-indigo-900 dark:bg-indigo-950/20">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -189,7 +220,7 @@ export default function ProductResearchPanel() {
         <div className="space-y-3">
           {(query.data?.ledgerProgress?.total ?? 0) > 0 && (
             <div
-              className="grid grid-cols-3 gap-2 rounded-xl border border-blue-200 bg-blue-50/60 p-3 text-center dark:border-blue-900 dark:bg-blue-950/30"
+              className="grid grid-cols-2 gap-2 rounded-xl border border-blue-200 bg-blue-50/60 p-3 text-center sm:grid-cols-4 dark:border-blue-900 dark:bg-blue-950/30"
               data-testid="ledger-research-progress"
             >
               <div>
@@ -199,6 +230,10 @@ export default function ProductResearchPanel() {
               <div>
                 <div className="text-lg font-bold text-emerald-700 dark:text-emerald-400">{query.data.ledgerProgress.researched}</div>
                 <div className="text-[10px] text-muted-foreground">Researched</div>
+              </div>
+              <div>
+                <div className="text-lg font-bold text-slate-700 dark:text-slate-300">{query.data.ledgerProgress.insufficientData ?? 0}</div>
+                <div className="text-[10px] text-muted-foreground">Insufficient</div>
               </div>
               <div>
                 <div className="text-lg font-bold text-amber-700 dark:text-amber-400">{query.data.ledgerProgress.remaining}</div>
@@ -216,7 +251,8 @@ export default function ProductResearchPanel() {
                     <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">Recently sold by Twin Seam (90 days)</div>
                     {(query.data?.ledgerModels ?? []).map((item: any) => (
                       <SelectItem key={item.researchKey} value={item.researchKey}>
-                        {item.lastObserved ? "✓ " : ""}{item.label} · {item.sold_count} sold
+                        {item.lastObserved ? "✓ " : item.reviewOutcome === "insufficient_data" ? "◇ " : ""}
+                        {item.label} · {item.sold_count} sold
                       </SelectItem>
                     ))}
                   </>
@@ -239,11 +275,20 @@ export default function ProductResearchPanel() {
                 Sold {Number(target.sold_count ?? 0).toLocaleString()} time{Number(target.sold_count ?? 0) === 1 ? "" : "s"} in your ledger
                 {target.last_sold ? ` · last sold ${String(target.last_sold).slice(0, 10)}` : ""}
               </div>
-              <div className={target.lastObserved ? "mt-1 text-emerald-700 dark:text-emerald-400" : "mt-1 text-amber-700 dark:text-amber-400"}>
+              <div className={target.lastObserved
+                ? "mt-1 text-emerald-700 dark:text-emerald-400"
+                : target.reviewOutcome === "insufficient_data"
+                  ? "mt-1 text-slate-700 dark:text-slate-300"
+                  : "mt-1 text-amber-700 dark:text-amber-400"}>
                 {target.lastObserved
                   ? `${windowDays}-day research recorded through ${String(target.lastObserved).slice(0, 10)}`
-                  : `${windowDays}-day research still needed`}
+                  : target.reviewOutcome === "insufficient_data"
+                    ? `Reviewed · insufficient trustworthy ${windowDays}-day market data`
+                    : `${windowDays}-day research still needed`}
               </div>
+              {target.reviewOutcome === "insufficient_data" && target.reviewNotes && (
+                <div className="mt-1 text-muted-foreground">{target.reviewNotes}</div>
+              )}
             </div>
           )}
           {target?.researchUrl && (
@@ -312,10 +357,23 @@ export default function ProductResearchPanel() {
               </div>
             ))}
           </div>
-          <Button className="w-full md:w-auto" disabled={saving || !target} onClick={save}>
-            <Save className="mr-2 h-4 w-4" />
-            {saving ? "Saving…" : "Save aggregate observation"}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button className="w-full md:w-auto" disabled={saving || reviewing || !target} onClick={save}>
+              <Save className="mr-2 h-4 w-4" />
+              {saving ? "Saving…" : "Save aggregate observation"}
+            </Button>
+            {target?.observationType === "ledger_model" && !target.lastObserved && (
+              <Button
+                className="w-full md:w-auto"
+                variant="outline"
+                disabled={saving || reviewing}
+                onClick={markInsufficientData}
+              >
+                <SearchX className="mr-2 h-4 w-4" />
+                {reviewing ? "Saving review…" : "Mark insufficient data"}
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
