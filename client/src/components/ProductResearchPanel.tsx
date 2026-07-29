@@ -32,6 +32,38 @@ function emptyForm() {
   };
 }
 
+export function researchPeriodFromUrl(sourceUrl: string, windowDays: WindowDays) {
+  const fallbackEnd = new Date();
+  const fallbackStart = new Date(fallbackEnd);
+  fallbackStart.setUTCDate(fallbackStart.getUTCDate() - windowDays);
+  try {
+    const url = new URL(sourceUrl);
+    const startMs = Number(url.searchParams.get("startDate"));
+    const endMs = Number(url.searchParams.get("endDate"));
+    if (Number.isFinite(startMs) && startMs > 0 && Number.isFinite(endMs) && endMs > 0) {
+      const timeZone = url.searchParams.get("tz") || "America/New_York";
+      const dateInZone = (value: number) => {
+        const parts = new Intl.DateTimeFormat("en-US", {
+          timeZone,
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }).formatToParts(new Date(value));
+        const part = (type: string) => parts.find((item) => item.type === type)?.value;
+        return `${part("year")}-${part("month")}-${part("day")}`;
+      };
+      return {
+        periodStart: dateInZone(startMs),
+        periodEnd: dateInZone(endMs),
+      };
+    }
+  } catch {}
+  return {
+    periodStart: fallbackStart.toISOString().slice(0, 10),
+    periodEnd: fallbackEnd.toISOString().slice(0, 10),
+  };
+}
+
 export default function ProductResearchPanel() {
   const { toast } = useToast();
   const [windowDays, setWindowDays] = useState<WindowDays>(30);
@@ -75,9 +107,7 @@ export default function ProductResearchPanel() {
       });
       return;
     }
-    const end = new Date();
-    const start = new Date(end);
-    start.setUTCDate(start.getUTCDate() - windowDays);
+    const period = researchPeriodFromUrl(form.sourceUrl, windowDays);
     setSaving(true);
     try {
       await apiRequest("POST", "/api/admin/product-research/observations", {
@@ -90,8 +120,8 @@ export default function ProductResearchPanel() {
         categoryId: target.categoryId ?? null,
         categoryLabel: target.categoryLabel ?? null,
         windowDays,
-        periodStart: start.toISOString().slice(0, 10),
-        periodEnd: end.toISOString().slice(0, 10),
+        periodStart: period.periodStart,
+        periodEnd: period.periodEnd,
         averageSoldPriceCents: dollarsToCents(form.averageSoldPrice),
         minimumSoldPriceCents: dollarsToCents(form.minimumSoldPrice),
         maximumSoldPriceCents: dollarsToCents(form.maximumSoldPrice),
