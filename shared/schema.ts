@@ -313,6 +313,49 @@ export const demandMarketSnapshots = pgTable(
 export type DemandSnapshotRun = typeof demandSnapshotRuns.$inferSelect;
 export type DemandMarketSnapshot = typeof demandMarketSnapshots.$inferSelect;
 
+// Manually recorded, aggregate-only observations from authenticated market
+// research tools. These never contain individual buyer, seller, or order data.
+export const productResearchObservations = pgTable(
+  "product_research_observations",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    source: varchar("source", { length: 40 }).notNull().default("ebay_product_research"),
+    observationType: varchar("observation_type", { length: 24 }).notNull(),
+    productIdentityId: varchar("product_identity_id")
+      .references(() => productIdentities.id, { onDelete: "set null" }),
+    researchKey: varchar("research_key", { length: 160 }).notNull(),
+    label: text("label").notNull(),
+    marketplace: varchar("marketplace", { length: 24 }).notNull().default("EBAY_US"),
+    queryText: text("query_text"),
+    categoryId: varchar("category_id", { length: 32 }),
+    categoryLabel: text("category_label"),
+    windowDays: integer("window_days").notNull(),
+    periodStart: date("period_start").notNull(),
+    periodEnd: date("period_end").notNull(),
+    averageSoldPriceCents: integer("average_sold_price_cents"),
+    minimumSoldPriceCents: integer("minimum_sold_price_cents"),
+    maximumSoldPriceCents: integer("maximum_sold_price_cents"),
+    averageShippingCents: integer("average_shipping_cents"),
+    freeShippingPercent: integer("free_shipping_percent"),
+    sellThroughPercent: integer("sell_through_percent"),
+    totalSold: integer("total_sold"),
+    totalSellers: integer("total_sellers"),
+    notes: text("notes"),
+    sourceUrl: text("source_url").notNull(),
+    recordedBy: varchar("recorded_by"),
+    observedAt: timestamp("observed_at").notNull().defaultNow(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("product_research_observation_period_idx")
+      .on(t.source, t.researchKey, t.windowDays, t.periodEnd),
+    index("product_research_observation_identity_idx").on(t.productIdentityId),
+    index("product_research_observation_window_idx").on(t.windowDays, t.periodEnd),
+  ],
+);
+
+export type ProductResearchObservation = typeof productResearchObservations.$inferSelect;
+
 // deal_sub_filters: many-to-many join between deals and equipment_sub_filters.
 // A deal can carry multiple sub-filter tags (e.g. a glove can be both "Infield"
 // and "11.5"). The legacy `deals.sub_filter_id` column is kept in sync with the

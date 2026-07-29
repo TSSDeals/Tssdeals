@@ -53,6 +53,12 @@ export const STARTUP_MIGRATION_MANIFEST = [
     kind: "structural",
     description: "Daily approved-identity market observations for rolling demand intelligence",
   },
+  {
+    id: "20260728_008_product_research_observations",
+    checksum: "ac275fa86d46f9421ed79570a54b7c0d902993a22d81f71c52091e6d4de74cff",
+    kind: "structural",
+    description: "Aggregate-only authenticated product research observations",
+  },
 ] as const;
 
 export type ApprovedSeedState = "empty" | "satisfied" | "partial";

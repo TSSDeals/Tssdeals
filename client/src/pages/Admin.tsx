@@ -33,6 +33,7 @@ import EbayPricingAnalysis from "@/components/EbayPricingAnalysis";
 import SidelineSwapSync from "@/components/SidelineSwapSync";
 import PromoCodes from "@/components/PromoCodes";
 import { DataReportingPanel } from "@/components/DataReportingPanel";
+import ProductResearchPanel from "@/components/ProductResearchPanel";
 import { Activity, AlertTriangle, ArrowDown, ArrowUp, Ban, BarChart3, Calendar, Check, ChevronDown, ChevronUp, Database, Download, ExternalLink, Eye, EyeOff, FileText, Filter, Gift, Globe, GripVertical, Link2, Link2Off, Loader2, MousePointerClick, Package, Pencil, PlayCircle, Plus, RefreshCw, Search, Shield, ShieldCheck, ShoppingBag, ShoppingCart, Sparkles, Store, Terminal, TicketX, Trash2, TrendingDown, TrendingUp, Users, X, Zap } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -2662,6 +2663,7 @@ export default function AdminPage() {
                   No market snapshot has been captured yet. The first one will run after a completed feed sync, or you can capture it here.
                 </div>
               )}
+              <ProductResearchPanel />
             </div>
           </section>
 

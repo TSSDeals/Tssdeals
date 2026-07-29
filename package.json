@@ -19,6 +19,7 @@
     "test:ebay-browse": "tsx --test server/ebay-browse-client.test.ts",
     "test:ebay-pricing": "tsx --test server/ebay-pricing-analysis.test.ts",
     "test:wholesale-autocomplete": "tsx --test client/src/lib/wholesale-autocomplete.test.ts",
+    "test:product-research": "tsx --test server/product-research.test.ts server/demand-brain.test.ts",
     "test:ebay-sync-incident": "tsx --test server/deal-sub-filter-sync.test.ts client/src/lib/queryClient.test.ts",
     "test:startup-safety": "tsx --test server/startup-safety.test.ts",
     "test:taxonomy-audit": "tsx --test server/taxonomy-audit.test.ts",
