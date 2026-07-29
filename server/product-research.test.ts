@@ -96,3 +96,14 @@ test("product-level observations require an approved identity reference", () => 
     researchKey: "identity:test",
   }).success, false);
 });
+
+test("recent sold ledger models can be recorded without a product identity", () => {
+  assert.equal(productResearchObservationInput.safeParse({
+    ...baseObservation,
+    observationType: "ledger_model",
+    productIdentityId: null,
+    researchKey: "ledger-model:mizuno:mvp-prime",
+    label: "Mizuno MVP Prime",
+    queryText: "Mizuno MVP Prime",
+  }).success, true);
+});
