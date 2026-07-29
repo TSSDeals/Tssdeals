@@ -807,18 +807,18 @@ async function syncMultiShopifyDeals(storage: IStorage): Promise<{ created: numb
   }
 }
 
-async function syncBallGloveBlueprintDeals(storage: IStorage): Promise<{ created: number; updated: number; errors: number }> {
+export async function syncBallGloveBlueprintDeals(storage: IStorage): Promise<{ created: number; updated: number; errors: number; fetched?: number; accepted?: number; skipped?: number; disabled?: boolean }> {
   // Keep launch explicit. The adapter can be deployed and reviewed without
   // silently introducing a new production collector on the next scheduler run.
   if (process.env.ENABLE_BALL_GLOVE_BLUEPRINT_SYNC !== "true") {
-    return { created: 0, updated: 0, errors: 0 };
+    return { created: 0, updated: 0, errors: 0, disabled: true };
   }
   try {
     const result = await syncBallGloveBlueprint(
       (deals) => storage.bulkUpsertDeals(deals),
       (id, name, url) => storage.ensureSource(id, name, url),
     );
-    return { created: result.created, updated: result.updated, errors: 0 };
+    return { ...result, errors: 0, disabled: false };
   } catch (err: any) {
     log(`Ball Glove Blueprint sync error: ${err.message}`, "deal-sync");
     return { created: 0, updated: 0, errors: 1 };
