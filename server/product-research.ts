@@ -18,7 +18,7 @@ const optionalPercent = z.number().min(0).max(100)
   .optional();
 
 export const productResearchObservationInput = z.object({
-  observationType: z.enum(["category", "product_identity"]),
+  observationType: z.enum(["category", "product_identity", "ledger_model"]),
   productIdentityId: z.string().min(1).nullable().optional(),
   researchKey: z.string().trim().min(1).max(160),
   label: z.string().trim().min(1).max(240),
@@ -193,7 +193,7 @@ export async function saveProductResearchObservation(
 export async function getProductResearchWorkspace(windowDays: ProductResearchWindow) {
   const client = await pool.connect();
   try {
-    const [observations, identities] = await Promise.all([
+    const [observations, identities, ledgerModels] = await Promise.all([
       client.query(`
         SELECT o.*, pi.canonical_brand, pi.product_family, pi.model_code
           FROM product_research_observations o
@@ -216,6 +216,21 @@ export async function getProductResearchWorkspace(windowDays: ProductResearchWin
                   count(dpi.deal_id) DESC, pi.canonical_brand, pi.product_family
          LIMIT 40
       `, [windowDays]),
+      client.query(`
+        SELECT brand, model, count(*)::int AS sold_count, max(sale_date) AS last_sold
+          FROM business_ledger_entries
+         WHERE sale_date >= CURRENT_DATE - INTERVAL '90 days'
+           AND status ILIKE '%sold%'
+           AND brand IS NOT NULL AND btrim(brand) <> ''
+           AND model IS NOT NULL AND btrim(model) <> ''
+           AND concat_ws(' ', description, brand, model) ILIKE '%glove%'
+           AND concat_ws(' ', description, brand, model) NOT ILIKE ALL (ARRAY[
+             '%batting glove%', '%golf glove%', '%trainer glove%', '%two hand trainer%'
+           ])
+         GROUP BY brand, model
+         ORDER BY count(*) DESC, max(sale_date) DESC, brand, model
+         LIMIT 80
+      `),
     ]);
     return {
       windowDays,
@@ -237,6 +252,24 @@ export async function getProductResearchWorkspace(windowDays: ProductResearchWin
           windowDays,
         }),
       })),
+      ledgerModels: ledgerModels.rows.map((model) => {
+        const label = `${model.brand} ${model.model}`;
+        const researchKey = `ledger-model:${model.brand}:${model.model}`
+          .toLowerCase()
+          .replace(/[^a-z0-9:]+/g, "-")
+          .replace(/-+/g, "-")
+          .slice(0, 160);
+        return {
+          ...model,
+          researchKey,
+          label,
+          queryText: label,
+          researchUrl: buildProductResearchUrl({
+            queryText: label,
+            windowDays,
+          }),
+        };
+      }),
       observations: observations.rows,
     };
   } finally {

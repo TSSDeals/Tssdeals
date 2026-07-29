@@ -82,6 +82,10 @@ export default function ProductResearchPanel() {
   });
   const targets = useMemo(() => [
     ...(query.data?.categories ?? []).map((item: any) => ({ ...item, observationType: "category" })),
+    ...(query.data?.ledgerModels ?? []).map((item: any) => ({
+      ...item,
+      observationType: "ledger_model",
+    })),
     ...(query.data?.identities ?? []).map((item: any) => ({
       ...item,
       observationType: "product_identity",
