@@ -97,7 +97,7 @@ export async function captureDailyDemandSnapshot(
 export async function getDemandBrainSummary(windowDays: 5 | 10 | 30 | 90 = 30) {
   const client = await pool.connect();
   try {
-    const [latest, history, families] = await Promise.all([
+    const [latest, history, families, completedSales] = await Promise.all([
       client.query(`
         SELECT snapshot_date, status, trusted_listings, proposed_listings,
                identity_variants, source_count, captured_at
@@ -143,14 +143,28 @@ export async function getDemandBrainSummary(windowDays: 5 | 10 | 30 | 90 = 30) {
          ORDER BY listing_observations DESC, sources DESC
          LIMIT 25
       `, [windowDays]),
+      client.query(`
+        SELECT DISTINCT ON (research_key)
+               research_key, label, observation_type, product_identity_id,
+               average_sold_price_cents, minimum_sold_price_cents,
+               maximum_sold_price_cents, average_shipping_cents,
+               free_shipping_percent, sell_through_percent, total_sold,
+               total_sellers, period_start, period_end, source_url
+          FROM product_research_observations
+         WHERE window_days=$1
+         ORDER BY research_key, period_end DESC, observed_at DESC
+      `, [windowDays]),
     ]);
     return {
       windowDays,
       latest: latest.rows[0] ?? null,
       history: history.rows,
       families: families.rows,
+      completedSales: completedSales.rows,
       generatedAt: new Date().toISOString(),
-      caveat: "Active-listing observations measure supply and market coverage. Completed-sale demand is not inferred until a verified sold-listing source is connected.",
+      caveat: completedSales.rows.length
+        ? "Supply metrics come from approved listings. Completed-sale metrics are aggregate observations manually recorded from authenticated eBay Product Research."
+        : "Active-listing observations measure supply and market coverage. Record an aggregate Product Research observation before using completed-sale demand.",
     };
   } finally {
     client.release();

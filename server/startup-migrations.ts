@@ -410,6 +410,47 @@ export const STARTUP_MIGRATIONS: readonly VersionedMigration<StartupContext>[] =
       for (const statement of statements) await context.execute(sql.raw(statement));
     },
   },
+  {
+    ...STARTUP_MIGRATION_MANIFEST[7],
+    async up(context) {
+      const statements = [
+        `CREATE TABLE IF NOT EXISTS product_research_observations (
+          id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+          source VARCHAR(40) NOT NULL DEFAULT 'ebay_product_research',
+          observation_type VARCHAR(24) NOT NULL,
+          product_identity_id VARCHAR REFERENCES product_identities(id) ON DELETE SET NULL,
+          research_key VARCHAR(160) NOT NULL,
+          label TEXT NOT NULL,
+          marketplace VARCHAR(24) NOT NULL DEFAULT 'EBAY_US',
+          query_text TEXT,
+          category_id VARCHAR(32),
+          category_label TEXT,
+          window_days INTEGER NOT NULL,
+          period_start DATE NOT NULL,
+          period_end DATE NOT NULL,
+          average_sold_price_cents INTEGER,
+          minimum_sold_price_cents INTEGER,
+          maximum_sold_price_cents INTEGER,
+          average_shipping_cents INTEGER,
+          free_shipping_percent INTEGER,
+          sell_through_percent INTEGER,
+          total_sold INTEGER,
+          total_sellers INTEGER,
+          notes TEXT,
+          source_url TEXT NOT NULL,
+          recorded_by VARCHAR,
+          observed_at TIMESTAMP NOT NULL DEFAULT NOW(),
+          created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+          UNIQUE(source, research_key, window_days, period_end)
+        )`,
+        `CREATE INDEX IF NOT EXISTS product_research_observation_identity_idx
+          ON product_research_observations(product_identity_id)`,
+        `CREATE INDEX IF NOT EXISTS product_research_observation_window_idx
+          ON product_research_observations(window_days, period_end)`,
+      ];
+      for (const statement of statements) await context.execute(sql.raw(statement));
+    },
+  },
 ] as const;
 
 const ledger: MigrationLedger<StartupContext> = {

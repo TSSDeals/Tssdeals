@@ -2306,6 +2306,31 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/admin/product-research/workspace", isAdmin, async (req: any, res) => {
+    try {
+      const { getProductResearchWorkspace, productResearchWindow } = await import("./product-research");
+      res.json(await getProductResearchWorkspace(productResearchWindow(req.query.days)));
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/admin/product-research/observations", isAdmin, async (req: any, res) => {
+    try {
+      const { saveProductResearchObservation } = await import("./product-research");
+      const userId = req.user?.claims?.sub ?? req.user?.id;
+      res.json(await saveProductResearchObservation(req.body, userId));
+    } catch (err: any) {
+      if (err?.name === "ZodError") {
+        return res.status(400).json({
+          message: err.issues?.[0]?.message ?? "Invalid Product Research observation",
+          issues: err.issues,
+        });
+      }
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.get("/api/admin/product-identities/review", isAdmin, async (req: any, res) => {
     try {
       const { db } = await import("./db");
