@@ -4,6 +4,7 @@ import {
   buildProductResearchUrl,
   buildLedgerResearchKey,
   productResearchObservationInput,
+  productResearchReviewInput,
   productResearchWindow,
 } from "./product-research";
 
@@ -118,4 +119,21 @@ test("recent sold ledger models can be recorded without a product identity", () 
     label: "Mizuno MVP Prime",
     queryText: "Mizuno MVP Prime",
   }).success, true);
+});
+
+test("insufficient-data reviews require useful notes and an optional eBay source", () => {
+  const review = {
+    researchKey: "ledger-model:ssk:dwg3820i",
+    label: "SSK DWG3820I",
+    windowDays: 90 as const,
+    outcome: "insufficient_data" as const,
+    notes: "Exact-model search returned no trustworthy aggregate sold sample.",
+    sourceUrl: "https://www.ebay.com/sh/research?keywords=SSK+DWG3820I",
+  };
+  assert.equal(productResearchReviewInput.safeParse(review).success, true);
+  assert.equal(productResearchReviewInput.safeParse({ ...review, notes: "None" }).success, false);
+  assert.equal(productResearchReviewInput.safeParse({
+    ...review,
+    sourceUrl: "https://example.com/results",
+  }).success, false);
 });

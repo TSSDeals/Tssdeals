@@ -451,6 +451,29 @@ export const STARTUP_MIGRATIONS: readonly VersionedMigration<StartupContext>[] =
       for (const statement of statements) await context.execute(sql.raw(statement));
     },
   },
+  {
+    ...STARTUP_MIGRATION_MANIFEST[8],
+    async up(context) {
+      const statements = [
+        `CREATE TABLE IF NOT EXISTS product_research_reviews (
+          id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+          research_key VARCHAR(160) NOT NULL,
+          label TEXT NOT NULL,
+          window_days INTEGER NOT NULL,
+          outcome VARCHAR(32) NOT NULL,
+          notes TEXT NOT NULL,
+          source_url TEXT,
+          reviewed_by VARCHAR,
+          reviewed_at TIMESTAMP NOT NULL DEFAULT NOW(),
+          created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+          UNIQUE(research_key, window_days)
+        )`,
+        `CREATE INDEX IF NOT EXISTS product_research_review_window_idx
+          ON product_research_reviews(window_days, reviewed_at)`,
+      ];
+      for (const statement of statements) await context.execute(sql.raw(statement));
+    },
+  },
 ] as const;
 
 const ledger: MigrationLedger<StartupContext> = {
