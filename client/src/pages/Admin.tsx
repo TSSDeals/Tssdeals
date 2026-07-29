@@ -5,6 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { redirectToLogin } from "@/lib/auth-utils";
 import { cn, outboundRetailerUrl } from "@/lib/utils";
+import { moveSectionToIndex, normalizeSectionIds } from "@/lib/admin-section-layout";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
@@ -41,6 +42,7 @@ import type { ClassificationReviewItem } from "@shared/schema";
 
 const ADMIN_SECTION_ORDER_KEY = "tss_admin_section_order";
 const ADMIN_SECTION_COLLAPSED_KEY = "tss_admin_section_collapsed";
+const ADMIN_SECTION_HIDDEN_KEY = "tss_admin_section_hidden";
 const ADMIN_SECTIONS: { id: string; label: string }[] = [
   { id: "system-controls", label: "System Controls" },
   { id: "aggregator", label: "Aggregator Controls" },
@@ -57,6 +59,7 @@ const ADMIN_SECTIONS: { id: string; label: string }[] = [
   { id: "featured-deals", label: "Featured Deals" },
   { id: "product-identity", label: "Product Identity Brain" },
   { id: "demand-brain", label: "Demand Brain" },
+  { id: "product-research", label: "Product Research" },
   { id: "taxonomy-status", label: "Taxonomy Status" },
   { id: "ai-classification", label: "AI Classification" },
   { id: "msrp", label: "MSRP Verification" },
@@ -186,9 +189,21 @@ export default function AdminPage() {
     return ADMIN_SECTIONS.map(s => s.id);
   });
   const [arrangeOpen, setArrangeOpen] = useState(false);
+  const [draggedSectionId, setDraggedSectionId] = useState<string | null>(null);
+  const [hiddenSections, setHiddenSections] = useState<string[]>(() => {
+    try {
+      return normalizeSectionIds(
+        JSON.parse(localStorage.getItem(ADMIN_SECTION_HIDDEN_KEY) ?? "[]"),
+        ADMIN_SECTIONS.map(section => section.id),
+      );
+    } catch {
+      return [];
+    }
+  });
 
   const sectionStyle = (id: string): CSSProperties => ({
     order: sectionOrder.includes(id) ? sectionOrder.indexOf(id) : sectionOrder.length,
+    display: hiddenSections.includes(id) ? "none" : undefined,
     maxHeight: collapsedSections.includes(id) ? "90px" : "9000px",
     overflow: "hidden",
     transition: "max-height 0.35s ease-out",
@@ -196,10 +211,11 @@ export default function AdminPage() {
 
   const moveSectionUp = (id: string) => {
     setSectionOrder(prev => {
-      const idx = prev.indexOf(id);
-      if (idx <= 0) return prev;
-      const next = [...prev];
-      [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+      const visibleOrder = prev.filter(sectionId => !hiddenSections.includes(sectionId));
+      const visibleIndex = visibleOrder.indexOf(id);
+      if (visibleIndex <= 0) return prev;
+      const targetIndex = prev.indexOf(visibleOrder[visibleIndex - 1]);
+      const next = moveSectionToIndex(prev, id, targetIndex);
       try { localStorage.setItem(ADMIN_SECTION_ORDER_KEY, JSON.stringify(next)); } catch {}
       return next;
     });
@@ -207,11 +223,33 @@ export default function AdminPage() {
 
   const moveSectionDown = (id: string) => {
     setSectionOrder(prev => {
-      const idx = prev.indexOf(id);
-      if (idx < 0 || idx >= prev.length - 1) return prev;
-      const next = [...prev];
-      [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+      const visibleOrder = prev.filter(sectionId => !hiddenSections.includes(sectionId));
+      const visibleIndex = visibleOrder.indexOf(id);
+      if (visibleIndex < 0 || visibleIndex >= visibleOrder.length - 1) return prev;
+      const targetIndex = prev.indexOf(visibleOrder[visibleIndex + 1]);
+      const next = moveSectionToIndex(prev, id, targetIndex);
       try { localStorage.setItem(ADMIN_SECTION_ORDER_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+
+  const persistSectionOrder = (next: string[]) => {
+    setSectionOrder(next);
+    try { localStorage.setItem(ADMIN_SECTION_ORDER_KEY, JSON.stringify(next)); } catch {}
+  };
+
+  const moveDraggedSection = (targetId: string) => {
+    if (!draggedSectionId || draggedSectionId === targetId) return;
+    const targetIndex = sectionOrder.indexOf(targetId);
+    persistSectionOrder(moveSectionToIndex(sectionOrder, draggedSectionId, targetIndex));
+  };
+
+  const setSectionHidden = (id: string, hidden: boolean) => {
+    setHiddenSections(prev => {
+      const next = hidden
+        ? (prev.includes(id) ? prev : [...prev, id])
+        : prev.filter(sectionId => sectionId !== id);
+      try { localStorage.setItem(ADMIN_SECTION_HIDDEN_KEY, JSON.stringify(next)); } catch {}
       return next;
     });
   };
@@ -2663,8 +2701,33 @@ export default function AdminPage() {
                   No market snapshot has been captured yet. The first one will run after a completed feed sync, or you can capture it here.
                 </div>
               )}
-              <ProductResearchPanel />
             </div>
+          </section>
+
+          <section
+            id="section-product-research"
+            style={sectionStyle("product-research")}
+            className="card-elevated animate-float-in p-5 md:p-6 relative"
+            data-testid="product-research-section"
+          >
+            <CollapseButton
+              id="product-research"
+              collapsed={collapsedSections}
+              onToggle={toggleSection}
+              onArrange={() => setArrangeOpen(true)}
+            />
+            <div className="mb-5 flex items-start gap-3 pr-32">
+              <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-blue-700 to-slate-500 shadow-lg shadow-blue-700/20">
+                <Search className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <div className="font-display text-xl font-bold">Product Research</div>
+                <div className="mt-1 text-sm text-muted-foreground">
+                  Research recent sold activity and build trusted demand evidence for specific models.
+                </div>
+              </div>
+            </div>
+            <ProductResearchPanel />
           </section>
 
           <section id="section-taxonomy-status" style={sectionStyle("taxonomy-status")} className="card-elevated animate-float-in p-5 md:p-6 relative" data-testid="taxonomy-status-panel">
@@ -4438,31 +4501,69 @@ export default function AdminPage() {
               Arrange Sections
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-1 py-2 max-h-96 overflow-y-auto">
-            {sectionOrder.map((id, idx) => {
+          <div className="space-y-3 py-2 max-h-[60vh] overflow-y-auto">
+            <div className="rounded-lg border border-dashed border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+              Drag sections by the handle to place them exactly where you want. Arrow buttons remain available for keyboard control.
+            </div>
+            <div className="space-y-1">
+            {sectionOrder.filter(id => !hiddenSections.includes(id)).map((id) => {
               const section = ADMIN_SECTIONS.find(s => s.id === id);
               if (!section) return null;
+              const visibleOrder = sectionOrder.filter(sectionId => !hiddenSections.includes(sectionId));
+              const visibleIndex = visibleOrder.indexOf(id);
               return (
-                <div key={id} className="flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm">
-                  <GripVertical className="h-4 w-4 text-muted-foreground shrink-0" />
-                  <span className={cn("flex-1 truncate", collapsedSections.includes(id) && "text-muted-foreground line-through")}>{section.label}</span>
+                <div
+                  key={id}
+                  draggable
+                  onDragStart={(event) => {
+                    setDraggedSectionId(id);
+                    event.dataTransfer.effectAllowed = "move";
+                    event.dataTransfer.setData("text/plain", id);
+                  }}
+                  onDragEnter={(event) => {
+                    event.preventDefault();
+                    moveDraggedSection(id);
+                  }}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = "move";
+                  }}
+                  onDragEnd={() => setDraggedSectionId(null)}
+                  className={cn(
+                    "flex cursor-grab items-center gap-1.5 rounded-lg border bg-background px-3 py-2 text-sm transition",
+                    draggedSectionId === id && "border-primary/50 bg-primary/5 opacity-60",
+                  )}
+                  data-testid={`section-drag-${id}`}
+                >
+                  <GripVertical className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden="true" />
+                  <span className={cn("flex-1 truncate", collapsedSections.includes(id) && "text-muted-foreground")}>{section.label}</span>
                   <Button
                     variant="ghost"
                     size="icon"
                     className="h-7 w-7 shrink-0"
                     onClick={() => toggleSection(id)}
-                    title={collapsedSections.includes(id) ? "Show section" : "Minimize section"}
+                    title={collapsedSections.includes(id) ? "Expand section" : "Collapse section"}
                     data-testid={`section-toggle-${id}`}
                   >
                     {collapsedSections.includes(id)
-                      ? <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />
-                      : <Eye className="h-3.5 w-3.5" />}
+                      ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                      : <ChevronUp className="h-3.5 w-3.5" />}
                   </Button>
                   <Button
                     variant="ghost"
                     size="icon"
                     className="h-7 w-7 shrink-0"
-                    disabled={idx === 0}
+                    onClick={() => setSectionHidden(id, true)}
+                    title="Hide section"
+                    data-testid={`section-hide-${id}`}
+                  >
+                    <EyeOff className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 shrink-0"
+                    disabled={visibleIndex === 0}
                     onClick={() => moveSectionUp(id)}
                     data-testid={`section-up-${id}`}
                   >
@@ -4472,7 +4573,7 @@ export default function AdminPage() {
                     variant="ghost"
                     size="icon"
                     className="h-7 w-7 shrink-0"
-                    disabled={idx === sectionOrder.length - 1}
+                    disabled={visibleIndex === visibleOrder.length - 1}
                     onClick={() => moveSectionDown(id)}
                     data-testid={`section-down-${id}`}
                   >
@@ -4481,6 +4582,34 @@ export default function AdminPage() {
                 </div>
               );
             })}
+            </div>
+            {hiddenSections.length > 0 && (
+              <div className="space-y-1 border-t border-border pt-3" data-testid="hidden-sections-list">
+                <div className="px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Hidden sections
+                </div>
+                {sectionOrder.filter(id => hiddenSections.includes(id)).map(id => {
+                  const section = ADMIN_SECTIONS.find(item => item.id === id);
+                  if (!section) return null;
+                  return (
+                    <div key={id} className="flex items-center gap-2 rounded-lg border border-dashed px-3 py-2 text-sm text-muted-foreground">
+                      <EyeOff className="h-4 w-4 shrink-0" />
+                      <span className="flex-1 truncate">{section.label}</span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7"
+                        onClick={() => setSectionHidden(id, false)}
+                        data-testid={`section-restore-${id}`}
+                      >
+                        <Eye className="mr-1 h-3.5 w-3.5" />
+                        Show
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
           <DialogFooter className="gap-2">
             <Button
@@ -4488,8 +4617,9 @@ export default function AdminPage() {
               size="sm"
               onClick={() => {
                 const defaultOrder = ADMIN_SECTIONS.map(s => s.id);
-                setSectionOrder(defaultOrder);
-                try { localStorage.setItem(ADMIN_SECTION_ORDER_KEY, JSON.stringify(defaultOrder)); } catch {}
+                persistSectionOrder(defaultOrder);
+                setHiddenSections([]);
+                try { localStorage.removeItem(ADMIN_SECTION_HIDDEN_KEY); } catch {}
               }}
               data-testid="arrange-reset"
             >
