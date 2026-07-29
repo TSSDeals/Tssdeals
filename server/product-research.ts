@@ -135,6 +135,16 @@ export async function saveProductResearchObservation(
       `, [input.productIdentityId]);
       if (!approved.rowCount) throw new Error("Product identity is not approved for trusted research");
     }
+    // Re-saving the same dated eBay research URL is a correction, not a second
+    // observation. This also repairs records created before URL dates were used.
+    await client.query(`
+      DELETE FROM product_research_observations
+       WHERE source='ebay_product_research'
+         AND research_key=$1
+         AND window_days=$2
+         AND source_url=$3
+         AND period_end<>$4::date
+    `, [input.researchKey, input.windowDays, input.sourceUrl, input.periodEnd]);
     const result = await client.query(`
       INSERT INTO product_research_observations (
         observation_type, product_identity_id, research_key, label, marketplace,
