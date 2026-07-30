@@ -1,6 +1,7 @@
 import type { InsertDeal } from "@shared/schema";
 import { shopifyProductToDeal, type ShopifyProduct, type ShopifyVariant } from "./shopify-sync";
 import { classifyDeterministicProduct } from "./deterministic-product-classifier";
+import { isGolfClubAccessoryOnly } from "./golf-product-classifier";
 
 export const SHOPIFY_COLLECTIVE_SOURCE_ID = "shopify-collective";
 export const SHOPIFY_COLLECTIVE_SOURCE_NAME = "Twin Seam Collective";
@@ -148,6 +149,7 @@ export function collectiveCategory(product: CollectiveProduct): { sportId: strin
   if (taxonomyRule) {
     const text = productText(product);
     if (EXCLUDED.test(text)) return null;
+    if (taxonomyRule.sportId === "golf" && isGolfClubAccessoryOnly(text)) return null;
     const deterministic = classifyDeterministicProduct(text);
     if (deterministic) {
       return {
@@ -155,6 +157,7 @@ export function collectiveCategory(product: CollectiveProduct): { sportId: strin
         equipmentTypeId: deterministic.equipmentTypeId,
       };
     }
+    if (taxonomyRule.sportId === "golf") return null;
     return { sportId: taxonomyRule.sportId, equipmentTypeId: taxonomyRule.equipmentTypeId };
   }
   // A populated Shopify category is stronger evidence than merchant wording.

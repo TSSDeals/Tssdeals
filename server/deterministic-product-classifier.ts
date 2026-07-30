@@ -1,3 +1,8 @@
+import {
+  classifyGolfClubProduct,
+  isGolfClubAccessoryOnly,
+} from "./golf-product-classifier";
+
 export type DeterministicProductCategory = {
   sportId: string;
   equipmentTypeId: string;
@@ -57,6 +62,17 @@ export function classifyDeterministicProduct(text: string): DeterministicProduct
   }
   if (RUNNING_SHOE.test(value)) {
     return category("running", "run-shoes", "explicit running shoe");
+  }
+
+  const golf = classifyGolfClubProduct(value);
+  if (golf) {
+    return category(golf.sportId, golf.equipmentTypeId, golf.reason);
+  }
+  if (
+    isGolfClubAccessoryOnly(value)
+    || /\b(?:impact|drill|screw|torque|ratchet|socket)\s+drivers?\b/i.test(value)
+  ) {
+    return null;
   }
 
   if (/\b(?:golf\s+)?drivers?\b/i.test(value) && !/\b(?:headcover|cover)\b/i.test(value)) {
