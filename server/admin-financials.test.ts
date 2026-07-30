@@ -60,6 +60,23 @@ test("statement parser combines separate debit and credit columns", () => {
   assert.deepEqual(rows.map((row) => row.category), ["Inventory", "Sales income"]);
 });
 
+test("credit-card CSV purchases are expenses and payments are credits", () => {
+  const rows = parseFinancialStatement(XLSX.write({
+    SheetNames: ["Activity"],
+    Sheets: {
+      Activity: XLSX.utils.aoa_to_sheet([
+        ["Date", "Description", "Amount"],
+        ["2026-07-12", "REPLIT, INC.", 78.02],
+        ["2026-07-13", "MOBILE PAYMENT - THANK YOU", -100],
+        ["2026-07-15", "PAYPAL *EBAY", 197.10],
+        ["2026-07-16", "MERCHANT REFUND", -25],
+      ]),
+    },
+  }, { type: "buffer", bookType: "xlsx" }), "card.xlsx", "credit_card");
+  assert.deepEqual(rows.map(row => row.amountCents), [-7_802, 10_000, -19_710, 2_500]);
+  assert.deepEqual(rows.map(row => row.category), ["Software", "Transfer", "Uncategorized", "Refunds"]);
+});
+
 test("transfers are excluded from operating cash flow by category", () => {
   assert.equal(categorizeFinancialTransaction("Online payment to card"), "Transfer");
   assert.equal(categorizeFinancialTransaction("Replit subscription"), "Software");
