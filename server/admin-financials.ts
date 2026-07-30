@@ -7,7 +7,7 @@ import { db } from "./db";
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 25 * 1024 * 1024, files: 1 },
+  limits: { fileSize: 25 * 1024 * 1024, files: 20 },
 });
 
 const clean = (value: unknown) => String(value ?? "").trim();
@@ -67,6 +67,7 @@ const DEBIT_HEADERS = ["debit", "withdrawal", "charge", "money out"];
 const CREDIT_HEADERS = ["credit", "deposit", "payment", "money in"];
 const PDF_DATE_PREFIX = /^(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)(?:\s+(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?))?\s+(.+)$/;
 const PDF_AMOUNT_SUFFIX = /(?:\s+)(\(?(?:[-+]?\$?\s*)?\d[\d,]*\.\d{2}\)?-?)(?:\s+(CR|CREDIT|DR|DEBIT))?$/i;
+const PDF_MONEY_LINE = /^\$?(\d[\d,]*\.\d{2})$/;
 
 function findColumn(headers: string[], aliases: string[]) {
   return headers.findIndex((header) => aliases.includes(headerKey(header)));
@@ -137,7 +138,18 @@ function statementReferenceDate(text: string) {
     /\b(?:statement\s+(?:date|ending)|closing\s+date|through)\D{0,12}(\d{1,2}\/\d{1,2}\/\d{2,4})\b/i,
   );
   if (explicit) return pdfDate(explicit[1], new Date().getFullYear(), null);
-  const years = Array.from(text.matchAll(/\b(20\d{2})\b/g), match => Number(match[1]));
+  const namedDate = text.match(
+    /\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2}),\s+(20\d{2})\b/i,
+  );
+  if (namedDate) {
+    const month = [
+      "january", "february", "march", "april", "may", "june",
+      "july", "august", "september", "october", "november", "december",
+    ].indexOf(namedDate[1].toLowerCase());
+    return new Date(Date.UTC(Number(namedDate[3]), month, Number(namedDate[2])));
+  }
+  const years = Array.from(text.matchAll(/\b(20\d{2})\b/g), match => Number(match[1]))
+    .filter(year => year >= 2000 && year <= new Date().getFullYear() + 1);
   return new Date(Date.UTC(years.length ? Math.max(...years) : new Date().getFullYear(), 11, 31));
 }
 
@@ -178,6 +190,111 @@ function pdfSignedAmount(
   return parsed;
 }
 
+function parsedPdfTransaction(
+  transactionDate: Date,
+  postedDate: Date | null,
+  description: string,
+  signedAmount: number,
+  filename: string,
+  sourceLine: number,
+  sourceText: string,
+): ParsedTransaction {
+  const fingerprint = crypto.createHash("sha256")
+    .update([transactionDate.toISOString().slice(0, 10), signedAmount, description.toLowerCase()].join("|"))
+    .digest("hex");
+  return {
+    transactionDate,
+    postedDate,
+    description,
+    amountCents: signedAmount,
+    category: categorizeFinancialTransaction(description),
+    fingerprint,
+    raw: { sourceFile: filename, sourceFormat: "pdf", sourceLine, sourceText },
+  };
+}
+
+function parseChaseStatementText(
+  lines: string[],
+  filename: string,
+  referenceDate: Date,
+): ParsedTransaction[] {
+  const sectionSign = new Map<string, 1 | -1>([
+    ["DEPOSITS AND ADDITIONS", 1],
+    ["ATM & DEBIT CARD WITHDRAWALS", -1],
+    ["ELECTRONIC WITHDRAWALS", -1],
+    ["FEES", -1],
+  ]);
+  if (!lines.includes("DEPOSITS AND ADDITIONS") || !lines.includes("ELECTRONIC WITHDRAWALS")) return [];
+
+  const rows: ParsedTransaction[] = [];
+  let sign: 1 | -1 | null = null;
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const line = lines[lineIndex];
+    if (line === "DAILY ENDING BALANCE") break;
+    if (sectionSign.has(line)) {
+      sign = sectionSign.get(line)!;
+      continue;
+    }
+    if (!sign || /^Total\b/i.test(line) || /^DATE DESCRIPTION AMOUNT$/i.test(line)) continue;
+    const dated = line.match(/^(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)\s+(.+)$/);
+    if (!dated) continue;
+
+    const block = [dated[2]];
+    let nextIndex = lineIndex + 1;
+    while (nextIndex < lines.length) {
+      const next = lines[nextIndex];
+      if (
+        sectionSign.has(next)
+        || next === "DAILY ENDING BALANCE"
+        || /^Total\b/i.test(next)
+        || /^DATE DESCRIPTION AMOUNT$/i.test(next)
+        || /^\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\s+/.test(next)
+      ) break;
+      block.push(next);
+      nextIndex += 1;
+    }
+
+    let amountIndex = -1;
+    let amountToken = "";
+    for (let index = block.length - 1; index >= 0; index -= 1) {
+      const standalone = block[index].match(PDF_MONEY_LINE);
+      const suffix = block[index].match(PDF_AMOUNT_SUFFIX);
+      if (standalone) {
+        amountIndex = index;
+        amountToken = standalone[1];
+        break;
+      }
+      if (suffix) {
+        amountIndex = index;
+        amountToken = suffix[1];
+        block[index] = block[index].slice(0, suffix.index).trim();
+        break;
+      }
+    }
+    if (amountIndex < 0) continue;
+    if (PDF_MONEY_LINE.test(block[amountIndex])) block.splice(amountIndex, 1);
+    const description = block
+      .filter(part => part && !/^Page \d+ of \d+$/i.test(part) && !/^-- \d+ of \d+ --$/.test(part))
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const transactionDate = pdfDate(dated[1], referenceDate.getUTCFullYear(), referenceDate);
+    const cents = amountCents(amountToken);
+    if (!transactionDate || !description || cents === null || cents === 0) continue;
+    rows.push(parsedPdfTransaction(
+      transactionDate,
+      null,
+      description,
+      sign * Math.abs(cents),
+      filename,
+      lineIndex + 1,
+      [line, ...block].join(" "),
+    ));
+    lineIndex = nextIndex - 1;
+  }
+  return rows;
+}
+
 export function parseFinancialStatementText(
   text: string,
   filename: string,
@@ -187,6 +304,8 @@ export function parseFinancialStatementText(
   const referenceDate = statementReferenceDate(text);
   const year = referenceDate.getUTCFullYear();
   const lines = text.split(/\r?\n/).map(line => line.replace(/\s+/g, " ").trim()).filter(Boolean);
+  const chaseRows = parseChaseStatementText(lines, filename, referenceDate);
+  if (chaseRows.length) return chaseRows;
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
     const dated = lines[lineIndex].match(PDF_DATE_PREFIX);
     if (!dated) continue;
@@ -197,23 +316,15 @@ export function parseFinancialStatementText(
     const description = dated[3].slice(0, amount.index).trim();
     const signedAmount = pdfSignedAmount(amount[1], amount[2], description, accountType);
     if (!transactionDate || !description || signedAmount === null || signedAmount === 0) continue;
-    const fingerprint = crypto.createHash("sha256")
-      .update([transactionDate.toISOString().slice(0, 10), signedAmount, description.toLowerCase()].join("|"))
-      .digest("hex");
-    parsed.push({
+    parsed.push(parsedPdfTransaction(
       transactionDate,
       postedDate,
       description,
-      amountCents: signedAmount,
-      category: categorizeFinancialTransaction(description),
-      fingerprint,
-      raw: {
-        sourceFile: filename,
-        sourceFormat: "pdf",
-        sourceLine: lineIndex + 1,
-        sourceText: lines[lineIndex],
-      },
-    });
+      signedAmount,
+      filename,
+      lineIndex + 1,
+      lines[lineIndex],
+    ));
   }
   return parsed;
 }
@@ -256,15 +367,28 @@ async function importStatement(accountId: string, filename: string, buffer: Buff
       WHERE account_id = ${accountId} AND file_checksum = ${checksum}
       LIMIT 1
     `);
-    if ((prior as any).rows?.[0]) {
-      return { imported: 0, duplicates: transactions.length, alreadyImported: true };
+    const priorRow = (prior as any).rows?.[0];
+    if (priorRow && Number(priorRow.row_count) >= transactions.length) {
+      return { imported: 0, duplicates: transactions.length, alreadyImported: true, reprocessed: false };
     }
-    const imported = await tx.execute(sql`
-      INSERT INTO financial_imports (account_id, source_file_name, file_checksum, row_count, status)
-      VALUES (${accountId}, ${filename}, ${checksum}, ${transactions.length}, 'complete')
-      RETURNING id
-    `);
-    const importId = (imported as any).rows[0].id;
+    let importId: string;
+    if (priorRow) {
+      importId = priorRow.id;
+      await tx.execute(sql`DELETE FROM financial_transactions WHERE import_id = ${importId}`);
+      await tx.execute(sql`
+        UPDATE financial_imports
+        SET source_file_name = ${filename}, row_count = ${transactions.length},
+            status = 'complete', imported_at = NOW()
+        WHERE id = ${importId}
+      `);
+    } else {
+      const imported = await tx.execute(sql`
+        INSERT INTO financial_imports (account_id, source_file_name, file_checksum, row_count, status)
+        VALUES (${accountId}, ${filename}, ${checksum}, ${transactions.length}, 'complete')
+        RETURNING id
+      `);
+      importId = (imported as any).rows[0].id;
+    }
     let inserted = 0;
     for (let offset = 0; offset < transactions.length; offset += 400) {
       const chunk = transactions.slice(offset, offset + 400);
@@ -283,7 +407,12 @@ async function importStatement(accountId: string, filename: string, buffer: Buff
       `);
       inserted += (result as any).rows?.length ?? 0;
     }
-    return { imported: inserted, duplicates: transactions.length - inserted, alreadyImported: false };
+    return {
+      imported: inserted,
+      duplicates: transactions.length - inserted,
+      alreadyImported: false,
+      reprocessed: Boolean(priorRow),
+    };
   });
 }
 
@@ -320,18 +449,58 @@ export function registerAdminFinancialRoutes(app: Express, isAdmin: RequestHandl
     res.status(201).json((result as any).rows[0]);
   });
 
-  app.post("/api/admin/financial/import", isAdmin, upload.single("file"), async (req: any, res) => {
-    if (!req.file) return res.status(400).json({ message: "Choose a CSV, Excel, or PDF statement." });
+  app.post("/api/admin/financial/import", isAdmin, upload.fields([
+    { name: "files", maxCount: 20 },
+    { name: "file", maxCount: 1 },
+  ]), async (req: any, res) => {
+    const files = [
+      ...((req.files?.files as Express.Multer.File[] | undefined) ?? []),
+      ...((req.files?.file as Express.Multer.File[] | undefined) ?? []),
+    ];
+    if (!files.length) return res.status(400).json({ message: "Choose one or more CSV, Excel, or PDF statements." });
     const accountId = clean(req.body?.accountId);
     if (!accountId) return res.status(400).json({ message: "Choose the account for this statement." });
-    try {
-      res.json({
-        file: req.file.originalname,
-        ...(await importStatement(accountId, req.file.originalname, req.file.buffer)),
-      });
-    } catch (error: any) {
-      res.status(400).json({ message: error?.message ?? "Statement import failed." });
+    const results: Array<Record<string, unknown>> = [];
+    for (const file of files) {
+      try {
+        results.push({
+          file: file.originalname,
+          success: true,
+          ...(await importStatement(accountId, file.originalname, file.buffer)),
+        });
+      } catch (error: any) {
+        results.push({
+          file: file.originalname,
+          success: false,
+          message: error?.message ?? "Statement import failed.",
+        });
+      }
     }
+    const successful = results.filter(result => result.success);
+    const failed = results.filter(result => !result.success);
+    const imported = successful.reduce((sum, result) => sum + Number(result.imported ?? 0), 0);
+    const duplicates = successful.reduce((sum, result) => sum + Number(result.duplicates ?? 0), 0);
+    const reprocessed = successful.filter(result => result.reprocessed).length;
+    const alreadyImported = successful.filter(result => result.alreadyImported).length;
+    const payload = {
+      files: results,
+      fileCount: files.length,
+      successful: successful.length,
+      failed: failed.length,
+      imported,
+      duplicates,
+      reprocessed,
+      alreadyImported,
+    };
+    if (!successful.length) {
+      return res.status(400).json({
+        ...payload,
+        message: failed.length === 1
+          ? failed[0].message
+          : `None of the ${files.length} statements could be imported.`,
+      });
+    }
+    res.json(payload);
   });
 
   app.get("/api/admin/financial/summary", isAdmin, async (req, res) => {
