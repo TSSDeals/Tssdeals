@@ -1,5 +1,6 @@
 import type { InsertDeal } from "@shared/schema";
 import { classifyDealAttributes } from "./sub-filter-classifier";
+import { classifyGolfClubProduct } from "./golf-product-classifier";
 import { EbayIntegrationError, ebayErrorFromResponse, logEbayError } from "./ebay-errors";
 import {
   fetchEbayBrowseJson,
@@ -248,7 +249,23 @@ export function ebayItemToDeal(
 
   const isBuyItNow = item.buyingOptions?.includes("FIXED_PRICE") ?? true;
 
-  const finalEquipmentTypeId = reclassifyBattingGloves(item.title, sportId, equipmentTypeId);
+  let finalEquipmentTypeId = reclassifyBattingGloves(item.title, sportId, equipmentTypeId);
+  if (sportId === "golf") {
+    const golfClub = classifyGolfClubProduct(item.title);
+    const clubFallback = [
+      "golf-drivers",
+      "golf-irons",
+      "golf-iron-sets",
+      "golf-wedges",
+      "golf-putters",
+      "golf-other",
+    ].includes(equipmentTypeId);
+    if (golfClub) {
+      finalEquipmentTypeId = golfClub.equipmentTypeId;
+    } else if (clubFallback) {
+      return null;
+    }
+  }
   const { subFilterId, dropWeight, sizeNumber } = classifyDealAttributes(item.title, finalEquipmentTypeId);
 
   return {
@@ -418,7 +435,25 @@ export function ebayDealItemToDeal(
     }
   }
 
-  const { subFilterId: subFilterId2, dropWeight: dropWeight2, sizeNumber: sizeNumber2 } = classifyDealAttributes(item.title, equipmentTypeId);
+  let finalEquipmentTypeId = equipmentTypeId;
+  if (sportId === "golf") {
+    const golfClub = classifyGolfClubProduct(item.title);
+    const clubFallback = [
+      "golf-drivers",
+      "golf-irons",
+      "golf-iron-sets",
+      "golf-wedges",
+      "golf-putters",
+      "golf-other",
+    ].includes(equipmentTypeId);
+    if (golfClub) {
+      finalEquipmentTypeId = golfClub.equipmentTypeId;
+    } else if (clubFallback) {
+      return null;
+    }
+  }
+
+  const { subFilterId: subFilterId2, dropWeight: dropWeight2, sizeNumber: sizeNumber2 } = classifyDealAttributes(item.title, finalEquipmentTypeId);
 
   return {
     sourceId: "ebay",
@@ -427,7 +462,7 @@ export function ebayDealItemToDeal(
     url: item.itemWebUrl,
     imageUrl: item.image?.imageUrl || null,
     sportId,
-    equipmentTypeId,
+    equipmentTypeId: finalEquipmentTypeId,
     subFilterId: subFilterId2,
     dropWeight: dropWeight2,
     sizeNumber: sizeNumber2,

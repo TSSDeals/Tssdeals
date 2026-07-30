@@ -90,6 +90,26 @@ test("Collective adapter rejects baseball-themed jewelry, hats, and unrelated dr
   }), []);
 });
 
+test("Collective adapter imports proven golf clubs into precise categories", () => {
+  const golfProduct = {
+    ...glove,
+    title: "TaylorMade Qi35 Max Driver 10.5 Stiff",
+    productType: "Golf Clubs",
+    tags: ["Golf", "Drivers"],
+    category: { fullName: "Sporting Goods > Golf > Golf Clubs" },
+  };
+  const deals = collectiveProductToDeals(golfProduct);
+  assert.equal(deals.length, 1);
+  assert.equal(deals[0].sportId, "golf");
+  assert.equal(deals[0].equipmentTypeId, "golf-drivers");
+
+  assert.deepEqual(collectiveProductToDeals({
+    ...golfProduct,
+    title: "TaylorMade Qi35 Driver Headcover",
+    tags: ["Golf", "Headcovers"],
+  }), []);
+});
+
 test("Collective adapter keeps the verified taxonomy category over broad product types", () => {
   const deals = collectiveProductToDeals({
     ...glove,

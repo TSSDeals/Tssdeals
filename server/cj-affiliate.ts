@@ -1,5 +1,6 @@
 import type { InsertDeal } from "@shared/schema";
 import { classifyDealAttributes } from "./sub-filter-classifier";
+import { classifyGolfClubProduct } from "./golf-product-classifier";
 
 const CJ_GRAPHQL_URL = "https://ads.api.cj.com/query";
 
@@ -555,7 +556,26 @@ export function cjProductToDeal(
   const condition: "new" | "preowned" =
     cjCondition === "used" || cjCondition === "refurbished" ? "preowned" : "new";
 
-  const finalEquipmentTypeId = classifyEquipmentTypeByTitle(product.title || "", sportId, equipmentTypeId);
+  let finalEquipmentTypeId = classifyEquipmentTypeByTitle(product.title || "", sportId, equipmentTypeId);
+  if (sportId === "golf") {
+    const text = [product.title, product.productType]
+      .filter(Boolean)
+      .join(" ");
+    const golfClub = classifyGolfClubProduct(text);
+    const clubFallback = [
+      "golf-drivers",
+      "golf-irons",
+      "golf-iron-sets",
+      "golf-wedges",
+      "golf-putters",
+      "golf-other",
+    ].includes(equipmentTypeId);
+    if (golfClub) {
+      finalEquipmentTypeId = golfClub.equipmentTypeId;
+    } else if (clubFallback) {
+      return null;
+    }
+  }
   const { subFilterId, dropWeight, sizeNumber } = classifyDealAttributes(product.title || "", finalEquipmentTypeId);
 
   return {
