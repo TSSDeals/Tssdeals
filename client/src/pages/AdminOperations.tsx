@@ -299,10 +299,10 @@ export default function AdminOperations() {
                 </Label>
               ) : (
                 <Label className={financialAccountId ? "cursor-pointer" : "cursor-not-allowed opacity-60"}>
-                  <Input className="hidden" type="file" accept=".csv,.xlsx,.xls" disabled={!financialAccountId} onChange={(event) => importFinancialStatement(event.target.files)} />
+                  <Input className="hidden" type="file" accept=".csv,.xlsx,.xls,.pdf,application/pdf" disabled={!financialAccountId} onChange={(event) => importFinancialStatement(event.target.files)} />
                   <span className="inline-flex h-9 items-center rounded-md border bg-background px-3 text-sm font-medium hover:bg-muted">
                     {uploading === "financial" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Upload className="mr-1.5 h-4 w-4" />}
-                    Import statement
+                    Import statement (CSV, Excel, or PDF)
                   </span>
                 </Label>
               )}
