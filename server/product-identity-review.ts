@@ -42,6 +42,11 @@ export function isSafeIdentityApproval(candidate: IdentityReviewCandidate): bool
     "throw hand",
     "bat length and weight",
     "certification",
+    "golf handedness",
+    "golf loft",
+    "shaft flex",
+    "iron set composition",
+    "head-only club component",
   ].filter((item) => evidence.includes(item)).length;
   return evidence.includes("model/style code") || exactVariantEvidence >= 2;
 }
