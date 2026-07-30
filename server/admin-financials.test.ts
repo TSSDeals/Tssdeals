@@ -4,11 +4,19 @@ import PDFDocument from "pdfkit";
 import * as XLSX from "xlsx";
 import {
   categorizeFinancialTransaction,
+  FINANCIAL_RESET_CONFIRMATION,
+  isFinancialResetConfirmed,
   normalizeAccountType,
   parseFinancialStatement,
   parseFinancialStatementText,
   parseUploadedFinancialStatement,
 } from "./admin-financials";
+
+test("financial reset requires the exact destructive-action confirmation", () => {
+  assert.equal(isFinancialResetConfirmed(FINANCIAL_RESET_CONFIRMATION), true);
+  assert.equal(isFinancialResetConfirmed("reset financial imports"), false);
+  assert.equal(isFinancialResetConfirmed("RESET ALL DATA"), false);
+});
 
 function workbookBuffer(rows: unknown[][]): Buffer {
   const workbook = XLSX.utils.book_new();

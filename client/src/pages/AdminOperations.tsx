@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { ArrowLeft, Calculator, CreditCard, Database, FileSpreadsheet, Landmark, Loader2, Search, Upload } from "lucide-react";
+import { ArrowLeft, Calculator, CreditCard, Database, FileSpreadsheet, Landmark, Loader2, Search, Trash2, Upload } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -252,6 +252,33 @@ export default function AdminOperations() {
     }
   };
 
+  const resetFinancialImports = async () => {
+    const confirmation = window.prompt(
+      "This removes imported statement transactions and import history only. Accounts, the business ledger, wholesale data, inventory, and sales are preserved.\n\nType RESET FINANCIAL IMPORTS to continue.",
+    );
+    if (confirmation !== "RESET FINANCIAL IMPORTS") {
+      if (confirmation !== null) toast({ title: "Reset cancelled", description: "The confirmation text did not match." });
+      return;
+    }
+    setUploading("financial-reset");
+    try {
+      const result = await jsonPost("/api/admin/financial/reset-imports", { confirmation });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/financial/accounts"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/financial/summary"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/financial/transactions"] }),
+      ]);
+      toast({
+        title: "Imported statements reset",
+        description: `${Number(result?.deletedTransactions ?? 0).toLocaleString()} transactions and ${Number(result?.deletedImports ?? 0).toLocaleString()} import records removed. Accounts were preserved.`,
+      });
+    } catch (error: any) {
+      toast({ title: "Financial reset failed", description: error?.message ?? "Unknown error", variant: "destructive" });
+    } finally {
+      setUploading(null);
+    }
+  };
+
   if (authLoading) {
     return <div className="grid min-h-screen place-items-center"><Loader2 className="h-7 w-7 animate-spin text-primary" /></div>;
   }
@@ -452,6 +479,16 @@ export default function AdminOperations() {
                   <Button onClick={createFinancialAccount} disabled={accountName.trim().length < 2}>Add account</Button>
                 </div>
                 <p className="mt-2 text-xs text-muted-foreground">For credit cards and loans, enter the amount currently owed as a positive balance. Statement imports are deduplicated and never contain online-banking passwords.</p>
+              </div>
+              <div className="flex flex-col gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="font-semibold">Reset imported statements</h2>
+                  <p className="mt-1 text-xs text-muted-foreground">Removes imported transactions and import history so corrected statements can be imported cleanly. Account setup and all other operations data stay intact.</p>
+                </div>
+                <Button variant="destructive" onClick={resetFinancialImports} disabled={uploading === "financial-reset"}>
+                  {uploading === "financial-reset" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Trash2 className="mr-1.5 h-4 w-4" />}
+                  Reset imports
+                </Button>
               </div>
             </div>
           )}

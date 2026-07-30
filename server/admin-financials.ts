@@ -14,6 +14,11 @@ const clean = (value: unknown) => String(value ?? "").trim();
 const headerKey = (value: unknown) => clean(value).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 
 const ACCOUNT_TYPES = new Set(["checking", "savings", "credit_card", "loan", "cash", "other"]);
+export const FINANCIAL_RESET_CONFIRMATION = "RESET FINANCIAL IMPORTS";
+
+export function isFinancialResetConfirmed(value: unknown) {
+  return clean(value) === FINANCIAL_RESET_CONFIRMATION;
+}
 
 export function normalizeAccountType(value: unknown) {
   const normalized = clean(value).toLowerCase().replace(/[\s-]+/g, "_");
@@ -538,6 +543,31 @@ export function registerAdminFinancialRoutes(app: Express, isAdmin: RequestHandl
       });
     }
     res.json(payload);
+  });
+
+  app.post("/api/admin/financial/reset-imports", isAdmin, async (req, res) => {
+    if (!isFinancialResetConfirmed(req.body?.confirmation)) {
+      return res.status(400).json({
+        message: `Type ${FINANCIAL_RESET_CONFIRMATION} exactly to reset imported statements.`,
+      });
+    }
+
+    const result = await db.transaction(async (tx) => {
+      const counts = await tx.execute(sql`
+        SELECT
+          (SELECT count(*)::int FROM financial_transactions WHERE import_id IS NOT NULL) AS transaction_count,
+          (SELECT count(*)::int FROM financial_imports) AS import_count
+      `);
+      await tx.execute(sql`DELETE FROM financial_transactions WHERE import_id IS NOT NULL`);
+      await tx.execute(sql`DELETE FROM financial_imports`);
+      return (counts as any).rows[0];
+    });
+
+    res.json({
+      deletedTransactions: Number(result?.transaction_count ?? 0),
+      deletedImports: Number(result?.import_count ?? 0),
+      accountsPreserved: true,
+    });
   });
 
   app.get("/api/admin/financial/summary", isAdmin, async (req, res) => {
