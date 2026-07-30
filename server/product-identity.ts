@@ -30,6 +30,11 @@ export type ProductIdentityProposal = {
     weight: number | null;
     drop: number | null;
     certification: string | null;
+    golfHand: "LH" | "RH" | null;
+    loft: number | null;
+    shaftFlex: "L" | "A" | "R" | "S" | "X" | null;
+    setComposition: string | null;
+    clubComponent: "complete" | "head_only" | null;
     condition: string | null;
   };
   confidence: "high" | "medium";
@@ -37,7 +42,7 @@ export type ProductIdentityProposal = {
   evidence: string[];
 };
 
-type FamilyKind = "glove" | "bat" | "any";
+type FamilyKind = "glove" | "bat" | "golf" | "any";
 
 const FAMILY_PATTERNS: Array<[RegExp, string, FamilyKind]> = [
   [/\ba\s?2000\b/i, "A2000", "glove"],
@@ -55,6 +60,23 @@ const FAMILY_PATTERNS: Array<[RegExp, string, FamilyKind]> = [
   [/\brawlings icon\b|\bicon\b/i, "Icon", "bat"],
   [/\bmeta\b/i, "Meta", "bat"],
   [/\batlas\b/i, "Atlas", "bat"],
+  [/\bqi[\s-]?35\b/i, "Qi35", "golf"],
+  [/\bqi[\s-]?10\b/i, "Qi10", "golf"],
+  [/\bstealth[\s-]?2\b/i, "Stealth 2", "golf"],
+  [/\bparadym\s+ai\s+smoke\b/i, "Paradym Ai Smoke", "golf"],
+  [/\bparadym\b/i, "Paradym", "golf"],
+  [/\belyte\b/i, "Elyte", "golf"],
+  [/\brogue\s+st\b/i, "Rogue ST", "golf"],
+  [/\bg[\s-]?440\b/i, "G440", "golf"],
+  [/\bg[\s-]?430\b/i, "G430", "golf"],
+  [/\btsr[\s-]?[234]\b/i, "TSR", "golf"],
+  [/\bgt[\s-]?[234]\b/i, "GT", "golf"],
+  [/\bvokey\s+sm[\s-]?10\b|\bsm[\s-]?10\b/i, "Vokey SM10", "golf"],
+  [/\bvokey\s+sm[\s-]?9\b|\bsm[\s-]?9\b/i, "Vokey SM9", "golf"],
+  [/\bspider(?:\s+tour|\s+gt|\s+x)?\b/i, "Spider", "golf"],
+  [/\bai[\s-]?one\b/i, "Ai-One", "golf"],
+  [/\bscotty\s+cameron\s+phantom\b/i, "Scotty Cameron Phantom", "golf"],
+  [/\bscotty\s+cameron\s+(?:studio\s+style\s+)?newport\b/i, "Scotty Cameron Newport", "golf"],
 ];
 
 const GENERIC_MODEL_WORDS = new Set([
@@ -158,6 +180,50 @@ function certification(text: string, raw: Record<string, unknown>): string | nul
   return candidate ? candidate.toUpperCase() : null;
 }
 
+const GOLF_ACCESSORY =
+  /\b(?:headcovers?|club covers?|grip kits?|adapters?|sleeves?|ferrules?|wrenches?|brushes?|towels?|cleaners?)\b|\b(?:grip|weight)\s+only\b/i;
+
+function golfHand(text: string, raw: Record<string, unknown>): "LH" | "RH" | null {
+  const value = `${firstRaw(raw, ["handedness", "hand", "dexterity"])} ${text}`;
+  if (/\b(?:left[- ]hand(?:ed)?|lefty|lh)\b/i.test(value)) return "LH";
+  if (/\b(?:right[- ]hand(?:ed)?|rh)\b/i.test(value)) return "RH";
+  return null;
+}
+
+function golfLoft(text: string, raw: Record<string, unknown>): number | null {
+  const structured = firstRaw(raw, ["loft", "clubLoft"]);
+  const structuredNumber = Number(structured.replace(/[^\d.]/g, ""));
+  if (structured && Number.isFinite(structuredNumber) && structuredNumber >= 7 && structuredNumber <= 64) {
+    return structuredNumber;
+  }
+  const value = text;
+  const match = value.match(/\b(7(?:\.5)?|8(?:\.5)?|9(?:\.5)?|10(?:\.5)?|11(?:\.5)?|12|13(?:\.5)?|14|15|16(?:\.5)?|17|18|19|20|21|22|23|24|25|26|27|28|30|32|34|35|36|38|40|42|44|46|48|50|52|54|56|58|60|62|64)\s*(?:°|deg(?:ree)?s?)\b/i);
+  return match ? Number(match[1]) : null;
+}
+
+function golfShaftFlex(text: string, raw: Record<string, unknown>): "L" | "A" | "R" | "S" | "X" | null {
+  const structured = firstRaw(raw, ["shaftFlex", "flex", "golfClubFlex"]).toLowerCase();
+  if (/^(?:l|ladies|womens?)$/.test(structured)) return "L";
+  if (/^(?:a|senior|lite)$/.test(structured)) return "A";
+  if (/^(?:x|x-stiff|extra stiff)$/.test(structured)) return "X";
+  if (/^(?:s|stiff)$/.test(structured)) return "S";
+  if (/^(?:r|reg|regular)$/.test(structured)) return "R";
+  const value = text;
+  if (/\b(?:ladies|womens?|lady)\s+flex\b/i.test(value)) return "L";
+  if (/\b(?:senior|lite|a)\s+flex\b/i.test(value)) return "A";
+  if (/\b(?:extra[- ]?stiff|x[- ]?stiff|x)\s+flex\b/i.test(value)) return "X";
+  if (/\b(?:stiff|s)\s+flex\b/i.test(value)) return "S";
+  if (/\b(?:regular|reg|r)\s+flex\b/i.test(value)) return "R";
+  return null;
+}
+
+function golfSetComposition(text: string, raw: Record<string, unknown>): string | null {
+  const structured = firstRaw(raw, ["setMakeup", "setComposition", "clubSet"]);
+  const value = structured || text;
+  const match = value.match(/\b([3-9](?:\s*-\s*|\s+thru\s+|\s+through\s+)(?:[4-9]|PW|AW|GW|SW)(?:\s*[,/+&]\s*(?:PW|AW|GW|SW)){0,3})\b/i);
+  return match ? match[1].toUpperCase().replace(/\s+/g, "") : null;
+}
+
 export function proposeProductIdentity(input: ProductIdentityInput): ProductIdentityProposal | null {
   const title = normalizedText(input.title);
   const raw = rawObject(input.raw);
@@ -173,6 +239,7 @@ export function proposeProductIdentity(input: ProductIdentityInput): ProductIden
   ) return null;
   if (familyMatch.kind === "glove" && !equipmentTypeId.includes("glove")) return null;
   if (familyMatch.kind === "bat" && !equipmentTypeId.includes("bat")) return null;
+  if (familyMatch.kind === "golf" && sportId !== "golf") return null;
 
   const family = familyMatch.family;
   const code = modelCode(title, raw, family);
@@ -193,8 +260,20 @@ export function proposeProductIdentity(input: ProductIdentityInput): ProductIden
     weight: equipmentTypeId.includes("bat") ? dimensions.weight : null,
     drop: equipmentTypeId.includes("bat") ? drop : null,
     certification: equipmentTypeId.includes("bat") ? certification(combined, raw) : null,
+    golfHand: sportId === "golf" ? golfHand(combined, raw) : null,
+    loft: sportId === "golf" ? golfLoft(combined, raw) : null,
+    shaftFlex: sportId === "golf" ? golfShaftFlex(combined, raw) : null,
+    setComposition: sportId === "golf" && equipmentTypeId.includes("iron")
+      ? golfSetComposition(combined, raw) : null,
+    clubComponent: sportId === "golf"
+      ? /\bhead\s*only\b|\bdriver\s*head\b|\bclub\s*head\b/i.test(combined)
+        ? "head_only"
+        : "complete"
+      : null,
     condition: normalizedText(input.condition).toLowerCase() || null,
   };
+  if (sportId === "golf" && GOLF_ACCESSORY.test(combined)) return null;
+  if (sportId === "golf" && /\bshaft\s+only\b|\breplacement\s+shaft\b/i.test(combined)) return null;
   const evidence = [
     "canonical brand",
     familyMatch.evidence,
@@ -205,6 +284,11 @@ export function proposeProductIdentity(input: ProductIdentityInput): ProductIden
   if (variant.throwHand) evidence.push("throw hand");
   if (variant.length && variant.weight) evidence.push("bat length and weight");
   if (variant.certification) evidence.push("certification");
+  if (variant.golfHand) evidence.push("golf handedness");
+  if (variant.loft) evidence.push("golf loft");
+  if (variant.shaftFlex) evidence.push("shaft flex");
+  if (variant.setComposition) evidence.push("iron set composition");
+  if (variant.clubComponent === "head_only") evidence.push("head-only club component");
 
   const familyKey = [
     canonicalToken(canonicalBrand), sportId, equipmentTypeId,
@@ -212,7 +296,8 @@ export function proposeProductIdentity(input: ProductIdentityInput): ProductIden
   ];
   const variantKey = [
     ...familyKey, variant.size, variant.throwHand, variant.length, variant.weight,
-    variant.drop, variant.certification, variant.condition,
+    variant.drop, variant.certification, variant.golfHand, variant.loft,
+    variant.shaftFlex, variant.setComposition, variant.clubComponent, variant.condition,
   ];
   return {
     dealId: input.id,

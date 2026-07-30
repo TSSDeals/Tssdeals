@@ -65,3 +65,24 @@ test("safe approval batches are capped at 25", () => {
   const rows = Array.from({ length: 40 }, (_, index) => candidate({ deal_id: `deal-${index}` }));
   assert.equal(safeIdentityApprovalBatch(rows, 40).length, 25);
 });
+
+test("safe approval recognizes exact golf configuration evidence", () => {
+  assert.equal(isSafeIdentityApproval(candidate({
+    title: "TaylorMade Qi10 Driver 10.5 Degree RH Stiff",
+    deal_sport_id: "golf",
+    sport_id: "golf",
+    deal_equipment_type_id: "golf-drivers",
+    equipment_type_id: "golf-drivers",
+    canonical_brand: "TaylorMade",
+    product_family: "Qi10",
+    model_code: null,
+    evidence: [
+      "canonical brand",
+      "recognized Qi10 model family in title",
+      "stored non-Other sport and equipment classification",
+      "golf handedness",
+      "golf loft",
+      "shaft flex",
+    ],
+  })), true);
+});

@@ -47,8 +47,84 @@ test("normalizes equivalent Supra bat dimensions without collapsing condition", 
   assert.notEqual(first.variantFingerprint, second.variantFingerprint);
   assert.deepEqual(first.variant, {
     size: null, throwHand: null, length: 27, weight: 17, drop: 10,
-    certification: "USSSA", condition: "new",
+    certification: "USSSA", golfHand: null, loft: null, shaftFlex: null,
+    setComposition: null, clubComponent: null, condition: "new",
   });
+});
+
+test("golf identities preserve loft, handedness, flex, and component differences", () => {
+  const common = {
+    brand: "TaylorMade Golf",
+    sportId: "golf",
+    equipmentTypeId: "golf-drivers",
+    condition: "preowned",
+  };
+  const complete = proposeProductIdentity({
+    ...common,
+    id: "complete",
+    title: "TaylorMade Qi10 Driver 10.5 Degree RH Ventus Blue Stiff Flex",
+  });
+  const headOnly = proposeProductIdentity({
+    ...common,
+    id: "head",
+    title: "TaylorMade Qi10 10.5 Degree RH Driver Head Only",
+  });
+  assert.ok(complete && headOnly);
+  assert.equal(complete.familyFingerprint, headOnly.familyFingerprint);
+  assert.notEqual(complete.variantFingerprint, headOnly.variantFingerprint);
+  assert.deepEqual({
+    golfHand: complete.variant.golfHand,
+    loft: complete.variant.loft,
+    shaftFlex: complete.variant.shaftFlex,
+    clubComponent: complete.variant.clubComponent,
+  }, {
+    golfHand: "RH",
+    loft: 10.5,
+    shaftFlex: "S",
+    clubComponent: "complete",
+  });
+  assert.equal(headOnly.variant.clubComponent, "head_only");
+
+  const structured = proposeProductIdentity({
+    ...common,
+    id: "structured-golf",
+    title: "TaylorMade Qi10 Driver with Golf Pride Grip",
+    raw: { loft: "9", shaftFlex: "X", handedness: "LH" },
+  });
+  assert.ok(structured);
+  assert.equal(structured.variant.loft, 9);
+  assert.equal(structured.variant.shaftFlex, "X");
+  assert.equal(structured.variant.golfHand, "LH");
+});
+
+test("golf identities preserve iron set makeup and reject club accessories", () => {
+  const irons = proposeProductIdentity({
+    id: "irons",
+    title: "Callaway Paradym Iron Set 5-PW, AW Right Hand Regular Flex",
+    brand: "Callaway Golf",
+    sportId: "golf",
+    equipmentTypeId: "golf-iron-sets",
+    raw: { setMakeup: "5-PW, AW" },
+  });
+  assert.ok(irons);
+  assert.equal(irons.variant.setComposition, "5-PW,AW");
+  assert.equal(irons.variant.golfHand, "RH");
+  assert.equal(irons.variant.shaftFlex, "R");
+
+  assert.equal(proposeProductIdentity({
+    id: "cover",
+    title: "TaylorMade Qi10 Driver Headcover",
+    brand: "TaylorMade",
+    sportId: "golf",
+    equipmentTypeId: "golf-drivers",
+  }), null);
+  assert.equal(proposeProductIdentity({
+    id: "shaft",
+    title: "TaylorMade Qi10 Ventus Blue Stiff Replacement Shaft Only",
+    brand: "TaylorMade",
+    sportId: "golf",
+    equipmentTypeId: "golf-drivers",
+  }), null);
 });
 
 test("refuses generic, Other, and brandless products instead of guessing", () => {
