@@ -39,6 +39,30 @@ test("rejects golf accessories, replacement shafts, and tool drivers", () => {
   assert.equal(isGolfClubAccessoryOnly("Titleist Golf Towel"), true);
 });
 
+test("rejects non-golf hybrid products and compact model collisions", () => {
+  for (const title of [
+    "Valor Hybrid BBCOR Certified -3 Baseball Bat 33 30oz",
+    "Spiderz Hybrid Custom Baseball Softball Batting Gloves",
+    "Women's Navigator Hybrid Jacket Size XL",
+    "2026 Bettinardi BB-8W Milled Putter Golf Club",
+    "MLB Los Angeles Dodgers Lucky Cat Driver Cover",
+  ]) {
+    const result = classifyGolfClubProduct(title);
+    if (/Bettinardi/.test(title)) {
+      assert.equal(result?.equipmentTypeId, "golf-putters");
+    } else {
+      assert.equal(result, null, title);
+    }
+  }
+});
+
+test("retains explicit golf hybrids", () => {
+  assert.equal(
+    classifyGolfClubProduct("Used Ping G25 Mens RH 4 Hybrid Golf Club")?.equipmentTypeId,
+    "golf-irons",
+  );
+});
+
 test("retains complete clubs that identify the installed shaft", () => {
   assert.equal(
     classifyGolfClubProduct("TaylorMade Qi10 Driver with Ventus Blue Shaft Stiff")?.equipmentTypeId,
