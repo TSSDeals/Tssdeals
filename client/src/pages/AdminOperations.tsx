@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { ArrowLeft, Calculator, Database, FileSpreadsheet, Loader2, Search, Upload } from "lucide-react";
+import { ArrowLeft, Calculator, CreditCard, Database, FileSpreadsheet, Landmark, Loader2, Search, Upload } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +20,18 @@ async function jsonFetch(url: string) {
   const response = await fetch(url, { credentials: "include" });
   if (!response.ok) throw new Error((await response.json().catch(() => null))?.message ?? "Request failed");
   return response.json();
+}
+
+async function jsonPost(url: string, body: unknown) {
+  const response = await fetch(url, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const result = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(result?.message ?? "Request failed");
+  return result;
 }
 
 const LEDGER_SORT_OPTIONS = [
@@ -50,7 +62,7 @@ export default function AdminOperations() {
   const isAdmin = (user as any)?.isAdmin === true;
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState<"wholesale" | "ledger">("wholesale");
+  const [tab, setTab] = useState<"wholesale" | "ledger" | "financial">("wholesale");
   const [query, setQuery] = useState("");
   const [markup, setMarkup] = useState(25);
   const [wholesaleCompany, setWholesaleCompany] = useState("");
@@ -61,7 +73,13 @@ export default function AdminOperations() {
   const [ledgerStatus, setLedgerStatus] = useState("");
   const [ledgerSort, setLedgerSort] = useState("date");
   const [ledgerDirection, setLedgerDirection] = useState<"asc" | "desc">("desc");
-  const [uploading, setUploading] = useState<"wholesale" | "ledger" | null>(null);
+  const [uploading, setUploading] = useState<"wholesale" | "ledger" | "financial" | null>(null);
+  const [financialAccountId, setFinancialAccountId] = useState("");
+  const [financialCategory, setFinancialCategory] = useState("");
+  const [accountName, setAccountName] = useState("");
+  const [accountInstitution, setAccountInstitution] = useState("");
+  const [accountType, setAccountType] = useState("checking");
+  const [accountBalance, setAccountBalance] = useState("");
 
   const summary = useQuery({
     queryKey: ["/api/admin/operations/summary"],
@@ -107,8 +125,31 @@ export default function AdminOperations() {
     queryFn: () => jsonFetch("/api/admin/operations/ledger-statuses"),
     enabled: isAuthenticated && isAdmin && tab === "ledger",
   });
+  const financialAccounts = useQuery({
+    queryKey: ["/api/admin/financial/accounts"],
+    queryFn: () => jsonFetch("/api/admin/financial/accounts"),
+    enabled: isAuthenticated && isAdmin && tab === "financial",
+  });
+  const financialSummary = useQuery({
+    queryKey: ["/api/admin/financial/summary"],
+    queryFn: () => jsonFetch("/api/admin/financial/summary?months=12"),
+    enabled: isAuthenticated && isAdmin && tab === "financial",
+  });
+  const financialTransactions = useQuery({
+    queryKey: ["/api/admin/financial/transactions", query, financialAccountId, financialCategory],
+    queryFn: () => {
+      const params = new URLSearchParams({ q: query, accountId: financialAccountId, category: financialCategory });
+      return jsonFetch(`/api/admin/financial/transactions?${params.toString()}`);
+    },
+    enabled: isAuthenticated && isAdmin && tab === "financial",
+  });
 
-  const rows = useMemo(() => tab === "wholesale" ? (wholesale.data ?? []) : (ledger.data ?? []), [tab, wholesale.data, ledger.data]);
+  const rows = useMemo(() => tab === "wholesale"
+    ? (wholesale.data ?? [])
+    : tab === "ledger"
+      ? (ledger.data ?? [])
+      : (financialTransactions.data ?? []),
+  [tab, wholesale.data, ledger.data, financialTransactions.data]);
   const wholesaleSuggestions = useMemo(
     () => buildWholesaleSuggestions(wholesale.data ?? [], query),
     [wholesale.data, query],
@@ -141,6 +182,55 @@ export default function AdminOperations() {
       });
     } catch (error: any) {
       toast({ title: "Import failed", description: error?.message ?? "Unknown error", variant: "destructive" });
+    } finally {
+      setUploading(null);
+    }
+  };
+
+  const createFinancialAccount = async () => {
+    try {
+      await jsonPost("/api/admin/financial/accounts", {
+        name: accountName,
+        institution: accountInstitution,
+        accountType,
+        currentBalance: accountBalance,
+      });
+      setAccountName("");
+      setAccountInstitution("");
+      setAccountBalance("");
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/financial/accounts"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/financial/summary"] }),
+      ]);
+      toast({ title: "Financial account added", description: "No credentials were stored." });
+    } catch (error: any) {
+      toast({ title: "Account was not added", description: error?.message ?? "Unknown error", variant: "destructive" });
+    }
+  };
+
+  const importFinancialStatement = async (files: FileList | null) => {
+    if (!files?.length || !financialAccountId) {
+      toast({ title: "Choose an account and statement", variant: "destructive" });
+      return;
+    }
+    setUploading("financial");
+    try {
+      const form = new FormData();
+      form.append("accountId", financialAccountId);
+      form.append("file", files[0]);
+      const response = await fetch("/api/admin/financial/import", { method: "POST", credentials: "include", body: form });
+      const result = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(result?.message ?? "Statement import failed");
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/financial/summary"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/financial/transactions"] }),
+      ]);
+      toast({
+        title: result?.alreadyImported ? "Statement was already imported" : "Statement imported",
+        description: `${Number(result?.imported ?? 0).toLocaleString()} new transactions; ${Number(result?.duplicates ?? 0).toLocaleString()} duplicates skipped.`,
+      });
+    } catch (error: any) {
+      toast({ title: "Statement import failed", description: error?.message ?? "Unknown error", variant: "destructive" });
     } finally {
       setUploading(null);
     }
@@ -186,6 +276,9 @@ export default function AdminOperations() {
               <Button variant={tab === "ledger" ? "default" : "ghost"} size="sm" onClick={() => { setTab("ledger"); setQuery(""); }}>
                 <FileSpreadsheet className="mr-1.5 h-4 w-4" />Business ledger
               </Button>
+              <Button variant={tab === "financial" ? "default" : "ghost"} size="sm" onClick={() => { setTab("financial"); setQuery(""); }}>
+                <Landmark className="mr-1.5 h-4 w-4" />Financials
+              </Button>
             </div>
             <div className="flex flex-wrap gap-2">
               {tab === "wholesale" ? (
@@ -196,7 +289,7 @@ export default function AdminOperations() {
                     Import price lists
                   </span>
                 </Label>
-              ) : (
+              ) : tab === "ledger" ? (
                 <Label className="cursor-pointer">
                   <Input className="hidden" type="file" accept=".xlsx,.xls" onChange={(event) => uploadFiles("ledger", event.target.files)} />
                   <span className="inline-flex h-9 items-center rounded-md border bg-background px-3 text-sm font-medium hover:bg-muted">
@@ -204,11 +297,19 @@ export default function AdminOperations() {
                     Replace ledger
                   </span>
                 </Label>
+              ) : (
+                <Label className={financialAccountId ? "cursor-pointer" : "cursor-not-allowed opacity-60"}>
+                  <Input className="hidden" type="file" accept=".csv,.xlsx,.xls" disabled={!financialAccountId} onChange={(event) => importFinancialStatement(event.target.files)} />
+                  <span className="inline-flex h-9 items-center rounded-md border bg-background px-3 text-sm font-medium hover:bg-muted">
+                    {uploading === "financial" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Upload className="mr-1.5 h-4 w-4" />}
+                    Import statement
+                  </span>
+                </Label>
               )}
             </div>
           </div>
 
-          <div className={`mt-4 grid gap-3 ${tab === "wholesale" ? "sm:grid-cols-[1fr_180px]" : "sm:grid-cols-2 lg:grid-cols-[minmax(260px,1fr)_220px_210px_150px]"}`}>
+          <div className={`mt-4 grid gap-3 ${tab === "wholesale" ? "sm:grid-cols-[1fr_180px]" : tab === "ledger" ? "sm:grid-cols-2 lg:grid-cols-[minmax(260px,1fr)_220px_210px_150px]" : "sm:grid-cols-[minmax(240px,1fr)_220px_220px]"}`}>
             <div className="relative">
               <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
               <Input
@@ -217,7 +318,7 @@ export default function AdminOperations() {
                 onChange={(event) => setQuery(event.target.value)}
                 list={tab === "wholesale" && wholesaleSuggestions.length ? "wholesale-search-suggestions" : undefined}
                 autoComplete="off"
-                placeholder={tab === "wholesale" ? "Search model, SKU, UPC, size, color…" : "Search inventory, supplier, SKU, status…"}
+                placeholder={tab === "wholesale" ? "Search model, SKU, UPC, size, color…" : tab === "ledger" ? "Search inventory, supplier, SKU, status…" : "Search transactions, accounts, categories…"}
                 data-testid="operations-search"
               />
               {tab === "wholesale" && wholesaleSuggestions.length > 0 && (
@@ -273,6 +374,18 @@ export default function AdminOperations() {
                 </select>
               </>
             )}
+            {tab === "financial" && (
+              <>
+                <select aria-label="Filter transactions by account" value={financialAccountId} onChange={(event) => setFinancialAccountId(event.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm">
+                  <option value="">All accounts</option>
+                  {(financialAccounts.data ?? []).map((account: any) => <option key={account.id} value={account.id}>{account.name}</option>)}
+                </select>
+                <select aria-label="Filter transactions by category" value={financialCategory} onChange={(event) => setFinancialCategory(event.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm">
+                  <option value="">All categories</option>
+                  {["Sales income", "Inventory", "Shipping", "Software", "Interest", "Bank fees", "Refunds", "Transfer", "Uncategorized"].map((category) => <option key={category} value={category}>{category}</option>)}
+                </select>
+              </>
+            )}
           </div>
           {tab === "wholesale" && (
             <>
@@ -302,17 +415,43 @@ export default function AdminOperations() {
               <p className="mt-2 text-xs text-muted-foreground">Target price applies the 10% EID fee first, then your selected markup. Tax and shipping are not yet included.</p>
             </>
           )}
+          {tab === "financial" && (
+            <div className="mt-4 space-y-4">
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+                <SummaryCard label="Cash balance" value={money(financialSummary.data?.cash_balance_cents ?? 0)} />
+                <SummaryCard label="Debt balance" value={money(financialSummary.data?.debt_balance_cents ?? 0)} />
+                <SummaryCard label="12-month inflow" value={money(financialSummary.data?.inflow_cents ?? 0)} />
+                <SummaryCard label="12-month outflow" value={money(financialSummary.data?.outflow_cents ?? 0)} />
+                <SummaryCard label="Net cash flow" value={money(financialSummary.data?.net_cash_flow_cents ?? 0)} />
+              </div>
+              <div className="rounded-xl border bg-muted/30 p-4">
+                <div className="mb-3 flex items-center gap-2"><CreditCard className="h-4 w-4 text-primary" /><h2 className="font-semibold">Add an account without bank credentials</h2></div>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                  <Input value={accountName} onChange={(event) => setAccountName(event.target.value)} placeholder="Account name" />
+                  <Input value={accountInstitution} onChange={(event) => setAccountInstitution(event.target.value)} placeholder="Bank or card issuer" />
+                  <select value={accountType} onChange={(event) => setAccountType(event.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm">
+                    <option value="checking">Checking</option><option value="savings">Savings</option><option value="credit_card">Credit card</option><option value="loan">Loan</option><option value="cash">Cash</option><option value="other">Other</option>
+                  </select>
+                  <Input type="number" step="0.01" value={accountBalance} onChange={(event) => setAccountBalance(event.target.value)} placeholder="Current balance" />
+                  <Button onClick={createFinancialAccount} disabled={accountName.trim().length < 2}>Add account</Button>
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">For credit cards and loans, enter the amount currently owed as a positive balance. Statement imports are deduplicated and never contain online-banking passwords.</p>
+              </div>
+            </div>
+          )}
         </section>
 
         <section className="space-y-3">
-          {(wholesale.isFetching || ledger.isFetching) && <p className="text-sm text-muted-foreground">Updating results…</p>}
+          {(wholesale.isFetching || ledger.isFetching || financialTransactions.isFetching) && <p className="text-sm text-muted-foreground">Updating results…</p>}
           {rows.length === 0 ? (
             <div className="rounded-2xl border border-dashed p-10 text-center text-muted-foreground">
-              {summary.isLoading ? "Loading…" : tab === "wholesale" ? "Import the EID Excel price lists to begin." : "Import the ledger workbook to begin."}
+              {summary.isLoading ? "Loading…" : tab === "wholesale" ? "Import the EID Excel price lists to begin." : tab === "ledger" ? "Import the ledger workbook to begin." : "Add an account, select it, and import a statement to begin."}
             </div>
           ) : rows.map((row: any) => tab === "wholesale"
             ? <WholesaleRow key={row.id} row={row} />
-            : <LedgerRow key={row.id} row={row} />)}
+            : tab === "ledger"
+              ? <LedgerRow key={row.id} row={row} />
+              : <FinancialTransactionRow key={row.id} row={row} />)}
         </section>
       </div>
     </AppShell>
@@ -391,6 +530,21 @@ function LedgerRow({ row }: { row: any }) {
         <Price label="In-person minimum" value={row.in_person_minimum_cents} />
         <Price label="Revenue" value={row.revenue_cents ?? row.sale_price_cents} />
         <Price label="Net profit" value={row.profit_cents} emphasize />
+      </div>
+    </article>
+  );
+}
+
+function FinancialTransactionRow({ row }: { row: any }) {
+  const inflow = Number(row.amount_cents) >= 0;
+  return (
+    <article className="grid gap-3 rounded-2xl border bg-card p-4 shadow-sm sm:grid-cols-[1fr_auto] sm:items-center">
+      <div className="min-w-0">
+        <p className="text-xs text-muted-foreground">{[row.transaction_date, row.account_name, row.category].filter(Boolean).join(" · ")}</p>
+        <h2 className="mt-1 font-semibold">{row.description}</h2>
+      </div>
+      <div className={`text-lg font-bold ${inflow ? "text-emerald-700" : "text-slate-800"}`}>
+        {inflow ? "+" : "−"}{money(Math.abs(Number(row.amount_cents)))}
       </div>
     </article>
   );

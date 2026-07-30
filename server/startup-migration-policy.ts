@@ -65,6 +65,12 @@ export const STARTUP_MIGRATION_MANIFEST = [
     kind: "structural",
     description: "Reviewed Product Research targets with insufficient trustworthy market data",
   },
+  {
+    id: "20260730_010_private_financial_foundation",
+    checksum: "d8bf75a6073f51ae382444188a16535978524db410d419318232025d9579f62d",
+    kind: "structural",
+    description: "Private read-only financial accounts, statement imports, and transactions",
+  },
 ] as const;
 
 export type ApprovedSeedState = "empty" | "satisfied" | "partial";
