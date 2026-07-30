@@ -36,7 +36,6 @@ import {
   curateShopperSports,
   isVirtualShopperEquipmentId,
   normalizeShopperSportId,
-  shopperResultEquipmentTypeId,
 } from "@shared/equipment-groups";
 import {
   BASELINE_SPORTS_NAME,
@@ -54,6 +53,10 @@ import {
   parseRecentShopperSearches,
 } from "@shared/shopper-search-ux";
 import { dealsQueryFromSearch, searchWithDealsQuery } from "@/lib/deals-url-state";
+import {
+  chooseCategoryVisuals,
+  chooseStarterVisuals,
+} from "@/lib/homepage-affiliate-visuals";
 
 type SortOption = "newest" | "oldest" | "price-low" | "price-high" | "discount-high" | "a-z" | "z-a";
 
@@ -424,8 +427,6 @@ export default function DealsPage() {
   }, [twinSeamQuery.data, featured]);
 
   const homepageVisuals = useMemo(() => {
-    const categoryImages: Record<string, string> = {};
-    const starterImages: Record<string, string> = {};
     const defaultFeedDeals = ((defaultFeed.data ?? []) as any[])
       .flatMap((group) => group.deals ?? []);
     const visualDeals = [
@@ -437,29 +438,17 @@ export default function DealsPage() {
       && deals.findIndex((candidate) => candidate?.id === deal?.id) === index
     );
 
-    for (const deal of visualDeals) {
-      if (!deal?.imageUrl) continue;
-      const categoryId = shopperResultEquipmentTypeId(deal);
-      if (!categoryImages[categoryId]) categoryImages[categoryId] = deal.imageUrl;
-    }
-
-    const normalizedDeals = visualDeals
-      .filter((deal) => deal?.imageUrl && deal?.title)
-      .map((deal) => ({
-        deal,
-        title: String(deal.title).toLowerCase().replace(/[^a-z0-9]+/g, " "),
-      }));
-    for (const starter of SHOPPER_STARTER_SEARCHES) {
-      const significantTerms = starter.query
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, " ")
-        .split(/\s+/)
-        .filter((term) => term.length >= 3);
-      const match = normalizedDeals.find(({ title }) =>
-        significantTerms.every((term) => title.includes(term))
-      );
-      if (match) starterImages[starter.query] = match.deal.imageUrl;
-    }
+    const categoryVisuals = chooseCategoryVisuals(visualDeals);
+    const starterVisuals = chooseStarterVisuals(
+      visualDeals,
+      SHOPPER_STARTER_SEARCHES.map((starter) => starter.query),
+    );
+    const categoryImages = Object.fromEntries(
+      Object.entries(categoryVisuals).map(([id, visual]) => [id, visual.imageUrl]),
+    );
+    const starterImages = Object.fromEntries(
+      Object.entries(starterVisuals).map(([query, visual]) => [query, visual.imageUrl]),
+    );
 
     return { categoryImages, starterImages };
   }, [defaultFeed.data, homepageVisualDeals.data, twinSeamQuery.data]);
