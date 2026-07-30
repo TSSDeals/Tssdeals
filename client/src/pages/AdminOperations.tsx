@@ -226,7 +226,11 @@ export default function AdminOperations() {
         queryClient.invalidateQueries({ queryKey: ["/api/admin/financial/transactions"] }),
       ]);
       toast({
-        title: result?.alreadyImported ? "Statement was already imported" : "Statement imported",
+        title: result?.alreadyImported
+          ? "Statement was already imported"
+          : result?.reprocessed
+            ? "Statement reprocessed with improved PDF support"
+            : "Statement imported",
         description: `${Number(result?.imported ?? 0).toLocaleString()} new transactions; ${Number(result?.duplicates ?? 0).toLocaleString()} duplicates skipped.`,
       });
     } catch (error: any) {

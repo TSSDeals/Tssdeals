@@ -98,6 +98,41 @@ test("PDF statement dates cross the calendar year safely", () => {
   );
 });
 
+test("Chase PDF text parser combines multiline rows and excludes summary balances", () => {
+  const rows = parseFinancialStatementText(`
+    February 27, 2026
+    DEPOSITS AND ADDITIONS
+    DATE DESCRIPTION AMOUNT
+    02/02 Real Time Transfer Recd From Acme Customer
+    Reference 123456
+    $76.71
+    02/04 Shopify Payout
+    156.84
+    Total Deposits and Additions $233.55
+    ATM & DEBIT CARD WITHDRAWALS
+    DATE DESCRIPTION AMOUNT
+    02/02 GOOGLE WORKSPACE $18.44
+    Total ATM & Debit Card Withdrawals $18.44
+    ELECTRONIC WITHDRAWALS
+    DATE DESCRIPTION AMOUNT
+    02/06 Extra Innings Direct
+    Invoice 98765
+    $63.68
+    Total Electronic Withdrawals $63.68
+    FEES
+    DATE DESCRIPTION AMOUNT
+    02/27 Monthly Service Fee $15.00
+    Total Fees $15.00
+    DAILY ENDING BALANCE
+    02/02 $468.06
+    02/04 $624.90
+  `, "chase-checking.pdf", "checking");
+  assert.equal(rows.length, 5);
+  assert.deepEqual(rows.map(row => row.amountCents), [7_671, 15_684, -1_844, -6_368, -1_500]);
+  assert.equal(rows[0].transactionDate.toISOString().slice(0, 10), "2026-02-02");
+  assert.equal(rows.some(row => row.description.includes("ENDING BALANCE")), false);
+});
+
 test("uploaded text-based PDF statements are extracted end to end", async () => {
   const buffer = await pdfBuffer([
     "Statement ending 07/28/2026",
