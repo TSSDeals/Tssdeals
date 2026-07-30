@@ -24,6 +24,24 @@ const BASEBALL_BAT =
   /\b(?:baseball|bbcor|usssa|usa\s+baseball|tee[ -]?ball|t[ -]?ball)\b.{0,60}\bbats?\b|\bbats?\b.{0,60}\b(?:baseball|bbcor|usssa|usa\s+baseball)\b/i;
 const RUNNING_SHOE =
   /\b(?:road|trail|cross[ -]?country)?\s*running\s+(?:shoes?|sneakers?)\b|\b(?:shoes?|sneakers?)\b.{0,30}\b(?:road|trail|cross[ -]?country)\s+running\b/i;
+const CASUAL_OR_NON_SPORT_FOOTWEAR =
+  /\b(?:dress|casual|lifestyle|fashion|walking|work|hiking)\s+(?:shoes?|boots?|sneakers?)\b/i;
+const BASEBALL_CLEAT =
+  /\bbaseball\b.{0,45}\b(?:cleats?|spikes?)\b|\b(?:cleats?|spikes?)\b.{0,45}\bbaseball\b/i;
+const FASTPITCH_CLEAT =
+  /\bfast\s*pitch\b.{0,45}\b(?:cleats?|spikes?)\b|\b(?:cleats?|spikes?)\b.{0,45}\bfast\s*pitch\b/i;
+const SLOWPITCH_CLEAT =
+  /\bslow\s*pitch\b.{0,45}\b(?:cleats?|spikes?)\b|\b(?:cleats?|spikes?)\b.{0,45}\bslow\s*pitch\b/i;
+const TRAINING_PRODUCT =
+  /\b(?:batting\s+tees?|pitching\s+machines?|pitching\s+targets?|pitching\s+nets?|hitting\s+nets?|baseball\s+rebounders?|softball\s+rebounders?|swing\s+trainers?|batting\s+trainers?)\b/i;
+const TRAINING_ACCESSORY_ONLY =
+  /\b(?:replacement|parts?|covers?|wheels?|motors?|cords?|adapters?|hardware|attachments?)\b/i;
+const BASEBALL_TRAINING =
+  /\bbaseball\b.{0,70}\b(?:training|practice|batting|pitching|hitting|fielding)\b|\b(?:training|practice|batting|pitching|hitting|fielding)\b.{0,70}\bbaseball\b/i;
+const FASTPITCH_TRAINING =
+  /\bfast\s*pitch\b.{0,70}\b(?:training|practice|batting|pitching|hitting|fielding)\b|\b(?:training|practice|batting|pitching|hitting|fielding)\b.{0,70}\bfast\s*pitch\b/i;
+const SLOWPITCH_TRAINING =
+  /\bslow\s*pitch\b.{0,70}\b(?:training|practice|batting|pitching|hitting|fielding)\b|\b(?:training|practice|batting|pitching|hitting|fielding)\b.{0,70}\bslow\s*pitch\b/i;
 
 function category(
   sportId: string,
@@ -62,6 +80,28 @@ export function classifyDeterministicProduct(text: string): DeterministicProduct
   }
   if (RUNNING_SHOE.test(value)) {
     return category("running", "run-shoes", "explicit running shoe");
+  }
+  if (!CASUAL_OR_NON_SPORT_FOOTWEAR.test(value)) {
+    if (FASTPITCH_CLEAT.test(value)) {
+      return category("fastpitch-softball", "fp-cleats", "explicit fastpitch cleat");
+    }
+    if (SLOWPITCH_CLEAT.test(value)) {
+      return category("slowpitch-softball", "sp-cleats", "explicit slowpitch cleat");
+    }
+    if (BASEBALL_CLEAT.test(value) && !/\b(?:football|soccer|lacrosse|golf)\b/i.test(value)) {
+      return category("baseball", "bb-cleats", "explicit baseball cleat");
+    }
+  }
+  if (TRAINING_PRODUCT.test(value) && !TRAINING_ACCESSORY_ONLY.test(value)) {
+    if (FASTPITCH_TRAINING.test(value)) {
+      return category("fastpitch-softball", "fp-training", "explicit fastpitch training equipment");
+    }
+    if (SLOWPITCH_TRAINING.test(value)) {
+      return category("slowpitch-softball", "sp-training", "explicit slowpitch training equipment");
+    }
+    if (BASEBALL_TRAINING.test(value) && !/\bsoftball\b/i.test(value)) {
+      return category("baseball", "bb-training", "explicit baseball training equipment");
+    }
   }
 
   const golf = classifyGolfClubProduct(value);
