@@ -36,10 +36,17 @@ function validDate(value: unknown): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-export function categorizeFinancialTransaction(description: unknown) {
+export function categorizeFinancialTransaction(
+  description: unknown,
+  signedAmount?: number,
+  accountType?: string,
+) {
   const text = clean(description).toLowerCase();
-  if (/\b(transfer|online payment|payment thank you|autopay)\b/.test(text)) return "Transfer";
-  if (/\b(ebay|shopify|stripe|paypal|square|deposit|payout)\b/.test(text)) return "Sales income";
+  if (/\b(transfer|online payment|mobile payment|payment thank you|autopay)\b/.test(text)) return "Transfer";
+  if (/\b(ebay|shopify|stripe|paypal|square|deposit|payout)\b/.test(text)) {
+    if (accountType === "credit_card" && (signedAmount ?? 0) < 0) return "Uncategorized";
+    return "Sales income";
+  }
   if (/\b(extra innings|eidirect|wholesale|supplier|inventory)\b/.test(text)) return "Inventory";
   if (/\b(usps|ups|fedex|pirate ship|shipping|postage)\b/.test(text)) return "Shipping";
   if (/\b(replit|sendgrid|twilio|openai|github|software|subscription)\b/.test(text)) return "Software";
@@ -73,7 +80,20 @@ function findColumn(headers: string[], aliases: string[]) {
   return headers.findIndex((header) => aliases.includes(headerKey(header)));
 }
 
-export function parseFinancialStatement(buffer: Buffer, filename: string): ParsedTransaction[] {
+function tabularSignedAmount(value: unknown, description: string, accountType: string) {
+  const parsed = amountCents(value);
+  if (parsed === null || accountType !== "credit_card") return parsed;
+  const text = description.toLowerCase();
+  return /\b(payment|credit|refund|reversal|cashback|reward)\b/.test(text)
+    ? Math.abs(parsed)
+    : -Math.abs(parsed);
+}
+
+export function parseFinancialStatement(
+  buffer: Buffer,
+  filename: string,
+  accountType = "other",
+): ParsedTransaction[] {
   const workbook = XLSX.read(buffer, { type: "buffer", cellDates: true });
   const parsed: ParsedTransaction[] = [];
   for (const sheetName of workbook.SheetNames) {
@@ -104,7 +124,9 @@ export function parseFinancialStatement(buffer: Buffer, filename: string): Parse
       const row = rows[rowIndex];
       const transactionDate = validDate(row[dateColumn]);
       const description = clean(row[descriptionColumn]);
-      let signedAmount = amountColumn >= 0 ? amountCents(row[amountColumn]) : null;
+      let signedAmount = amountColumn >= 0
+        ? tabularSignedAmount(row[amountColumn], description, accountType)
+        : null;
       if (signedAmount === null) {
         const debit = debitColumn >= 0 ? amountCents(row[debitColumn]) : null;
         const credit = creditColumn >= 0 ? amountCents(row[creditColumn]) : null;
@@ -124,7 +146,7 @@ export function parseFinancialStatement(buffer: Buffer, filename: string): Parse
         postedDate: postedColumn >= 0 ? validDate(row[postedColumn]) : null,
         description,
         amountCents: signedAmount,
-        category: categorizeFinancialTransaction(description),
+        category: categorizeFinancialTransaction(description, signedAmount, accountType),
         fingerprint,
         raw: { sourceFile: filename, sourceSheet: sheetName, sourceRow: rowIndex + 1, ...raw },
       });
@@ -195,6 +217,7 @@ function parsedPdfTransaction(
   postedDate: Date | null,
   description: string,
   signedAmount: number,
+  accountType: string,
   filename: string,
   sourceLine: number,
   sourceText: string,
@@ -207,7 +230,7 @@ function parsedPdfTransaction(
     postedDate,
     description,
     amountCents: signedAmount,
-    category: categorizeFinancialTransaction(description),
+    category: categorizeFinancialTransaction(description, signedAmount, accountType),
     fingerprint,
     raw: { sourceFile: filename, sourceFormat: "pdf", sourceLine, sourceText },
   };
@@ -286,6 +309,7 @@ function parseChaseStatementText(
       null,
       description,
       sign * Math.abs(cents),
+      "checking",
       filename,
       lineIndex + 1,
       [line, ...block].join(" "),
@@ -321,6 +345,7 @@ export function parseFinancialStatementText(
       postedDate,
       description,
       signedAmount,
+      accountType,
       filename,
       lineIndex + 1,
       lines[lineIndex],
@@ -334,7 +359,7 @@ export async function parseUploadedFinancialStatement(
   filename: string,
   accountType: string,
 ) {
-  if (!/\.pdf$/i.test(filename)) return parseFinancialStatement(buffer, filename);
+  if (!/\.pdf$/i.test(filename)) return parseFinancialStatement(buffer, filename, accountType);
   const { PDFParse } = await import("pdf-parse");
   const parser = new PDFParse({ data: buffer });
   let text = "";
