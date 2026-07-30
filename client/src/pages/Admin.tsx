@@ -923,6 +923,44 @@ export default function AdminPage() {
     enabled: !!isAdmin,
   });
 
+  const [golfBackfillPreview, setGolfBackfillPreview] = useState<any | null>(null);
+  const [golfBackfillRunning, setGolfBackfillRunning] = useState(false);
+
+  const previewGolfBackfill = async () => {
+    setGolfBackfillRunning(true);
+    try {
+      const response = await fetch("/api/admin/golf-taxonomy-backfill/preview?limit=50", {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Could not preview the golf taxonomy cleanup");
+      setGolfBackfillPreview(await response.json());
+    } catch (error: any) {
+      toast({ title: "Golf preview failed", description: error.message, variant: "destructive" });
+    } finally {
+      setGolfBackfillRunning(false);
+    }
+  };
+
+  const applyGolfBackfill = async () => {
+    if (!golfBackfillPreview?.proposed) return;
+    setGolfBackfillRunning(true);
+    try {
+      const response = await apiRequest("POST", "/api/admin/golf-taxonomy-backfill/apply", { limit: 100 });
+      const result = await response.json();
+      toast({
+        title: "Golf cleanup complete",
+        description: `${result.applied} safe corrections applied; ${result.remainingSafe} remain for another batch.`,
+      });
+      setGolfBackfillPreview(null);
+      taxonomyStatusQuery.refetch();
+      queryClient.invalidateQueries({ queryKey: ["/api/deals"] });
+      await previewGolfBackfill();
+    } catch (error: any) {
+      toast({ title: "Golf cleanup failed", description: error.message, variant: "destructive" });
+      setGolfBackfillRunning(false);
+    }
+  };
+
   const productIdentitySummaryQuery = useQuery<{
     variants: number;
     families: number;
@@ -2844,6 +2882,63 @@ export default function AdminPage() {
                     <span>Product identities awaiting review: <strong className="text-foreground">{taxonomyStatusQuery.data.productIdentityProposed.toLocaleString()}</strong></span>
                     <span>Product identities approved: <strong className="text-foreground">{taxonomyStatusQuery.data.productIdentityApproved.toLocaleString()}</strong></span>
                     <span>Updated: {new Date(taxonomyStatusQuery.data.generatedAt).toLocaleString()}</span>
+                  </div>
+                  <div className="rounded-xl border border-blue-500/25 bg-blue-500/5 p-4" data-testid="golf-taxonomy-backfill">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <div className="text-sm font-semibold">Golf taxonomy cleanup</div>
+                        <div className="mt-1 max-w-2xl text-xs text-muted-foreground">
+                          Preview deterministic corrections for drivers, irons, iron sets, wedges, and putters.
+                          Accessories, ambiguous products, and records with curated sub-filters stay protected.
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 gap-2">
+                        <Button variant="outline" size="sm" onClick={previewGolfBackfill} disabled={golfBackfillRunning}>
+                          {golfBackfillRunning ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+                          Preview
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={applyGolfBackfill}
+                          disabled={golfBackfillRunning || !golfBackfillPreview?.proposed}
+                        >
+                          Apply safe batch
+                        </Button>
+                      </div>
+                    </div>
+                    {golfBackfillPreview ? (
+                      <div className="mt-3 space-y-3">
+                        <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-5">
+                          {[
+                            ["Scanned", golfBackfillPreview.scanned],
+                            ["Safe corrections", golfBackfillPreview.proposed],
+                            ["Already correct", golfBackfillPreview.alreadyCorrect],
+                            ["Accessories excluded", golfBackfillPreview.accessoriesExcluded],
+                            ["Protected/ambiguous", golfBackfillPreview.protectedBySubFilters + golfBackfillPreview.ambiguous],
+                          ].map(([label, value]) => (
+                            <div key={String(label)} className="rounded-lg border border-border bg-background/70 p-2">
+                              <div className="font-bold">{Number(value).toLocaleString()}</div>
+                              <div className="text-[11px] text-muted-foreground">{label}</div>
+                            </div>
+                          ))}
+                        </div>
+                        {golfBackfillPreview.proposals?.length ? (
+                          <div className="max-h-52 overflow-y-auto rounded-lg border border-border bg-background/70">
+                            {golfBackfillPreview.proposals.map((proposal: any) => (
+                              <div key={proposal.id} className="border-b border-border px-3 py-2 text-xs last:border-b-0">
+                                <div className="truncate font-medium" title={proposal.title}>{proposal.title}</div>
+                                <div className="text-muted-foreground">
+                                  {proposal.sportId ?? "unassigned"} / {proposal.equipmentTypeId ?? "unassigned"}
+                                  {" â†’ "}golf / {proposal.proposedEquipmentTypeId}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-xs text-muted-foreground">No safe historical golf corrections are waiting.</div>
+                        )}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               ) : (
