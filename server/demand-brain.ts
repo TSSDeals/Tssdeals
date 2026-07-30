@@ -8,6 +8,111 @@ export type DemandSnapshotResult = {
   sourceCount: number;
 };
 
+export type DemandScoreInput = {
+  windowDays: number;
+  averageSoldPriceCents?: number | null;
+  minimumSoldPriceCents?: number | null;
+  maximumSoldPriceCents?: number | null;
+  averageShippingCents?: number | null;
+  sellThroughPercent?: number | null;
+  totalSold?: number | null;
+  totalSellers?: number | null;
+};
+
+export type DemandIntelligence = {
+  score: number | null;
+  confidence: "high" | "medium" | "low" | "insufficient";
+  marketStatus: "hot" | "reliable" | "slow" | "uncertain";
+  expectedSaleLowCents: number | null;
+  expectedSaleHighCents: number | null;
+  maximumAcquisitionCents: number | null;
+  explanation: string[];
+};
+
+function clampScore(value: number) {
+  return Math.max(0, Math.min(100, value));
+}
+
+export function calculateDemandIntelligence(input: DemandScoreInput): DemandIntelligence {
+  const sold = Number(input.totalSold ?? 0);
+  const sellers = Number(input.totalSellers ?? 0);
+  const average = Number(input.averageSoldPriceCents ?? 0);
+  const sellThrough = input.sellThroughPercent == null
+    ? null
+    : clampScore(Number(input.sellThroughPercent));
+  if (sold <= 0 || average <= 0) {
+    return {
+      score: null,
+      confidence: "insufficient",
+      marketStatus: "uncertain",
+      expectedSaleLowCents: null,
+      expectedSaleHighCents: null,
+      maximumAcquisitionCents: null,
+      explanation: ["No trustworthy sold-market sample is available for this exact model."],
+    };
+  }
+
+  const completeness = [
+    input.minimumSoldPriceCents, input.maximumSoldPriceCents,
+    input.sellThroughPercent, input.totalSellers,
+  ].filter((value) => value != null).length;
+  const confidence = sold >= 30 && completeness >= 3
+    ? "high"
+    : sold >= 10 && completeness >= 2
+      ? "medium"
+      : "low";
+  const monthlySold = sold * (30 / Math.max(1, Number(input.windowDays)));
+  const velocityScore = clampScore(
+    (Math.log1p(monthlySold) / Math.log1p(40)) * 100,
+  );
+  const sellThroughScore = sellThrough ?? 35;
+  const sellerEfficiency = sellers > 0
+    ? clampScore((sold / sellers / 2) * 100)
+    : 35;
+  const minimum = Number(input.minimumSoldPriceCents ?? average);
+  const maximum = Number(input.maximumSoldPriceCents ?? average);
+  const relativeSpread = average > 0 ? Math.max(0, maximum - minimum) / average : 1;
+  const stabilityScore = clampScore(100 - relativeSpread * 50);
+  const rawScore = (
+    velocityScore * 0.45
+    + sellThroughScore * 0.35
+    + sellerEfficiency * 0.10
+    + stabilityScore * 0.10
+  );
+  const confidenceFactor = confidence === "high" ? 1 : confidence === "medium" ? 0.85 : 0.65;
+  const score = Math.round(clampScore(rawScore * confidenceFactor));
+  const marketStatus = score >= 75 ? "hot" : score >= 55 ? "reliable" : score >= 35 ? "slow" : "uncertain";
+  const expectedSaleLowCents = input.minimumSoldPriceCents == null
+    ? Math.round(average * 0.9)
+    : Math.max(Number(input.minimumSoldPriceCents), Math.round(average * 0.75));
+  const expectedSaleHighCents = input.maximumSoldPriceCents == null
+    ? Math.round(average * 1.1)
+    : Math.min(Number(input.maximumSoldPriceCents), Math.round(average * 1.25));
+  const riskAllowance = confidence === "high" ? 0.05 : confidence === "medium" ? 0.10 : 0.15;
+  const maximumAcquisitionCents = Math.max(0, Math.round(
+    average * (1 - 0.15 - 0.20 - riskAllowance) - Number(input.averageShippingCents ?? 0),
+  ));
+  const explanation = [
+    `${sold.toLocaleString()} sold in ${input.windowDays} days (${monthlySold.toFixed(1)} per 30 days).`,
+    sellThrough == null
+      ? "Sell-through was unavailable, so the score uses a conservative neutral value."
+      : `${Math.round(sellThrough)}% sell-through indicates ${sellThrough >= 50 ? "strong" : sellThrough >= 25 ? "moderate" : "limited"} conversion.`,
+    sellers > 0
+      ? `${sellers.toLocaleString()} sellers create ${sold / sellers >= 1 ? "manageable" : "meaningful"} competition.`
+      : "Seller competition was unavailable.",
+    `${confidence[0].toUpperCase()}${confidence.slice(1)} confidence based on sample size and field coverage.`,
+  ];
+  return {
+    score,
+    confidence,
+    marketStatus,
+    expectedSaleLowCents,
+    expectedSaleHighCents,
+    maximumAcquisitionCents,
+    explanation,
+  };
+}
+
 export function marketWindowDays(value: unknown): 5 | 10 | 30 | 90 {
   const parsed = Number(value);
   return parsed === 5 || parsed === 10 || parsed === 90 ? parsed : 30;
@@ -155,12 +260,25 @@ export async function getDemandBrainSummary(windowDays: 5 | 10 | 30 | 90 = 30) {
          ORDER BY research_key, period_end DESC, observed_at DESC
       `, [windowDays]),
     ]);
+    const completedSalesWithScores = completedSales.rows.map((observation) => ({
+      ...observation,
+      intelligence: calculateDemandIntelligence({
+        windowDays,
+        averageSoldPriceCents: observation.average_sold_price_cents,
+        minimumSoldPriceCents: observation.minimum_sold_price_cents,
+        maximumSoldPriceCents: observation.maximum_sold_price_cents,
+        averageShippingCents: observation.average_shipping_cents,
+        sellThroughPercent: observation.sell_through_percent,
+        totalSold: observation.total_sold,
+        totalSellers: observation.total_sellers,
+      }),
+    }));
     return {
       windowDays,
       latest: latest.rows[0] ?? null,
       history: history.rows,
       families: families.rows,
-      completedSales: completedSales.rows,
+      completedSales: completedSalesWithScores,
       generatedAt: new Date().toISOString(),
       caveat: completedSales.rows.length
         ? "Supply metrics come from approved listings. Completed-sale metrics are aggregate observations manually recorded from authenticated eBay Product Research."
