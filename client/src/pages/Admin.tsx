@@ -999,7 +999,7 @@ export default function AdminPage() {
     }
   };
 
-  const [demandWindowDays, setDemandWindowDays] = useState<5 | 10 | 30 | 90>(30);
+  const [demandWindowDays, setDemandWindowDays] = useState<5 | 10 | 30 | 90>(90);
   const [capturingDemand, setCapturingDemand] = useState(false);
   const demandBrainQuery = useQuery<any>({
     queryKey: ["/api/admin/demand-brain/summary", demandWindowDays],
@@ -2640,6 +2640,68 @@ export default function AdminPage() {
                   {capturingDemand ? "Capturing…" : "Capture today"}
                 </Button>
               </div>
+
+              {(demandBrainQuery.data?.completedSales ?? []).filter(
+                (item: any) => item.observation_type === "ledger_model",
+              ).length > 0 && (
+                <div className="space-y-3" data-testid="demand-score-models">
+                  <div>
+                    <div className="font-semibold">Demand Score v1</div>
+                    <div className="text-xs text-muted-foreground">
+                      Confidence-weighted completed-sales intelligence. Scores remain admin-only while the model is validated.
+                    </div>
+                  </div>
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    {(demandBrainQuery.data.completedSales ?? [])
+                      .filter((item: any) => item.observation_type === "ledger_model")
+                      .sort((a: any, b: any) => Number(b.intelligence?.score ?? -1) - Number(a.intelligence?.score ?? -1))
+                      .map((item: any) => {
+                        const intelligence = item.intelligence ?? {};
+                        const dollars = (value: any) => value == null
+                          ? "—"
+                          : `$${(Number(value) / 100).toFixed(2)}`;
+                        return (
+                          <div key={item.research_key} className="rounded-xl border border-border bg-background/70 p-4">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <div className="font-semibold">{item.label}</div>
+                                <div className="mt-1 text-xs capitalize text-muted-foreground">
+                                  {intelligence.marketStatus ?? "uncertain"} market · {intelligence.confidence ?? "insufficient"} confidence
+                                </div>
+                              </div>
+                              <div className="min-w-16 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-center dark:border-blue-900 dark:bg-blue-950/40">
+                                <div className="text-2xl font-bold text-blue-700 dark:text-blue-300">
+                                  {intelligence.score ?? "—"}
+                                </div>
+                                <div className="text-[10px] text-muted-foreground">Demand</div>
+                              </div>
+                            </div>
+                            <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                              <div className="rounded-lg bg-muted/50 p-2">
+                                <div className="text-muted-foreground">Expected sale range</div>
+                                <div className="font-semibold">
+                                  {dollars(intelligence.expectedSaleLowCents)}–{dollars(intelligence.expectedSaleHighCents)}
+                                </div>
+                              </div>
+                              <div className="rounded-lg bg-muted/50 p-2">
+                                <div className="text-muted-foreground">Preliminary max buy</div>
+                                <div className="font-semibold">{dollars(intelligence.maximumAcquisitionCents)}</div>
+                              </div>
+                            </div>
+                            <ul className="mt-3 space-y-1 text-xs text-muted-foreground">
+                              {(intelligence.explanation ?? []).map((line: string) => (
+                                <li key={line}>• {line}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        );
+                      })}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Preliminary max-buy values reserve 15% for marketplace fees, 20% target margin, observed shipping, and a confidence-based risk allowance. They do not yet include item-specific refurbishment or tax.
+                  </div>
+                </div>
+              )}
 
               {demandBrainQuery.data?.latest ? (
                 <>
