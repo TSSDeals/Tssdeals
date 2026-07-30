@@ -20,7 +20,7 @@ const SHAFT_ONLY =
   /\b(?:replacement|aftermarket)\s+shafts?\b|\b(?:driver|fairway|wood|hybrid|iron|wedge|putter)\s+shafts?\b|\bshafts?\s+(?:only|adapter|sleeve|pull|uncut)\b/i;
 
 const NON_CLUB_GOLF_PRODUCT =
-  /\b(?:golf\s+balls?|golf\s+bags?|cart\s+bags?|stand\s+bags?|carry\s+bags?|golf\s+gloves?|golf\s+shoes?|golf\s+shirts?|golf\s+polos?|golf\s+pants?|golf\s+shorts?|rangefinders?|launch\s+monitors?|putting\s+mats?|training\s+aids?)\b/i;
+  /\b(?:golf\s+balls?|golf\s+bags?|cart\s+bags?|stand\s+bags?|carry\s+bags?|golf\s+gloves?|golf\s+shoes?|golf\s+shirts?|golf\s+polos?|golf\s+pants?|golf\s+shorts?|polo\s+shirts?|shirts?|jackets?|hoodies?|pants?|shorts?|apparel|rangefinders?|launch\s+monitors?|putting\s+mats?|training\s+aids?)\b/i;
 
 export function isGolfClubAccessoryOnly(text: string): boolean {
   const value = text.replace(/\s+/g, " ").trim();

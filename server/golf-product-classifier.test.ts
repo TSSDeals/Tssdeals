@@ -44,6 +44,7 @@ test("rejects non-golf hybrid products and compact model collisions", () => {
     "Valor Hybrid BBCOR Certified -3 Baseball Bat 33 30oz",
     "Spiderz Hybrid Custom Baseball Softball Batting Gloves",
     "Women's Navigator Hybrid Jacket Size XL",
+    "TravisMathew Polo Shirt Mens XL Jasper Park Lodge Golf Club",
     "2026 Bettinardi BB-8W Milled Putter Golf Club",
     "MLB Los Angeles Dodgers Lucky Cat Driver Cover",
   ]) {
