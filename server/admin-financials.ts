@@ -7,7 +7,7 @@ import { db } from "./db";
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 25 * 1024 * 1024, files: 1 },
+  limits: { fileSize: 25 * 1024 * 1024, files: 20 },
 });
 
 const clean = (value: unknown) => String(value ?? "").trim();
@@ -449,18 +449,58 @@ export function registerAdminFinancialRoutes(app: Express, isAdmin: RequestHandl
     res.status(201).json((result as any).rows[0]);
   });
 
-  app.post("/api/admin/financial/import", isAdmin, upload.single("file"), async (req: any, res) => {
-    if (!req.file) return res.status(400).json({ message: "Choose a CSV, Excel, or PDF statement." });
+  app.post("/api/admin/financial/import", isAdmin, upload.fields([
+    { name: "files", maxCount: 20 },
+    { name: "file", maxCount: 1 },
+  ]), async (req: any, res) => {
+    const files = [
+      ...((req.files?.files as Express.Multer.File[] | undefined) ?? []),
+      ...((req.files?.file as Express.Multer.File[] | undefined) ?? []),
+    ];
+    if (!files.length) return res.status(400).json({ message: "Choose one or more CSV, Excel, or PDF statements." });
     const accountId = clean(req.body?.accountId);
     if (!accountId) return res.status(400).json({ message: "Choose the account for this statement." });
-    try {
-      res.json({
-        file: req.file.originalname,
-        ...(await importStatement(accountId, req.file.originalname, req.file.buffer)),
-      });
-    } catch (error: any) {
-      res.status(400).json({ message: error?.message ?? "Statement import failed." });
+    const results: Array<Record<string, unknown>> = [];
+    for (const file of files) {
+      try {
+        results.push({
+          file: file.originalname,
+          success: true,
+          ...(await importStatement(accountId, file.originalname, file.buffer)),
+        });
+      } catch (error: any) {
+        results.push({
+          file: file.originalname,
+          success: false,
+          message: error?.message ?? "Statement import failed.",
+        });
+      }
     }
+    const successful = results.filter(result => result.success);
+    const failed = results.filter(result => !result.success);
+    const imported = successful.reduce((sum, result) => sum + Number(result.imported ?? 0), 0);
+    const duplicates = successful.reduce((sum, result) => sum + Number(result.duplicates ?? 0), 0);
+    const reprocessed = successful.filter(result => result.reprocessed).length;
+    const alreadyImported = successful.filter(result => result.alreadyImported).length;
+    const payload = {
+      files: results,
+      fileCount: files.length,
+      successful: successful.length,
+      failed: failed.length,
+      imported,
+      duplicates,
+      reprocessed,
+      alreadyImported,
+    };
+    if (!successful.length) {
+      return res.status(400).json({
+        ...payload,
+        message: failed.length === 1
+          ? failed[0].message
+          : `None of the ${files.length} statements could be imported.`,
+      });
+    }
+    res.json(payload);
   });
 
   app.get("/api/admin/financial/summary", isAdmin, async (req, res) => {

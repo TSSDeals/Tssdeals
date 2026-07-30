@@ -217,7 +217,7 @@ export default function AdminOperations() {
     try {
       const form = new FormData();
       form.append("accountId", financialAccountId);
-      form.append("file", files[0]);
+      Array.from(files).slice(0, 20).forEach(file => form.append("files", file));
       const response = await fetch("/api/admin/financial/import", { method: "POST", credentials: "include", body: form });
       const result = await response.json().catch(() => null);
       if (!response.ok) throw new Error(result?.message ?? "Statement import failed");
@@ -225,13 +225,25 @@ export default function AdminOperations() {
         queryClient.invalidateQueries({ queryKey: ["/api/admin/financial/summary"] }),
         queryClient.invalidateQueries({ queryKey: ["/api/admin/financial/transactions"] }),
       ]);
+      const fileCount = Number(result?.fileCount ?? files.length);
+      const failedCount = Number(result?.failed ?? 0);
+      const reprocessedCount = Number(result?.reprocessed ?? 0);
+      const alreadyImportedCount = Number(result?.alreadyImported ?? 0);
       toast({
-        title: result?.alreadyImported
-          ? "Statement was already imported"
-          : result?.reprocessed
-            ? "Statement reprocessed with improved PDF support"
-            : "Statement imported",
-        description: `${Number(result?.imported ?? 0).toLocaleString()} new transactions; ${Number(result?.duplicates ?? 0).toLocaleString()} duplicates skipped.`,
+        title: fileCount > 1
+          ? `${Number(result?.successful ?? 0)} of ${fileCount} statements processed`
+          : alreadyImportedCount
+            ? "Statement was already imported"
+            : reprocessedCount
+              ? "Statement reprocessed with improved PDF support"
+              : "Statement imported",
+        description: [
+          `${Number(result?.imported ?? 0).toLocaleString()} new transactions`,
+          `${Number(result?.duplicates ?? 0).toLocaleString()} duplicates skipped`,
+          reprocessedCount ? `${reprocessedCount} reprocessed` : null,
+          failedCount ? `${failedCount} failed` : null,
+        ].filter(Boolean).join("; ") + ".",
+        variant: failedCount ? "destructive" : "default",
       });
     } catch (error: any) {
       toast({ title: "Statement import failed", description: error?.message ?? "Unknown error", variant: "destructive" });
@@ -303,10 +315,10 @@ export default function AdminOperations() {
                 </Label>
               ) : (
                 <Label className={financialAccountId ? "cursor-pointer" : "cursor-not-allowed opacity-60"}>
-                  <Input className="hidden" type="file" accept=".csv,.xlsx,.xls,.pdf,application/pdf" disabled={!financialAccountId} onChange={(event) => importFinancialStatement(event.target.files)} />
+                  <Input className="hidden" type="file" accept=".csv,.xlsx,.xls,.pdf,application/pdf" multiple disabled={!financialAccountId} onChange={(event) => importFinancialStatement(event.target.files)} />
                   <span className="inline-flex h-9 items-center rounded-md border bg-background px-3 text-sm font-medium hover:bg-muted">
                     {uploading === "financial" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Upload className="mr-1.5 h-4 w-4" />}
-                    Import statement (CSV, Excel, or PDF)
+                    Import statements (CSV, Excel, or PDF)
                   </span>
                 </Label>
               )}
