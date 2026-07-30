@@ -3,12 +3,17 @@ import { pool } from "./db";
 
 export const PRODUCT_RESEARCH_WINDOWS = [5, 10, 30, 90, 365, 1095] as const;
 export type ProductResearchWindow = typeof PRODUCT_RESEARCH_WINDOWS[number];
+export type ProductResearchFocus = "baseball" | "golf";
 
 export function productResearchWindow(value: unknown): ProductResearchWindow {
   const parsed = Number(value);
   return PRODUCT_RESEARCH_WINDOWS.includes(parsed as ProductResearchWindow)
     ? parsed as ProductResearchWindow
     : 30;
+}
+
+export function productResearchFocus(value: unknown): ProductResearchFocus {
+  return value === "golf" ? "golf" : "baseball";
 }
 
 const optionalNonnegative = z.number().int().nonnegative().nullable().optional();
@@ -94,7 +99,14 @@ export const productResearchReviewInput = z.object({
   }, "Source URL must be an eBay page").nullable().optional(),
 });
 
-export const PRODUCT_RESEARCH_CATEGORIES = [
+export const PRODUCT_RESEARCH_CATEGORIES: Record<ProductResearchFocus, ReadonlyArray<{
+  researchKey: string;
+  label: string;
+  queryText: string;
+  categoryId?: string;
+  categoryLabel?: string;
+}>> = {
+  baseball: [
   {
     researchKey: "category:baseball-fielding-gloves",
     label: "Baseball Fielding Gloves & Mitts",
@@ -107,7 +119,45 @@ export const PRODUCT_RESEARCH_CATEGORIES = [
   { researchKey: "category:catchers-gear", label: "Catcher's Gear", queryText: "Baseball Catcher's Gear" },
   { researchKey: "category:batting-helmets", label: "Batting Helmets", queryText: "Baseball Batting Helmet" },
   { researchKey: "category:cleats", label: "Baseball & Softball Cleats", queryText: "Baseball Softball Cleats" },
-] as const;
+  ],
+  golf: [
+    {
+      researchKey: "category:golf-drivers",
+      label: "Golf Drivers",
+      queryText: "Golf Driver -headcover -shaft",
+      categoryId: "115280",
+      categoryLabel: "Golf Clubs",
+    },
+    {
+      researchKey: "category:golf-fairway-hybrids",
+      label: "Fairway Woods & Hybrids",
+      queryText: "(Fairway Wood,Hybrid) Golf Club -headcover -shaft",
+      categoryId: "115280",
+      categoryLabel: "Golf Clubs",
+    },
+    {
+      researchKey: "category:golf-iron-sets",
+      label: "Golf Iron Sets",
+      queryText: "Golf Iron Set -single -individual",
+      categoryId: "115280",
+      categoryLabel: "Golf Clubs",
+    },
+    {
+      researchKey: "category:golf-wedges",
+      label: "Golf Wedges",
+      queryText: "Golf Wedge -headcover -shaft",
+      categoryId: "115280",
+      categoryLabel: "Golf Clubs",
+    },
+    {
+      researchKey: "category:golf-putters",
+      label: "Golf Putters",
+      queryText: "Golf Putter -headcover -cover",
+      categoryId: "115280",
+      categoryLabel: "Golf Clubs",
+    },
+  ],
+};
 
 export function buildProductResearchUrl(input: {
   queryText: string;
@@ -235,7 +285,10 @@ export async function saveProductResearchReview(rawInput: unknown, reviewedBy?: 
   return result.rows[0];
 }
 
-export async function getProductResearchWorkspace(windowDays: ProductResearchWindow) {
+export async function getProductResearchWorkspace(
+  windowDays: ProductResearchWindow,
+  focus: ProductResearchFocus = "baseball",
+) {
   const client = await pool.connect();
   try {
     const [observations, reviews, identities, ledgerModels] = await Promise.all([
@@ -263,11 +316,12 @@ export async function getProductResearchWorkspace(windowDays: ProductResearchWin
           JOIN deal_product_identities dpi
             ON dpi.product_identity_id=pi.id AND dpi.status='approved'
           LEFT JOIN product_research_observations o ON o.product_identity_id=pi.id
+         WHERE pi.sport_id=$2
          GROUP BY pi.id
          ORDER BY (max(o.period_end) FILTER (WHERE o.window_days=$1)) ASC NULLS FIRST,
                   count(dpi.deal_id) DESC, pi.canonical_brand, pi.product_family
          LIMIT 40
-      `, [windowDays]),
+      `, [windowDays, focus === "golf" ? "golf" : "baseball"]),
       client.query(`
         SELECT brand, model, count(*)::int AS sold_count, max(sale_date) AS last_sold
           FROM business_ledger_entries
@@ -275,14 +329,21 @@ export async function getProductResearchWorkspace(windowDays: ProductResearchWin
            AND status ILIKE '%sold%'
            AND brand IS NOT NULL AND btrim(brand) <> ''
            AND model IS NOT NULL AND btrim(model) <> ''
-           AND concat_ws(' ', description, brand, model) ILIKE '%glove%'
-           AND concat_ws(' ', description, brand, model) NOT ILIKE ALL (ARRAY[
-             '%batting glove%', '%golf glove%', '%trainer glove%', '%two hand trainer%'
-           ])
+           AND (
+             ($1='baseball' AND concat_ws(' ', description, brand, model) ILIKE '%glove%'
+               AND concat_ws(' ', description, brand, model) NOT ILIKE ALL (ARRAY[
+                 '%batting glove%', '%golf glove%', '%trainer glove%', '%two hand trainer%'
+               ]))
+             OR
+             ($1='golf' AND concat_ws(' ', description, brand, model)
+               ~* '\\m(driver|fairway wood|hybrid|iron set|irons|wedge|putter)\\M'
+               AND concat_ws(' ', description, brand, model)
+               !~* '\\m(headcover|cover only|shaft only|grip only|adapter|sleeve)\\M')
+           )
          GROUP BY brand, model
          ORDER BY count(*) DESC, max(sale_date) DESC, brand, model
          LIMIT 80
-      `),
+      `, [focus]),
     ]);
     const observationsByKey = new Map<string, any>();
     for (const observation of observations.rows) {
@@ -316,7 +377,8 @@ export async function getProductResearchWorkspace(windowDays: ProductResearchWin
     });
     return {
       windowDays,
-      categories: PRODUCT_RESEARCH_CATEGORIES.map((category) => ({
+      focus,
+      categories: PRODUCT_RESEARCH_CATEGORIES[focus].map((category) => ({
         ...category,
         researchUrl: buildProductResearchUrl({
           queryText: category.queryText,

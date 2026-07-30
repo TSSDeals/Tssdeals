@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 
 type WindowDays = 5 | 10 | 30 | 90 | 365 | 1095;
+type ResearchFocus = "baseball" | "golf";
 
 function dollarsToCents(value: string) {
   if (!value.trim()) return null;
@@ -67,14 +68,15 @@ export function researchPeriodFromUrl(sourceUrl: string, windowDays: WindowDays)
 export default function ProductResearchPanel() {
   const { toast } = useToast();
   const [windowDays, setWindowDays] = useState<WindowDays>(30);
+  const [focus, setFocus] = useState<ResearchFocus>("baseball");
   const [targetKey, setTargetKey] = useState("");
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [reviewing, setReviewing] = useState(false);
   const query = useQuery<any>({
-    queryKey: ["/api/admin/product-research/workspace", windowDays],
+    queryKey: ["/api/admin/product-research/workspace", windowDays, focus],
     queryFn: async () => {
-      const response = await fetch(`/api/admin/product-research/workspace?days=${windowDays}`, {
+      const response = await fetch(`/api/admin/product-research/workspace?days=${windowDays}&focus=${focus}`, {
         credentials: "include",
       });
       if (!response.ok) throw new Error("Could not load Product Research workspace");
@@ -216,6 +218,23 @@ export default function ProductResearchPanel() {
         </div>
       </div>
 
+      <div className="mt-3 flex gap-2" aria-label="Product Research sport">
+        {(["baseball", "golf"] as const).map((sport) => (
+          <Button
+            key={sport}
+            size="sm"
+            variant={focus === sport ? "default" : "outline"}
+            onClick={() => {
+              setFocus(sport);
+              setTargetKey("");
+              setForm(emptyForm());
+            }}
+          >
+            {sport === "baseball" ? "Baseball / Softball" : "Golf"}
+          </Button>
+        ))}
+      </div>
+
       <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
         <div className="space-y-3">
           {(query.data?.ledgerProgress?.total ?? 0) > 0 && (
@@ -225,7 +244,7 @@ export default function ProductResearchPanel() {
             >
               <div>
                 <div className="text-lg font-bold">{query.data.ledgerProgress.total}</div>
-                <div className="text-[10px] text-muted-foreground">90-day models</div>
+                <div className="text-[10px] text-muted-foreground">90-day {focus} models</div>
               </div>
               <div>
                 <div className="text-lg font-bold text-emerald-700 dark:text-emerald-400">{query.data.ledgerProgress.researched}</div>
