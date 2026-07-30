@@ -65,6 +65,8 @@ const DESCRIPTION_HEADERS = ["description", "details", "merchant", "name", "tran
 const AMOUNT_HEADERS = ["amount", "transaction amount"];
 const DEBIT_HEADERS = ["debit", "withdrawal", "charge", "money out"];
 const CREDIT_HEADERS = ["credit", "deposit", "payment", "money in"];
+const PDF_DATE_PREFIX = /^(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)(?:\s+(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?))?\s+(.+)$/;
+const PDF_AMOUNT_SUFFIX = /(?:\s+)(\(?(?:[-+]?\$?\s*)?\d[\d,]*\.\d{2}\)?-?)(?:\s+(CR|CREDIT|DR|DEBIT))?$/i;
 
 function findColumn(headers: string[], aliases: string[]) {
   return headers.findIndex((header) => aliases.includes(headerKey(header)));
@@ -130,14 +132,125 @@ export function parseFinancialStatement(buffer: Buffer, filename: string): Parse
   return parsed;
 }
 
+function statementReferenceDate(text: string) {
+  const explicit = text.match(
+    /\b(?:statement\s+(?:date|ending)|closing\s+date|through)\D{0,12}(\d{1,2}\/\d{1,2}\/\d{2,4})\b/i,
+  );
+  if (explicit) return pdfDate(explicit[1], new Date().getFullYear(), null);
+  const years = Array.from(text.matchAll(/\b(20\d{2})\b/g), match => Number(match[1]));
+  return new Date(Date.UTC(years.length ? Math.max(...years) : new Date().getFullYear(), 11, 31));
+}
+
+function pdfDate(value: string, year: number, referenceDate: Date | null) {
+  const parts = value.split("/").map(Number);
+  if (parts.length < 2 || parts.some(part => !Number.isFinite(part))) return null;
+  let resolvedYear = parts[2] ?? year;
+  if (resolvedYear < 100) resolvedYear += 2000;
+  if (parts[2] === undefined && referenceDate && parts[0] > referenceDate.getUTCMonth() + 2) {
+    resolvedYear -= 1;
+  }
+  const date = new Date(Date.UTC(resolvedYear, parts[0] - 1, parts[1]));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function pdfSignedAmount(
+  token: string,
+  marker: string | undefined,
+  description: string,
+  accountType: string,
+) {
+  const parsed = amountCents(token);
+  if (parsed === null) return null;
+  if (parsed < 0 || /^\(.*\)$/.test(token) || /-$/.test(token)) return -Math.abs(parsed);
+  if (/^(cr|credit)$/i.test(marker ?? "")) return Math.abs(parsed);
+  if (/^(dr|debit)$/i.test(marker ?? "")) return -Math.abs(parsed);
+  const text = description.toLowerCase();
+  if (accountType === "credit_card") {
+    return /\b(payment|credit|refund|reversal|cashback|reward)\b/.test(text)
+      ? Math.abs(parsed)
+      : -Math.abs(parsed);
+  }
+  if (accountType === "checking" || accountType === "savings") {
+    return /\b(deposit|credit|interest paid|payout|payroll|mobile deposit|refund)\b/.test(text)
+      ? Math.abs(parsed)
+      : -Math.abs(parsed);
+  }
+  return parsed;
+}
+
+export function parseFinancialStatementText(
+  text: string,
+  filename: string,
+  accountType: string,
+): ParsedTransaction[] {
+  const parsed: ParsedTransaction[] = [];
+  const referenceDate = statementReferenceDate(text);
+  const year = referenceDate.getUTCFullYear();
+  const lines = text.split(/\r?\n/).map(line => line.replace(/\s+/g, " ").trim()).filter(Boolean);
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const dated = lines[lineIndex].match(PDF_DATE_PREFIX);
+    if (!dated) continue;
+    const amount = dated[3].match(PDF_AMOUNT_SUFFIX);
+    if (!amount) continue;
+    const transactionDate = pdfDate(dated[1], year, referenceDate);
+    const postedDate = dated[2] ? pdfDate(dated[2], year, referenceDate) : null;
+    const description = dated[3].slice(0, amount.index).trim();
+    const signedAmount = pdfSignedAmount(amount[1], amount[2], description, accountType);
+    if (!transactionDate || !description || signedAmount === null || signedAmount === 0) continue;
+    const fingerprint = crypto.createHash("sha256")
+      .update([transactionDate.toISOString().slice(0, 10), signedAmount, description.toLowerCase()].join("|"))
+      .digest("hex");
+    parsed.push({
+      transactionDate,
+      postedDate,
+      description,
+      amountCents: signedAmount,
+      category: categorizeFinancialTransaction(description),
+      fingerprint,
+      raw: {
+        sourceFile: filename,
+        sourceFormat: "pdf",
+        sourceLine: lineIndex + 1,
+        sourceText: lines[lineIndex],
+      },
+    });
+  }
+  return parsed;
+}
+
+export async function parseUploadedFinancialStatement(
+  buffer: Buffer,
+  filename: string,
+  accountType: string,
+) {
+  if (!/\.pdf$/i.test(filename)) return parseFinancialStatement(buffer, filename);
+  const { PDFParse } = await import("pdf-parse");
+  const parser = new PDFParse({ data: buffer });
+  let text = "";
+  try {
+    text = clean((await parser.getText()).text);
+  } finally {
+    await parser.destroy();
+  }
+  if (!text) {
+    throw new Error("This PDF has no selectable text. Download a text-based statement from the bank, or use CSV/Excel.");
+  }
+  const parsed = parseFinancialStatementText(text, filename, accountType);
+  if (!parsed.length) {
+    throw new Error("No transaction rows could be read from this PDF. Try the bank's CSV/Excel export, or provide a different statement layout for support.");
+  }
+  return parsed;
+}
+
 async function importStatement(accountId: string, filename: string, buffer: Buffer) {
-  const transactions = parseFinancialStatement(buffer, filename);
+  const account = await db.execute(sql`
+    SELECT id, account_type FROM financial_accounts WHERE id = ${accountId} AND is_active = true LIMIT 1
+  `);
+  const accountRow = (account as any).rows?.[0];
+  if (!accountRow) throw new Error("Financial account was not found.");
+  const transactions = await parseUploadedFinancialStatement(buffer, filename, accountRow.account_type);
   const checksum = crypto.createHash("sha256").update(buffer).digest("hex");
   return db.transaction(async (tx) => {
-    const account = await tx.execute(sql`
-      SELECT id FROM financial_accounts WHERE id = ${accountId} AND is_active = true LIMIT 1
-    `);
-    if (!(account as any).rows?.[0]) throw new Error("Financial account was not found.");
     const prior = await tx.execute(sql`
       SELECT id, row_count FROM financial_imports
       WHERE account_id = ${accountId} AND file_checksum = ${checksum}
@@ -208,7 +321,7 @@ export function registerAdminFinancialRoutes(app: Express, isAdmin: RequestHandl
   });
 
   app.post("/api/admin/financial/import", isAdmin, upload.single("file"), async (req: any, res) => {
-    if (!req.file) return res.status(400).json({ message: "Choose a CSV or Excel statement." });
+    if (!req.file) return res.status(400).json({ message: "Choose a CSV, Excel, or PDF statement." });
     const accountId = clean(req.body?.accountId);
     if (!accountId) return res.status(400).json({ message: "Choose the account for this statement." });
     try {

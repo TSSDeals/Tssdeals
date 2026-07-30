@@ -73,6 +73,7 @@ const ADMIN_SECTIONS: { id: string; label: string }[] = [
   { id: "ebay-sellers", label: "eBay Sellers" },
   { id: "sub-filters", label: "Equipment Sub-Filters" },
   { id: "data-reporting", label: "Data Reporting & Edit" },
+  { id: "tracked-websites", label: "Tracked Websites" },
   { id: "affiliate-reporting", label: "Affiliate Reporting" },
   { id: "analytics", label: "Analytics" },
 ];
@@ -4621,32 +4622,45 @@ export default function AdminPage() {
             <DataReportingPanel />
           </section>
 
-          <section className="card-elevated p-5 md:p-6">
+          <section
+            id="section-tracked-websites"
+            style={sectionStyle("tracked-websites")}
+            className="card-elevated animate-float-in p-5 md:p-6 relative"
+            data-testid="tracked-websites-panel"
+          >
+            <CollapseButton
+              id="tracked-websites"
+              collapsed={collapsedSections}
+              onToggle={toggleSection}
+              onArrange={() => setArrangeOpen(true)}
+            />
             <div className="flex items-center gap-3 mb-4">
               <Globe className="h-5 w-5 text-primary" />
               <div className="font-display text-xl font-bold">Tracked Websites</div>
             </div>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {(sources.data ?? []).map((s: any) => (
-                <div key={s.id} className="rounded-xl border border-border bg-background/60 p-3 shadow-sm flex flex-col justify-between">
-                  <div>
-                    <div className="text-sm font-bold truncate">{s.name}</div>
-                    <a
-                      href={s.baseUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-primary hover:underline truncate block"
-                      data-testid={`source-url-${s.id}`}
-                    >{s.baseUrl}</a>
-                  </div>
-                  {s.isOurStore && (
-                    <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary border border-primary/20 w-fit">
-                      Our Store
+            {!collapsedSections.includes("tracked-websites") && (
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {(sources.data ?? []).map((s: any) => (
+                  <div key={s.id} className="rounded-xl border border-border bg-background/60 p-3 shadow-sm flex flex-col justify-between">
+                    <div>
+                      <div className="text-sm font-bold truncate">{s.name}</div>
+                      <a
+                        href={s.baseUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-primary hover:underline truncate block"
+                        data-testid={`source-url-${s.id}`}
+                      >{s.baseUrl}</a>
                     </div>
-                  )}
-                </div>
-              ))}
-            </div>
+                    {s.isOurStore && (
+                      <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary border border-primary/20 w-fit">
+                        Our Store
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
         </div>
       )}

@@ -36,6 +36,7 @@ import {
   curateShopperSports,
   isVirtualShopperEquipmentId,
   normalizeShopperSportId,
+  shopperResultEquipmentTypeId,
 } from "@shared/equipment-groups";
 import {
   BASELINE_SPORTS_NAME,
