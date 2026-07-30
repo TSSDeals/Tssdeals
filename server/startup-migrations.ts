@@ -474,6 +474,62 @@ export const STARTUP_MIGRATIONS: readonly VersionedMigration<StartupContext>[] =
       for (const statement of statements) await context.execute(sql.raw(statement));
     },
   },
+  {
+    ...STARTUP_MIGRATION_MANIFEST[9],
+    async up(context) {
+      const statements = [
+        `CREATE TABLE IF NOT EXISTS financial_accounts (
+          id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+          name VARCHAR(120) NOT NULL,
+          institution VARCHAR(120),
+          account_type VARCHAR(24) NOT NULL,
+          last_four VARCHAR(4),
+          current_balance_cents BIGINT NOT NULL DEFAULT 0,
+          credit_limit_cents BIGINT,
+          interest_rate_bps INTEGER,
+          minimum_payment_cents BIGINT,
+          is_active BOOLEAN NOT NULL DEFAULT true,
+          created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )`,
+        `CREATE INDEX IF NOT EXISTS financial_accounts_type_idx
+          ON financial_accounts(account_type, is_active)`,
+        `CREATE TABLE IF NOT EXISTS financial_imports (
+          id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+          account_id VARCHAR NOT NULL REFERENCES financial_accounts(id) ON DELETE CASCADE,
+          source_file_name TEXT NOT NULL,
+          file_checksum VARCHAR(64) NOT NULL,
+          row_count INTEGER NOT NULL DEFAULT 0,
+          status VARCHAR(20) NOT NULL DEFAULT 'complete',
+          imported_at TIMESTAMP NOT NULL DEFAULT NOW(),
+          UNIQUE(account_id, file_checksum)
+        )`,
+        `CREATE TABLE IF NOT EXISTS financial_transactions (
+          id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+          import_id VARCHAR NOT NULL REFERENCES financial_imports(id) ON DELETE CASCADE,
+          account_id VARCHAR NOT NULL REFERENCES financial_accounts(id) ON DELETE CASCADE,
+          fingerprint VARCHAR(64) NOT NULL,
+          transaction_date DATE NOT NULL,
+          posted_date DATE,
+          description TEXT NOT NULL,
+          amount_cents BIGINT NOT NULL,
+          category VARCHAR(80) NOT NULL DEFAULT 'Uncategorized',
+          category_source VARCHAR(24) NOT NULL DEFAULT 'rule',
+          pending BOOLEAN NOT NULL DEFAULT false,
+          raw_data JSONB NOT NULL DEFAULT '{}'::jsonb,
+          created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+          UNIQUE(account_id, fingerprint)
+        )`,
+        `CREATE INDEX IF NOT EXISTS financial_transactions_date_idx
+          ON financial_transactions(transaction_date DESC)`,
+        `CREATE INDEX IF NOT EXISTS financial_transactions_account_idx
+          ON financial_transactions(account_id, transaction_date DESC)`,
+        `CREATE INDEX IF NOT EXISTS financial_transactions_category_idx
+          ON financial_transactions(category, transaction_date DESC)`,
+      ];
+      for (const statement of statements) await context.execute(sql.raw(statement));
+    },
+  },
 ] as const;
 
 const ledger: MigrationLedger<StartupContext> = {
