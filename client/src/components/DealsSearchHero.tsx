@@ -14,6 +14,13 @@ const BASEBALL_QUICK_CATEGORIES = curateShopperEquipmentTypes<
   { id: string; name: string; sportId: string }
 >([], "baseball");
 
+const BASEBALL_CATEGORY_IMAGE_FALLBACKS: Record<string, string> = {
+  "bb-bats": "/images/products/bbcor-bat-composite.png",
+  "bb-gloves": "/images/products/wilson-a2000-glove.png",
+  "bb-cleats": "/images/products/baseball-cleats.png",
+  "bb-training": "/images/products/pitching-machine.png",
+};
+
 export function DealsSearchHero({
   query,
   recentSearches,
@@ -189,6 +196,10 @@ export function DealsSearchHero({
         </div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
           {BASEBALL_QUICK_CATEGORIES.map((category) => (
+            (() => {
+              const categoryImage = categoryImages[category.id]
+                ?? BASEBALL_CATEGORY_IMAGE_FALLBACKS[category.id];
+              return (
             <button
               key={category.id}
               type="button"
@@ -196,14 +207,14 @@ export function DealsSearchHero({
               className="ring-focus group relative min-h-14 rounded-2xl overflow-hidden border border-border bg-card px-3 py-3 text-left text-sm font-bold shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-md sm:min-h-20"
               data-testid={`quick-category-${category.id}`}
             >
-              <span className={cn("relative z-10 block max-w-[70%]", categoryImages[category.id] && "drop-shadow-[0_1px_0_rgba(255,255,255,0.9)]")}>
+              <span className={cn("relative z-10 block max-w-[70%]", categoryImage && "drop-shadow-[0_1px_0_rgba(255,255,255,0.9)]")}>
                 {category.name}
               </span>
-              {categoryImages[category.id] && (
+              {categoryImage && (
                 <>
                   <span className="absolute inset-y-0 right-0 w-1/2 bg-gradient-to-l from-card via-card/85 to-transparent" />
                   <img
-                    src={categoryImages[category.id]}
+                    src={categoryImage}
                     alt=""
                     loading="lazy"
                     className="absolute right-1 top-1/2 h-[72px] w-[72px] -translate-y-1/2 object-contain opacity-90 transition-transform group-hover:scale-105"
@@ -211,6 +222,8 @@ export function DealsSearchHero({
                 </>
               )}
             </button>
+              );
+            })()
           ))}
           <button
             type="button"
