@@ -2287,6 +2287,27 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/admin/golf-taxonomy-backfill/preview", isAdmin, async (req: any, res) => {
+    try {
+      const { previewGolfTaxonomyBackfill } = await import("./golf-taxonomy-backfill");
+      const limit = Math.max(1, Math.min(Number(req.query.limit) || 50, 250));
+      res.json(await previewGolfTaxonomyBackfill(limit));
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/admin/golf-taxonomy-backfill/apply", isAdmin, async (req: any, res) => {
+    try {
+      const schema = z.object({ limit: z.number().int().min(1).max(250).default(100) });
+      const { limit } = schema.parse(req.body ?? {});
+      const { applyGolfTaxonomyBackfill } = await import("./golf-taxonomy-backfill");
+      res.json(await applyGolfTaxonomyBackfill(limit));
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.get("/api/admin/product-identities/summary", isAdmin, async (_req: any, res) => {
     try {
       const { db } = await import("./db");
