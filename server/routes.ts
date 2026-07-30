@@ -2327,8 +2327,15 @@ export async function registerRoutes(
 
   app.get("/api/admin/product-research/workspace", isAdmin, async (req: any, res) => {
     try {
-      const { getProductResearchWorkspace, productResearchWindow } = await import("./product-research");
-      res.json(await getProductResearchWorkspace(productResearchWindow(req.query.days)));
+      const {
+        getProductResearchWorkspace,
+        productResearchFocus,
+        productResearchWindow,
+      } = await import("./product-research");
+      res.json(await getProductResearchWorkspace(
+        productResearchWindow(req.query.days),
+        productResearchFocus(req.query.focus),
+      ));
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

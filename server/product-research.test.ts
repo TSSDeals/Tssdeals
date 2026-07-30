@@ -4,6 +4,8 @@ import {
   buildProductResearchUrl,
   buildLedgerResearchKey,
   productResearchObservationInput,
+  productResearchFocus,
+  PRODUCT_RESEARCH_CATEGORIES,
   productResearchReviewInput,
   productResearchWindow,
 } from "./product-research";
@@ -26,6 +28,24 @@ test("Product Research accepts supported demand and baseline windows", () => {
     assert.equal(productResearchWindow(days), days);
   }
   assert.equal(productResearchWindow("not-a-window"), 30);
+});
+
+test("Product Research exposes a separate, club-only golf track", () => {
+  assert.equal(productResearchFocus("golf"), "golf");
+  assert.equal(productResearchFocus("unknown"), "baseball");
+  assert.deepEqual(
+    PRODUCT_RESEARCH_CATEGORIES.golf.map((category) => category.researchKey),
+    [
+      "category:golf-drivers",
+      "category:golf-fairway-hybrids",
+      "category:golf-iron-sets",
+      "category:golf-wedges",
+      "category:golf-putters",
+    ],
+  );
+  assert.equal(PRODUCT_RESEARCH_CATEGORIES.golf.every(
+    (category) => category.categoryId === "115280",
+  ), true);
 });
 
 test("Product Research accepts decimal eBay percentages and stores database-safe values", () => {
