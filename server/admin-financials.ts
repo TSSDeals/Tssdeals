@@ -368,8 +368,20 @@ async function importStatement(accountId: string, filename: string, buffer: Buff
       LIMIT 1
     `);
     const priorRow = (prior as any).rows?.[0];
-    if (priorRow && Number(priorRow.row_count) >= transactions.length) {
-      return { imported: 0, duplicates: transactions.length, alreadyImported: true, reprocessed: false };
+    if (priorRow) {
+      const existing = await tx.execute(sql`
+        SELECT fingerprint
+        FROM financial_transactions
+        WHERE import_id = ${priorRow.id}
+      `);
+      const existingFingerprints = new Set(
+        ((existing as any).rows ?? []).map((row: any) => String(row.fingerprint)),
+      );
+      const exactMatch = existingFingerprints.size === transactions.length
+        && transactions.every(transaction => existingFingerprints.has(transaction.fingerprint));
+      if (exactMatch) {
+        return { imported: 0, duplicates: transactions.length, alreadyImported: true, reprocessed: false };
+      }
     }
     let importId: string;
     if (priorRow) {

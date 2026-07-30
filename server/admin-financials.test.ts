@@ -133,6 +133,28 @@ test("Chase PDF text parser combines multiline rows and excludes summary balance
   assert.equal(rows.some(row => row.description.includes("ENDING BALANCE")), false);
 });
 
+test("corrected Chase parser fingerprints change when a formerly incorrect year is repaired", () => {
+  const corrected = parseFinancialStatementText(`
+    February 27, 2026
+    DEPOSITS AND ADDITIONS
+    02/02 Shopify Payout
+    $76.71
+    ELECTRONIC WITHDRAWALS
+    02/06 Supplier Payment
+    $63.68
+    DAILY ENDING BALANCE
+  `, "checking.pdf", "checking");
+  const formerlyIncorrect = parseFinancialStatementText(`
+    Statement ending 02/27/2051
+    02/02 SHOPIFY PAYOUT 76.71
+    02/06 SUPPLIER PAYMENT 63.68
+  `, "checking.pdf", "checking");
+  assert.notDeepEqual(
+    corrected.map(row => row.fingerprint),
+    formerlyIncorrect.map(row => row.fingerprint),
+  );
+});
+
 test("uploaded text-based PDF statements are extracted end to end", async () => {
   const buffer = await pdfBuffer([
     "Statement ending 07/28/2026",
