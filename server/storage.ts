@@ -2488,6 +2488,25 @@ export class DatabaseStorage implements IStorage {
       whereParts.push(gte(deals.priceCents, category.minPriceCents));
     }
 
+    if (category.slug === "elite-baseball-gloves") {
+      // Do not let ordinary, recently refreshed glove inventory crowd premium
+      // candidates out before the Elite evaluator runs. This is intentionally
+      // broader than the final boundary in top-deals-ranking.ts: the evaluator
+      // remains the source of truth for acceptance and admin overrides.
+      whereParts.push(or(
+        eq(deals.sourceId, "ball-glove-blueprint"),
+        dsql`${deals.raw}->>'eliteCornerOverride' = 'include'`,
+        ilike(deals.title, "%A2K%"),
+        ilike(deals.title, "%Pro Preferred%"),
+        ilike(deals.title, "%Wilson Staff%"),
+        ilike(deals.title, "%Made in Japan%"),
+        ilike(deals.title, "% MIJ%"),
+        ilike(deals.brand, "%A2K%"),
+        ilike(deals.brand, "%Pro Preferred%"),
+        ilike(deals.brand, "%Wilson Staff%"),
+      ));
+    }
+
     // Cricket bats get misclassified as baseball/softball bats by broad "bat" keyword
     // matching. Keep them out of any bat or baseball/softball category.
     const BAT_EQ_IDS = ["bb-bats", "fp-bats", "sp-bats"];
@@ -2510,7 +2529,9 @@ export class DatabaseStorage implements IStorage {
       .from(deals)
       .where(where)
       .orderBy(desc(deals.lastPriceConfirmedAt), desc(deals.lastSeenAt), desc(deals.foundAt))
-      .limit(Math.max(200, effectiveLimit * 20));
+      .limit(category.slug === "elite-baseball-gloves"
+        ? Math.max(1000, effectiveLimit * 50)
+        : Math.max(200, effectiveLimit * 20));
 
     const clickCounts = new Map<string, number>();
     if (pool.length > 0) {
