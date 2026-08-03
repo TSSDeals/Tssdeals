@@ -404,9 +404,14 @@ async function replaceWholesaleFile(filename: string, products: ParsedWholesaleR
   });
 }
 
-async function replaceLedger(filename: string, entries: ReturnType<typeof parseLedgerWorkbook>) {
+export async function replaceLedger(
+  filename: string,
+  entries: ReturnType<typeof parseLedgerWorkbook>,
+  options: { exclusive?: boolean } = {},
+) {
   return db.transaction(async (tx) => {
-    await tx.execute(sql`DELETE FROM business_ledger_imports WHERE source_file_name = ${filename}`);
+    if (options.exclusive) await tx.execute(sql`DELETE FROM business_ledger_imports`);
+    else await tx.execute(sql`DELETE FROM business_ledger_imports WHERE source_file_name = ${filename}`);
     const inserted = await tx.execute(sql`
       INSERT INTO business_ledger_imports (source_file_name, row_count, status)
       VALUES (${filename}, ${entries.length}, 'complete') RETURNING id

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { ArrowLeft, Calculator, CreditCard, Database, FileSpreadsheet, Landmark, Loader2, Search, Trash2, Upload } from "lucide-react";
+import { ArrowLeft, Calculator, Cloud, CreditCard, Database, FileSpreadsheet, Landmark, Loader2, RefreshCw, Search, Trash2, Unlink, Upload } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -62,7 +62,10 @@ export default function AdminOperations() {
   const isAdmin = (user as any)?.isAdmin === true;
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState<"wholesale" | "ledger" | "financial">("wholesale");
+  const [tab, setTab] = useState<"wholesale" | "ledger" | "financial">(() => {
+    const requested = new URLSearchParams(window.location.search).get("tab");
+    return requested === "ledger" || requested === "financial" ? requested : "wholesale";
+  });
   const [query, setQuery] = useState("");
   const [markup, setMarkup] = useState(25);
   const [wholesaleCompany, setWholesaleCompany] = useState("");
@@ -73,7 +76,8 @@ export default function AdminOperations() {
   const [ledgerStatus, setLedgerStatus] = useState("");
   const [ledgerSort, setLedgerSort] = useState("date");
   const [ledgerDirection, setLedgerDirection] = useState<"asc" | "desc">("desc");
-  const [uploading, setUploading] = useState<"wholesale" | "ledger" | "financial" | null>(null);
+  const [uploading, setUploading] = useState<"wholesale" | "ledger" | "financial" | "onedrive" | null>(null);
+  const [oneDrivePath, setOneDrivePath] = useState("Desktop/TSS Ledger_Copy.xlsx");
   const [financialAccountId, setFinancialAccountId] = useState("");
   const [financialCategory, setFinancialCategory] = useState("");
   const [financialResetConfirmation, setFinancialResetConfirmation] = useState("");
@@ -125,6 +129,16 @@ export default function AdminOperations() {
     queryKey: ["/api/admin/operations/ledger-statuses"],
     queryFn: () => jsonFetch("/api/admin/operations/ledger-statuses"),
     enabled: isAuthenticated && isAdmin && tab === "ledger",
+  });
+  const oneDrive = useQuery({
+    queryKey: ["/api/admin/operations/onedrive/status"],
+    queryFn: async () => {
+      const result = await jsonFetch("/api/admin/operations/onedrive/status");
+      setOneDrivePath(result.filePath || "Desktop/TSS Ledger_Copy.xlsx");
+      return result;
+    },
+    enabled: isAuthenticated && isAdmin && tab === "ledger",
+    refetchInterval: 60_000,
   });
   const financialAccounts = useQuery({
     queryKey: ["/api/admin/financial/accounts"],
@@ -206,6 +220,47 @@ export default function AdminOperations() {
       toast({ title: "Financial account added", description: "No credentials were stored." });
     } catch (error: any) {
       toast({ title: "Account was not added", description: error?.message ?? "Unknown error", variant: "destructive" });
+    }
+  };
+
+  const syncOneDrive = async (force = false) => {
+    setUploading("onedrive");
+    try {
+      const result = await jsonPost("/api/admin/operations/onedrive/sync", { force });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/operations/onedrive/status"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/operations/summary"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/operations/ledger"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/operations/ledger-statuses"] }),
+      ]);
+      toast({
+        title: result.changed ? "OneDrive ledger updated" : "OneDrive ledger is already current",
+        description: `${Number(result.rows ?? 0).toLocaleString()} ledger rows are available.`,
+      });
+    } catch (error: any) {
+      toast({ title: "OneDrive sync failed", description: error?.message ?? "Unknown error", variant: "destructive" });
+    } finally {
+      setUploading(null);
+    }
+  };
+
+  const saveOneDrivePath = async () => {
+    try {
+      await jsonPost("/api/admin/operations/onedrive/config", { filePath: oneDrivePath });
+      await queryClient.invalidateQueries({ queryKey: ["/api/admin/operations/onedrive/status"] });
+      toast({ title: "OneDrive ledger selected", description: "Run a sync to import the selected workbook." });
+    } catch (error: any) {
+      toast({ title: "Ledger path was not saved", description: error?.message ?? "Unknown error", variant: "destructive" });
+    }
+  };
+
+  const disconnectOneDrive = async () => {
+    try {
+      await jsonPost("/api/admin/operations/onedrive/disconnect", {});
+      await queryClient.invalidateQueries({ queryKey: ["/api/admin/operations/onedrive/status"] });
+      toast({ title: "OneDrive disconnected", description: "Previously imported ledger rows were preserved." });
+    } catch (error: any) {
+      toast({ title: "OneDrive was not disconnected", description: error?.message ?? "Unknown error", variant: "destructive" });
     }
   };
 
@@ -454,6 +509,61 @@ export default function AdminOperations() {
               )}
               <p className="mt-2 text-xs text-muted-foreground">Target price applies the 10% EID fee first, then your selected markup. Tax and shipping are not yet included.</p>
             </>
+          )}
+          {tab === "ledger" && (
+            <div className="mt-4 rounded-xl border bg-muted/30 p-4" data-testid="onedrive-ledger-sync">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Cloud className="h-4 w-4 text-primary" />
+                    <h2 className="font-semibold">OneDrive ledger connection</h2>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    OneDrive is the source of truth. TSSDeals checks for workbook changes every {Number(oneDrive.data?.automaticIntervalMinutes ?? 15)} minutes and replaces only the OneDrive ledger import.
+                  </p>
+                  {oneDrive.data?.connected && (
+                    <p className="mt-2 text-xs">
+                      <span className="font-medium text-emerald-700 dark:text-emerald-400">Connected</span>
+                      {oneDrive.data.lastSuccessAt ? ` · Last updated ${new Date(oneDrive.data.lastSuccessAt).toLocaleString()}` : " · Waiting for first sync"}
+                      {` · ${Number(oneDrive.data.rowCount ?? 0).toLocaleString()} rows`}
+                    </p>
+                  )}
+                  {oneDrive.data?.lastError && <p className="mt-2 text-xs text-destructive">{oneDrive.data.lastError}</p>}
+                </div>
+                {!oneDrive.data?.connected ? (
+                  <Button
+                    onClick={() => { window.location.href = "/api/admin/operations/onedrive/start"; }}
+                    disabled={!oneDrive.data?.configured}
+                  >
+                    <Cloud className="mr-1.5 h-4 w-4" />Connect Microsoft OneDrive
+                  </Button>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    <Button onClick={() => syncOneDrive(false)} disabled={uploading === "onedrive"}>
+                      {uploading === "onedrive" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-1.5 h-4 w-4" />}
+                      Sync now
+                    </Button>
+                    <Button variant="outline" onClick={disconnectOneDrive}><Unlink className="mr-1.5 h-4 w-4" />Disconnect</Button>
+                  </div>
+                )}
+              </div>
+              {!oneDrive.data?.configured && (
+                <p className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+                  Setup required: add ONEDRIVE_CLIENT_ID and ONEDRIVE_CLIENT_SECRET to Replit Secrets, then republish.
+                </p>
+              )}
+              {oneDrive.data?.connected && (
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                  <Input
+                    aria-label="OneDrive ledger path"
+                    value={oneDrivePath}
+                    onChange={(event) => setOneDrivePath(event.target.value)}
+                    placeholder="Folder/TSS Ledger_Copy.xlsx"
+                  />
+                  <Button variant="secondary" onClick={saveOneDrivePath}>Save workbook path</Button>
+                </div>
+              )}
+            </div>
           )}
           {tab === "financial" && (
             <div className="mt-4 space-y-4">

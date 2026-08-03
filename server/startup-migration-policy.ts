@@ -71,6 +71,12 @@ export const STARTUP_MIGRATION_MANIFEST = [
     kind: "structural",
     description: "Private read-only financial accounts, statement imports, and transactions",
   },
+  {
+    id: "20260803_011_onedrive_ledger_connection",
+    checksum: "d41da6868b8d1791a3a44ce46a3ff50d2e5fd487f9c4e9a9615bc948f35f8c7c",
+    kind: "structural",
+    description: "Encrypted private OneDrive authorization and ledger sync state",
+  },
 ] as const;
 
 export type ApprovedSeedState = "empty" | "satisfied" | "partial";

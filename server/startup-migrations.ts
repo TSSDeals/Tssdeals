@@ -530,6 +530,32 @@ export const STARTUP_MIGRATIONS: readonly VersionedMigration<StartupContext>[] =
       for (const statement of statements) await context.execute(sql.raw(statement));
     },
   },
+  {
+    ...STARTUP_MIGRATION_MANIFEST[10],
+    async up(context) {
+      const statements = [
+        `CREATE TABLE IF NOT EXISTS onedrive_ledger_connections (
+          user_id VARCHAR PRIMARY KEY,
+          access_token_ciphertext TEXT NOT NULL,
+          refresh_token_ciphertext TEXT NOT NULL,
+          token_expires_at TIMESTAMP NOT NULL,
+          scope TEXT,
+          file_path TEXT NOT NULL DEFAULT 'Desktop/TSS Ledger_Copy.xlsx',
+          drive_item_id TEXT,
+          etag TEXT,
+          last_sync_at TIMESTAMP,
+          last_success_at TIMESTAMP,
+          last_error TEXT,
+          last_row_count INTEGER NOT NULL DEFAULT 0,
+          created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )`,
+        `CREATE INDEX IF NOT EXISTS onedrive_ledger_last_sync_idx
+          ON onedrive_ledger_connections(last_sync_at)`,
+      ];
+      for (const statement of statements) await context.execute(sql.raw(statement));
+    },
+  },
 ] as const;
 
 const ledger: MigrationLedger<StartupContext> = {
