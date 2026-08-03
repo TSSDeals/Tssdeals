@@ -2519,7 +2519,12 @@ export class DatabaseStorage implements IStorage {
       whereParts.push(dsql`LOWER(${deals.title}) NOT LIKE '%cricket%'`);
     }
 
-    const effectiveLimit = Math.min(category.maxResults ?? limit, limit);
+    // Elite Corner intentionally shows the complete verified collection. Do
+    // not let a legacy database row (historically maxResults=20) override the
+    // larger route limit introduced for this dedicated collection.
+    const effectiveLimit = category.slug === "elite-baseball-gloves"
+      ? Math.max(category.maxResults ?? 0, limit)
+      : Math.min(category.maxResults ?? limit, limit);
     const where = whereParts.length ? and(...whereParts) : undefined;
 
     // Ranking needs a broad, recent candidate pool. Pre-sorting by claimed percent-off
