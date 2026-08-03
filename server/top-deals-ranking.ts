@@ -221,7 +221,7 @@ function hasTrustedEliteGloveEvidence(deal: Deal): boolean {
   if (VALUE_OR_TRAINING_GLOVE_FAMILY_PATTERN.test(evidence)) return false;
   // Ball Glove Blueprint is a deliberately curated premium source. Every
   // available playable glove from that adapter belongs in Elite Corner.
-  if (deal.sourceId === "ball-glove-blueprint" || raw.catalogAdapter === "ball-glove-blueprint") return true;
+  if (isCuratedEliteSource(deal)) return true;
   if (ELITE_GLOVE_CORE_FAMILY_PATTERN.test(evidence)) return true;
   // Standard A2000 and Heart of the Hide are intentionally outside Elite.
   // Their explicitly Japan-made counterparts are the only exception.
@@ -230,6 +230,12 @@ function hasTrustedEliteGloveEvidence(deal: Deal): boolean {
     return JAPAN_MADE_GLOVE_PATTERN.test(evidence) || TEDDY_BEAR_GLOVE_PATTERN.test(evidence);
   }
   return JAPAN_MADE_GLOVE_PATTERN.test(evidence);
+}
+
+function isCuratedEliteSource(deal: Deal): boolean {
+  const raw = (deal.raw ?? {}) as Record<string, unknown>;
+  return deal.sourceId === "ball-glove-blueprint"
+    || raw.catalogAdapter === "ball-glove-blueprint";
 }
 
 function isBatCategory(context: TopDealsContext): boolean {
@@ -494,8 +500,11 @@ export function rankTopDeals(pool: Deal[], context: TopDealsContext = {}): Ranke
   const deduped = [...representatives.values()]
     .filter((deal) =>
       deal.topDealScore >= 28 &&
-      deal.topDealReasons.some((reason) =>
-        ["verified-price-drop", "historical-low", "verified-savings", "strong-market-value"].includes(reason.code),
+      (
+        isEliteGloveCategory(context)
+        || deal.topDealReasons.some((reason) =>
+          ["verified-price-drop", "historical-low", "verified-savings", "strong-market-value"].includes(reason.code),
+        )
       ),
     )
     .sort((a, b) => {
