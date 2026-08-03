@@ -31,7 +31,7 @@ test("Baseline adapter emits active variants, structured metadata, and tagged UR
   assert.equal(deals[0].equipmentTypeId, "bb-gloves");
   assert.equal(deals[0].url, "https://www.baselinesports.us/products/wilson-a2000-1786?variant=101&aff=380");
   assert.equal((deals[0].raw as any).shopifySku, "WBW-RHT");
-  assert.equal((deals[0].raw as any).baselineCouponEligibility, "unknown");
+  assert.equal((deals[0].raw as any).baselineCouponEligibility, "eligible");
   assert.equal(deals[0].msrpCents, 39_999);
   assert.equal(deals[1].msrpCents, null, "implausible compare-at price must not be trusted");
 });
@@ -39,6 +39,21 @@ test("Baseline adapter emits active variants, structured metadata, and tagged UR
 test("Baseline adapter rejects non-products and unknown taxonomy instead of polluting deals", () => {
   assert.deepEqual(baselineProductToDeals({ ...glove, title: "Signed Baseball Glove", product_type: "Collectible" }), []);
   assert.deepEqual(baselineProductToDeals({ ...glove, title: "Mystery Lifestyle Product", product_type: "" , tags: [] }), []);
+});
+
+test("Baseline Pro Preferred clearance gloves are retained for Elite Corner and affiliate checkout", () => {
+  const deals = baselineProductToDeals({
+    ...glove,
+    id: 9342,
+    title: 'Rawlings Pro Preferred 11.5" Infield Baseball Glove PROS934-2BW',
+    handle: "rawlings-pro-preferred-11-5-infield-baseball-glove-pros934-2bw",
+    vendor: "Rawlings",
+    variants: [{ ...glove.variants[0], id: 934201, price: "419.99", compare_at_price: null, sku: "PROS934-2BW-RHT" }],
+  });
+  assert.equal(deals.length, 1);
+  assert.equal(deals[0].equipmentTypeId, "bb-gloves");
+  assert.match(deals[0].url ?? "", /aff=380/);
+  assert.equal((deals[0].raw as any).baselineCouponEligibility, "eligible");
 });
 
 test("Baseline source is disabled by default and dry-run never writes", async () => {
@@ -60,6 +75,7 @@ test("Baseline source is disabled by default and dry-run never writes", async ()
   });
   assert.equal(writes, 0);
   assert.equal(result.acceptedVariants, 2);
+  assert.equal(result.fetchedProducts, 1, "overlapping catalog and priority collections are deduplicated");
   assert.equal(result.dryRun, true);
 });
 
