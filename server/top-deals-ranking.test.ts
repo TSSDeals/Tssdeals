@@ -181,6 +181,51 @@ test("elite glove categories require trusted premium family or source evidence",
   );
 });
 
+test("qualifying Elite gloves do not require a discount or price-history signal", () => {
+  const context = {
+    now,
+    category: {
+      name: "Elite Baseball Glove Deals",
+      slug: "elite-baseball-gloves",
+      sportId: "baseball",
+      equipmentTypeId: null,
+      searchQuery: "glove",
+    },
+  };
+  const blueprint = deal({
+    id: "blueprint-current-price",
+    sourceId: "ball-glove-blueprint",
+    title: 'Mack Provisions 11.5" Infield Baseball Glove',
+    brand: "Mack Provisions",
+    msrpCents: null,
+    manufacturerMsrpCents: null,
+    msrpVerified: false,
+    percentOff: null,
+    originalPriceCents: null,
+    highestPriceCents: null,
+    priceDropPercent: null,
+    hasPriceDrop: false,
+    isLow30d: false,
+    isLow60d: false,
+    isLow90d: false,
+    isLow180d: false,
+    isLow365d: false,
+    raw: { catalogAdapter: "ball-glove-blueprint", glovePosition: "infield" },
+  });
+  const a2k = deal({
+    ...blueprint,
+    id: "a2k-current-price",
+    sourceId: "independent-glove-seller",
+    title: 'Wilson A2K 1786 11.5" Infield Baseball Glove',
+    brand: "Wilson",
+    raw: { glovePosition: "infield" },
+  });
+
+  const ranked = rankTopDeals([blueprint, a2k], context);
+  assert.deepEqual(ranked.map((item) => item.id).sort(), ["a2k-current-price", "blueprint-current-price"]);
+  assert.ok(ranked.every((item) => item.topDealReasons.every((reason) => reason.code === "fresh-listing")));
+});
+
 test("teddy bear Wilson Staff gloves receive Elite ranking preference", () => {
   const context = {
     now,
