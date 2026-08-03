@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { AppShell } from "@/components/AppShell";
@@ -198,6 +198,7 @@ function CategoryDetail({
 }) {
   const { data, isLoading } = useCategoryDeals(slug);
   const sources = useSources();
+  const [eliteSort, setEliteSort] = useState("recommended");
 
   const sourceById = useMemo(() => {
     const m = new Map<string, any>();
@@ -207,7 +208,15 @@ function CategoryDetail({
   }, [sources.data]);
 
   const category = resolveTopDealsCategory(data?.category, categories, slug);
-  const deals = data?.deals ?? [];
+  const deals = useMemo(() => {
+    const list = [...(data?.deals ?? [])];
+    if (slug !== "elite-baseball-gloves" || eliteSort === "recommended") return list;
+    if (eliteSort === "discount") return list.sort((a: any, b: any) => Number(b.percentOff ?? -1) - Number(a.percentOff ?? -1));
+    if (eliteSort === "price-low") return list.sort((a: any, b: any) => Number(a.priceCents) - Number(b.priceCents));
+    if (eliteSort === "price-high") return list.sort((a: any, b: any) => Number(b.priceCents) - Number(a.priceCents));
+    if (eliteSort === "newest") return list.sort((a: any, b: any) => new Date(b.lastPriceConfirmedAt ?? b.lastSeenAt ?? b.foundAt ?? 0).getTime() - new Date(a.lastPriceConfirmedAt ?? a.lastSeenAt ?? a.foundAt ?? 0).getTime());
+    return list;
+  }, [data?.deals, eliteSort, slug]);
 
   if (isLoading) {
     return (
@@ -254,6 +263,22 @@ function CategoryDetail({
         </div>
       </div>
 
+      {slug === "elite-baseball-gloves" && (
+        <div className="flex flex-col gap-2 rounded-2xl border border-border bg-card/70 p-3 sm:flex-row sm:items-center sm:justify-between" data-testid="elite-sort-controls">
+          <div>
+            <div className="text-sm font-bold">Sort the complete Elite collection</div>
+            <div className="text-xs text-muted-foreground">Discount is optional; every listing must first meet the Elite glove standard.</div>
+          </div>
+          <select value={eliteSort} onChange={(event) => setEliteSort(event.target.value)} className="min-h-11 rounded-xl border border-input bg-background px-3 text-sm" aria-label="Sort Elite gloves" data-testid="elite-sort">
+            <option value="recommended">Brain recommended</option>
+            <option value="discount">Biggest verified discount</option>
+            <option value="price-low">Price: low to high</option>
+            <option value="price-high">Price: high to low</option>
+            <option value="newest">Recently confirmed</option>
+          </select>
+        </div>
+      )}
+
       {deals.length === 0 ? (
         <div className="card-elevated flex flex-col items-center gap-3 p-10 text-center">
           <Trophy className="h-10 w-10 text-muted-foreground/40" />
@@ -274,6 +299,7 @@ function CategoryDetail({
                 deal={deal}
                 sourceName={src?.name}
                 ourStore={src?.isOurStore}
+                eliteCornerAction={slug === "elite-baseball-gloves" ? "remove" : undefined}
                 data-testid={`deal-card-${idx}`}
               />
             );

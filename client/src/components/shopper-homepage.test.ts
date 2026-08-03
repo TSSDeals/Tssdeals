@@ -49,6 +49,14 @@ test("Memorabilia participates in the responsive category grid", () => {
   );
 });
 
+test("homepage offers a compact top-level sport selector and Elite Corner before filters", () => {
+  assert.match(heroSource, /data-testid="other-sports-select"/);
+  assert.match(heroSource, /Shop another sport/);
+  assert.match(dealsSource, /<EliteGloveCorner \/>/);
+  assert.ok(dealsSource.indexOf("<EliteGloveCorner />") > dealsSource.indexOf("<DealsSearchHero"));
+  assert.ok(dealsSource.indexOf("<EliteGloveCorner />") < dealsSource.indexOf('data-testid="primary-filters"'));
+});
+
 test("advanced filters are collapsed by default while primary filters stay visible", () => {
   assert.match(dealsSource, /useState\(false\)/);
   assert.match(dealsSource, /data-testid="primary-filters"/);

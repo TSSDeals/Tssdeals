@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { cn, outboundRetailerUrl } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ExternalLink, Pencil, Trash2, ShieldCheck, Store, Zap, TrendingDown, BarChart3, Tag, Copy, Check, EyeOff, Share2 } from "lucide-react";
+import { ExternalLink, Pencil, Trash2, ShieldCheck, Store, Zap, TrendingDown, BarChart3, Tag, Copy, Check, EyeOff, Share2, Sparkles } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -61,12 +61,14 @@ export function DealCard({
   sourceName,
   featured,
   ourStore,
+  eliteCornerAction,
   "data-testid": dataTestId,
 }: {
   deal: any;
   sourceName?: string;
   featured?: boolean;
   ourStore?: boolean;
+  eliteCornerAction?: "add" | "remove";
   "data-testid"?: string;
 }) {
   const { toast } = useToast();
@@ -130,6 +132,21 @@ export function DealCard({
       queryClient.invalidateQueries({ queryKey: ["/api/deals"], refetchType: "none" });
       toast({ title: "Deal hidden", description: "This deal won't show up again." });
     },
+  });
+
+  const eliteMutation = useMutation({
+    mutationFn: () => apiRequest("PATCH", `/api/admin/deals/${deal.id}/elite-corner`, {
+      decision: eliteCornerAction === "remove" ? "exclude" : "include",
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/deal-categories", "elite-baseball-gloves"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/deals"] });
+      toast({
+        title: eliteCornerAction === "remove" ? "Removed from Elite Corner" : "Added to Elite Corner",
+        description: "The Brain will respect this decision for future Elite selections.",
+      });
+    },
+    onError: (error: any) => toast({ title: "Elite Corner update failed", description: error?.message ?? "Please try again.", variant: "destructive" }),
   });
 
   const handleShare = async () => {
@@ -363,6 +380,19 @@ export function DealCard({
               )}
               {isAdmin && (
                 <>
+                  {eliteCornerAction && (
+                    <Button
+                      variant={eliteCornerAction === "remove" ? "outline" : "secondary"}
+                      size="icon"
+                      onClick={() => eliteMutation.mutate()}
+                      disabled={eliteMutation.isPending}
+                      className="ring-focus rounded-xl shadow-sm hover:shadow-md transition-all"
+                      data-testid={`deal-elite-${eliteCornerAction}`}
+                      title={eliteCornerAction === "remove" ? "Remove from Elite Corner" : "Add to Elite Corner"}
+                    >
+                      <Sparkles className="h-4 w-4" />
+                    </Button>
+                  )}
                   <Button
                     variant="secondary"
                     size="icon"
