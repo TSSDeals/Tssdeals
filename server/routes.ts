@@ -1152,7 +1152,13 @@ export async function registerRoutes(
     if (!category) {
       return res.status(404).json({ message: "Category not found" });
     }
-    const deals = await storage.getCategoryDeals(category, 40);
+    // Elite Corner is a complete premium collection, not a short "top N"
+    // teaser. Existing production rows may still carry the legacy 20-result
+    // cap, so request enough candidates to expose every verified premium glove.
+    const deals = await storage.getCategoryDeals(
+      category,
+      category.slug === "elite-baseball-gloves" ? 500 : 40,
+    );
     res.json({ category: shopperTopDealCategory(category), deals });
   });
 

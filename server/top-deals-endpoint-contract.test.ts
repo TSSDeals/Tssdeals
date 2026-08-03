@@ -11,7 +11,7 @@ const storageSource = readFileSync(`${serverDirectory}/storage.ts`, "utf8");
 test("curated category endpoint applies the shared semantic ranking gate", () => {
   assert.match(
     routesSource,
-    /app\.get\("\/api\/deal-categories\/:slug"[\s\S]*storage\.getCategoryDeals\(category,\s*40\)/,
+    /app\.get\("\/api\/deal-categories\/:slug"[\s\S]*storage\.getCategoryDeals\([\s\S]*category\.slug === "elite-baseball-gloves" \? 500 : 40/,
   );
   assert.match(
     storageSource,
