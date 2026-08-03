@@ -76,6 +76,7 @@ export default function AdminOperations() {
   const [uploading, setUploading] = useState<"wholesale" | "ledger" | "financial" | null>(null);
   const [financialAccountId, setFinancialAccountId] = useState("");
   const [financialCategory, setFinancialCategory] = useState("");
+  const [financialResetConfirmation, setFinancialResetConfirmation] = useState("");
   const [accountName, setAccountName] = useState("");
   const [accountInstitution, setAccountInstitution] = useState("");
   const [accountType, setAccountType] = useState("checking");
@@ -253,13 +254,8 @@ export default function AdminOperations() {
   };
 
   const resetFinancialImports = async () => {
-    const confirmation = window.prompt(
-      "This removes imported statement transactions and import history only. Accounts, the business ledger, wholesale data, inventory, and sales are preserved.\n\nType RESET FINANCIAL IMPORTS to continue.",
-    );
-    if (confirmation !== "RESET FINANCIAL IMPORTS") {
-      if (confirmation !== null) toast({ title: "Reset cancelled", description: "The confirmation text did not match." });
-      return;
-    }
+    const confirmation = financialResetConfirmation;
+    if (confirmation !== "RESET FINANCIAL IMPORTS") return;
     setUploading("financial-reset");
     try {
       const result = await jsonPost("/api/admin/financial/reset-imports", { confirmation });
@@ -272,6 +268,7 @@ export default function AdminOperations() {
         title: "Imported statements reset",
         description: `${Number(result?.deletedTransactions ?? 0).toLocaleString()} transactions and ${Number(result?.deletedImports ?? 0).toLocaleString()} import records removed. Accounts were preserved.`,
       });
+      setFinancialResetConfirmation("");
     } catch (error: any) {
       toast({ title: "Financial reset failed", description: error?.message ?? "Unknown error", variant: "destructive" });
     } finally {
@@ -485,10 +482,19 @@ export default function AdminOperations() {
                   <h2 className="font-semibold">Reset imported statements</h2>
                   <p className="mt-1 text-xs text-muted-foreground">Removes imported transactions and import history so corrected statements can be imported cleanly. Account setup and all other operations data stay intact.</p>
                 </div>
-                <Button variant="destructive" onClick={resetFinancialImports} disabled={uploading === "financial-reset"}>
-                  {uploading === "financial-reset" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Trash2 className="mr-1.5 h-4 w-4" />}
-                  Reset imports
-                </Button>
+                <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-72">
+                  <Input
+                    value={financialResetConfirmation}
+                    onChange={(event) => setFinancialResetConfirmation(event.target.value)}
+                    placeholder="Type RESET FINANCIAL IMPORTS"
+                    aria-label="Financial reset confirmation"
+                    autoComplete="off"
+                  />
+                  <Button variant="destructive" onClick={resetFinancialImports} disabled={uploading === "financial-reset" || financialResetConfirmation !== "RESET FINANCIAL IMPORTS"}>
+                    {uploading === "financial-reset" ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Trash2 className="mr-1.5 h-4 w-4" />}
+                    Reset imports
+                  </Button>
+                </div>
               </div>
             </div>
           )}
