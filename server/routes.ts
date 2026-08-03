@@ -2209,7 +2209,7 @@ export async function registerRoutes(
       const result = await syncBallGloveBlueprintDeals(storage);
       if (result.disabled) {
         return res.status(409).json({
-          message: "Ball Glove Blueprint sync is installed but not enabled. Set ENABLE_BALL_GLOVE_BLUEPRINT_SYNC=true, then run it again.",
+          message: "Ball Glove Blueprint sync is disabled by the production kill switch. Remove ENABLE_BALL_GLOVE_BLUEPRINT_SYNC=false, then run it again.",
           ...result,
         });
       }

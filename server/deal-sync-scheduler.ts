@@ -808,9 +808,10 @@ async function syncMultiShopifyDeals(storage: IStorage): Promise<{ created: numb
 }
 
 export async function syncBallGloveBlueprintDeals(storage: IStorage): Promise<{ created: number; updated: number; errors: number; fetched?: number; accepted?: number; skipped?: number; disabled?: boolean }> {
-  // Keep launch explicit. The adapter can be deployed and reviewed without
-  // silently introducing a new production collector on the next scheduler run.
-  if (process.env.ENABLE_BALL_GLOVE_BLUEPRINT_SYNC !== "true") {
+  // This source has been reviewed and approved for Elite Corner. Keep an
+  // explicit kill switch, but do not silently disable it when a deployment is
+  // missing an optional environment variable.
+  if (process.env.ENABLE_BALL_GLOVE_BLUEPRINT_SYNC === "false") {
     return { created: 0, updated: 0, errors: 0, disabled: true };
   }
   try {
