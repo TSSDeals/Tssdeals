@@ -79,7 +79,11 @@ test("endpoint semantic gate matrix rejects exact production leaks across eight 
     {
       slug: "premium-collector-gloves",
       searchQuery: "glove mitt",
-      valid: candidate("Inaba 11.5 Infield Baseball Glove", "bb-gloves", { brand: "Inaba" }),
+      valid: candidate("Inaba 11.5 Infield Baseball Glove", "bb-gloves", {
+        brand: "Inaba",
+        sourceId: "ball-glove-blueprint",
+        raw: { premiumGloveSource: true, catalogAdapter: "ball-glove-blueprint" },
+      }),
       leaks: [candidate("Mizuno Prospect Series PowerClose Baseball Glove", "bb-gloves", { brand: "Mizuno" })],
     },
     {
