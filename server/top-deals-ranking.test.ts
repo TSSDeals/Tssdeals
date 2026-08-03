@@ -102,8 +102,8 @@ test("fielding-glove categories keep position gloves and exclude adjacent gear",
   const context = {
     now,
     category: {
-      name: "Elite Baseball Glove Deals",
-      slug: "elite-baseball-gloves",
+      name: "Baseball & Softball Fielding Glove Deals",
+      slug: "baseball-softball-gloves",
       sportId: "baseball",
       equipmentTypeId: null,
       searchQuery: "glove mitt",
@@ -150,8 +150,11 @@ test("elite glove categories require trusted premium family or source evidence",
   const fixtures = [
     deal({ id: "a2k", sourceId: "source-a2k", title: 'Wilson A2K 1786 11.5" Baseball Glove', brand: "Wilson", raw: { sellerUsername: "seller-a2k" } }),
     deal({ id: "a2000", sourceId: "source-a2000", title: 'Wilson A2000 1786 11.5" Baseball Glove', brand: "Wilson", raw: { sellerUsername: "seller-a2000" } }),
+    deal({ id: "a2000-mij", sourceId: "source-a2000-mij", title: 'Wilson A2000 1786 11.5" Baseball Glove Made in Japan', brand: "Wilson" }),
     deal({ id: "hoh", sourceId: "source-hoh", title: 'Rawlings Heart of the Hide 11.75" Infield Glove', brand: "Rawlings", raw: { sellerUsername: "seller-hoh" } }),
+    deal({ id: "hoh-mij", sourceId: "source-hoh-mij", title: 'Rawlings Heart of the Hide 11.75" Infield Glove MIJ', brand: "Rawlings" }),
     deal({ id: "pro-preferred", sourceId: "source-pro-preferred", title: 'Rawlings Pro Preferred 12.75" Outfield Glove', brand: "Rawlings", raw: { sellerUsername: "seller-pro-preferred" } }),
+    deal({ id: "wilson-staff", sourceId: "source-wilson-staff", title: 'Wilson Staff Teddy Bear 11.5" Infield Baseball Glove', brand: "Wilson" }),
     deal({ id: "mizuno-pro", sourceId: "source-mizuno-pro", title: 'Mizuno Pro 11.5" Baseball Glove', brand: "Mizuno", raw: { sellerUsername: "seller-mizuno-pro" } }),
     deal({
       id: "premium-source",
@@ -170,12 +173,22 @@ test("elite glove categories require trusted premium family or source evidence",
 
   assert.deepEqual(
     fixtures.filter((item) => matchesTopDealCategoryBoundary(item, context)).map((item) => item.id),
-    ["a2k", "a2000", "hoh", "pro-preferred", "mizuno-pro", "premium-source"],
+    ["a2k", "a2000-mij", "hoh-mij", "pro-preferred", "wilson-staff", "premium-source"],
   );
   assert.deepEqual(
     rankTopDeals(fixtures, context).map((item) => item.id).sort(),
-    ["a2000", "a2k", "hoh", "mizuno-pro", "premium-source", "pro-preferred"].sort(),
+    ["a2k", "a2000-mij", "hoh-mij", "premium-source", "pro-preferred", "wilson-staff"].sort(),
   );
+});
+
+test("teddy bear Wilson Staff gloves receive Elite ranking preference", () => {
+  const context = {
+    now,
+    category: { name: "Elite Baseball Glove Deals", slug: "elite-baseball-gloves", sportId: "baseball", searchQuery: "glove" },
+  };
+  const ordinary = deal({ id: "ordinary", title: 'Wilson A2K 1786 11.5" Baseball Glove', brand: "Wilson" });
+  const teddy = deal({ id: "teddy", title: 'Wilson Staff Teddy Bear 11.5" Infield Baseball Glove', brand: "Wilson" });
+  assert.deepEqual(rankTopDeals([ordinary, teddy], context).map((item) => item.id), ["teddy", "ordinary"]);
 });
 
 test("admin Elite Corner decisions override future automatic family selection", () => {

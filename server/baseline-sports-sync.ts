@@ -14,6 +14,7 @@ import {
 import { classifyDeterministicProduct } from "./deterministic-product-classifier";
 
 export const BASELINE_SYNC_FEATURE_FLAG = "ENABLE_BASELINE_SPORTS_SYNC";
+const BASELINE_PRIORITY_COLLECTIONS = ["clearance", "baseball-gloves"] as const;
 
 export type BaselineSyncDiagnostics = {
   sourceId: string;
@@ -117,7 +118,10 @@ export function baselineProductToDeals(product: ShopifyProduct): InsertDeal[] {
       deal.raw = {
         ...(deal.raw as Record<string, unknown>),
         catalogAdapter: BASELINE_SPORTS_SOURCE_ID,
-        baselineCouponEligibility: "unknown",
+        // Twin Seam Sports has confirmed these storewide checkout codes for
+        // Baseline inventory. The comparison layer still reveals a code only
+        // when it is needed to beat a known comparable offer.
+        baselineCouponEligibility: "eligible",
         baselineCouponRulesVersion: 1,
         shopifyProductStatus: "active",
         shopifyVariantAvailable: true,
@@ -160,7 +164,17 @@ export async function syncBaselineSports(options: {
   }
 
   const fetchProducts = options.fetchProducts ?? fetchShopifyProducts;
-  const products = await fetchProducts(BASELINE_SPORTS_URL, 10, 750);
+  const catalogBatches = await Promise.all([
+    fetchProducts(BASELINE_SPORTS_URL, 10, 750),
+    ...BASELINE_PRIORITY_COLLECTIONS.map((handle) =>
+      fetchProducts(`${BASELINE_SPORTS_URL}/collections/${handle}`, 4, 500)
+    ),
+  ]);
+  // Priority collections protect high-value clearance and glove inventory
+  // from being missed if Shopify's broad catalog pagination changes order.
+  const products = [...new Map(
+    catalogBatches.flat().map((product) => [String(product.id), product]),
+  ).values()];
   const deals = products.flatMap(baselineProductToDeals);
   const acceptedProductIds = new Set(
     deals.map((deal) => (deal.raw as Record<string, unknown>)?.shopifyProductId),

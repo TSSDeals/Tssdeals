@@ -61,11 +61,14 @@ test("keeps trainer gloves out of ordinary playable fielding gloves", () => {
   assert.equal((deal.raw as any).glovePosition, "trainer");
 });
 
-test("rejects unavailable products, unsupported makers, and non-fielding forms", () => {
+test("accepts every available playable Ball Glove Blueprint maker and rejects non-fielding forms", () => {
   assert.equal(ballGloveBlueprintProductToDeal(product({
     variants: [{ ...product().variants[0], available: false }],
   })), null);
-  assert.equal(ballGloveBlueprintProductToDeal(product({ vendor: "Unknown Brand", tags: ["baseball"] })), null);
+  const newMaker = ballGloveBlueprintProductToDeal(product({ vendor: "New Japanese Maker", tags: ["baseball"] }));
+  assert.ok(newMaker);
+  assert.equal(newMaker.brand, "New Japanese Maker");
+  assert.equal((newMaker.raw as any).premiumGloveSource, true);
   assert.equal(ballGloveBlueprintProductToDeal(product({
     title: "Emery Premium Batting Gloves",
     product_type: "",

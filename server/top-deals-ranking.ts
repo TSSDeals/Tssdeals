@@ -19,8 +19,14 @@ const FIELDING_GLOVE_STRUCTURED_PATTERN =
 const FIELDING_GLOVE_EXCLUSION_PATTERN =
   /\b(?:golf|rain|cold[\s-]*weather|winter|football|work|utility)\s+gloves?\b|\b(?:batting\s+gloves?|sliding\s+mitts?|oven\s+mitts?|training\s+(?:gloves?|mitts?)|glove\s+(?:care|oil|conditioner|cleaner|wrap|lace|laces|lacing|repair|replacement|parts?|webs?)|(?:replacement|repair)\s+glove|batting\s+helmets?|helmets?|face\s*(?:guard|mask)|chest\s+protectors?|protective\s+gear|elbow\s+guards?|leg\s+guards?|signed|autograph(?:ed)?|memorabilia|collectible|display[\s-]only|game[\s-]used)\b/i;
 const ELITE_GLOVE_CATEGORY_PATTERN = /\b(?:elite|premium|high[\s-]*end|collector)\b/i;
-const ELITE_GLOVE_FAMILY_PATTERN =
-  /\b(?:wilson\s+)?a(?:2000|2k)\b|\b(?:rawlings\s+)?(?:pro\s+preferred|heart\s+of\s+the\s+hide)\b|\bmizuno\s+pro\b|\b(?:atoms|d-quest|emery|inaba|ip\s+select|leggera(?:-diamante)?|mack\s+provisions|wagyu[\s-]*jb|zett|nokona|junkei|glove\s+studio\s+ryu|kubota\s+slugger|donaiya|tamazawa|hi[\s-]*gold)\b/i;
+const ELITE_GLOVE_CORE_FAMILY_PATTERN =
+  /\b(?:wilson\s+)?a2k\b|\b(?:rawlings\s+)?pro\s+preferred\b/i;
+const JAPAN_MADE_GLOVE_PATTERN =
+  /\b(?:made|crafted|manufactured)\s+in\s+japan\b|\bjapan(?:ese)?[\s-]made\b|\bmade[\s-]in[\s-]japan\b|\bmij\b|日本製/i;
+const WILSON_STAFF_PATTERN = /\bwilson\s+staff\b/i;
+const TEDDY_BEAR_GLOVE_PATTERN = /\b(?:teddy|teddy[\s-]?bear|bear\s+(?:logo|patch|series))\b/i;
+const STANDARD_ELITE_EXCLUSION_PATTERN =
+  /\b(?:wilson\s+)?a2000\b|\b(?:rawlings\s+)?heart\s+of\s+the\s+hide\b/i;
 const VALUE_OR_TRAINING_GLOVE_FAMILY_PATTERN =
   /\bmizuno\s+prospect\b|\brawlings\s+(?:players?|r9)\b|\bwilson\s+a(?:500|700)\b|\b(?:youth|junior|training|trainer|practice)\b/i;
 const BAT_CATEGORY_PATTERN = /\b(?:baseball|softball|fastpitch|slowpitch)?\s*bats?\b|\bbbcor\b/i;
@@ -199,12 +205,31 @@ function hasTrustedEliteGloveEvidence(deal: Deal): boolean {
   const raw = (deal.raw ?? {}) as Record<string, unknown>;
   if (raw.eliteCornerOverride === "exclude") return false;
   if (raw.eliteCornerOverride === "include") return true;
-  const evidence = `${deal.brand ?? ""} ${deal.title ?? ""} ${String(raw.premiumMaker ?? "")}`;
+  const evidence = [
+    deal.brand,
+    deal.title,
+    raw.premiumMaker,
+    raw.vendor,
+    raw.tags,
+    raw.countryOfOrigin,
+    raw.manufacturingCountry,
+    raw.madeIn,
+  ]
+    .flatMap((value) => Array.isArray(value) ? value : [value])
+    .filter((value): value is string => typeof value === "string")
+    .join(" ");
   if (VALUE_OR_TRAINING_GLOVE_FAMILY_PATTERN.test(evidence)) return false;
-  if (raw.premiumGloveSource === true && typeof raw.premiumMaker === "string" && raw.premiumMaker.trim()) {
-    return true;
+  // Ball Glove Blueprint is a deliberately curated premium source. Every
+  // available playable glove from that adapter belongs in Elite Corner.
+  if (deal.sourceId === "ball-glove-blueprint" || raw.catalogAdapter === "ball-glove-blueprint") return true;
+  if (ELITE_GLOVE_CORE_FAMILY_PATTERN.test(evidence)) return true;
+  // Standard A2000 and Heart of the Hide are intentionally outside Elite.
+  // Their explicitly Japan-made counterparts are the only exception.
+  if (STANDARD_ELITE_EXCLUSION_PATTERN.test(evidence)) return JAPAN_MADE_GLOVE_PATTERN.test(evidence);
+  if (WILSON_STAFF_PATTERN.test(evidence)) {
+    return JAPAN_MADE_GLOVE_PATTERN.test(evidence) || TEDDY_BEAR_GLOVE_PATTERN.test(evidence);
   }
-  return ELITE_GLOVE_FAMILY_PATTERN.test(evidence);
+  return JAPAN_MADE_GLOVE_PATTERN.test(evidence);
 }
 
 function isBatCategory(context: TopDealsContext): boolean {
@@ -416,11 +441,16 @@ function scoreDeal(deal: Deal, context: TopDealsContext, now: Date): RankedTopDe
   const engagement = Math.min(8, Math.log2(clickCount + 1) * 2);
   if (clickCount >= 4) reasons.push({ code: "popular-with-shoppers", label: "Popular with shoppers" });
 
+  const elitePreference = isEliteGloveCategory(context)
+    && TEDDY_BEAR_GLOVE_PATTERN.test(`${deal.brand ?? ""} ${deal.title ?? ""} ${JSON.stringify(deal.raw ?? {})}`)
+    ? 12
+    : 0;
+
   if (!reasons.some((reason) => reason.code !== "fresh-listing") && value >= 8) {
     reasons.unshift({ code: "strong-market-value", label: "Strong market value" });
   }
 
-  const score = Math.max(0, Math.min(100, value + relevance + quality + freshness + engagement));
+  const score = Math.max(0, Math.min(100, value + relevance + quality + freshness + engagement + elitePreference));
   const confidence = savings.trusted || lowDays >= 90 || (deal.hasPriceDrop && deal.lastPriceConfirmedAt)
     ? "high"
     : deal.lastPriceConfirmedAt && deal.imageUrl

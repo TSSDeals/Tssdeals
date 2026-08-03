@@ -97,7 +97,7 @@ export function ballGloveBlueprintProductToDeal(product: ShopifyProduct): Insert
   const maker = premiumMakerFor(product);
   const hasAvailableVariant = product.variants?.some((variant) => variant.available);
 
-  if (!maker || !hasAvailableVariant) return null;
+  if (!hasAvailableVariant) return null;
   if (EXCLUDED_FORM_PATTERN.test(text)) return null;
   if (
     product.product_type.toLowerCase().trim() !== "baseball glove" &&
@@ -115,7 +115,11 @@ export function ballGloveBlueprintProductToDeal(product: ShopifyProduct): Insert
   );
   if (!deal) return null;
 
-  deal.brand = maker;
+  // Ball Glove Blueprint itself is the trusted curation boundary. Preserve a
+  // recognized maker when possible, otherwise keep the catalog vendor so a
+  // new or limited-run maker is not silently omitted from Elite Corner.
+  const catalogMaker = maker ?? product.vendor?.trim() ?? null;
+  deal.brand = catalogMaker;
   // The shared Shopify refinement treats every "Baseball Glove" product type as
   // playable. Restore the adapter's explicit trainer boundary after conversion.
   if (position === "trainer") {
@@ -126,7 +130,7 @@ export function ballGloveBlueprintProductToDeal(product: ShopifyProduct): Insert
     ...(deal.raw as Record<string, unknown>),
     catalogAdapter: BALL_GLOVE_BLUEPRINT_SOURCE_ID,
     premiumGloveSource: true,
-    premiumMaker: maker,
+    premiumMaker: catalogMaker,
     glovePosition: position,
     gloveSize: ballGloveSize(product),
     throwHand: ballGloveThrowHand(product),
