@@ -178,6 +178,27 @@ test("elite glove categories require trusted premium family or source evidence",
   );
 });
 
+test("admin Elite Corner decisions override future automatic family selection", () => {
+  const context = {
+    now,
+    category: { name: "Elite Baseball Glove Deals", slug: "elite-baseball-gloves", sportId: "baseball", equipmentTypeId: null, searchQuery: "glove" },
+  };
+  const manuallyIncluded = deal({
+    id: "manual-include",
+    title: 'Custom Maker 11.5" Infield Baseball Glove',
+    brand: "Custom Maker",
+    raw: { eliteCornerOverride: "include" },
+  });
+  const manuallyExcluded = deal({
+    id: "manual-exclude",
+    title: 'Wilson A2K 1786 11.5" Baseball Glove',
+    brand: "Wilson",
+    raw: { eliteCornerOverride: "exclude" },
+  });
+  assert.equal(matchesTopDealCategoryBoundary(manuallyIncluded, context), true);
+  assert.equal(matchesTopDealCategoryBoundary(manuallyExcluded, context), false);
+});
+
 test("bat categories reject batting helmets and accessories without affecting real bats", () => {
   const context = {
     now,

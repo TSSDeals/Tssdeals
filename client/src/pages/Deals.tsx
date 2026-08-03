@@ -26,6 +26,7 @@ import { ArrowUpDown, Camera, CheckCircle2, ChevronDown, ChevronRight, ChevronUp
 import { Link } from "wouter";
 import { DealCarousel } from "@/components/DealCarousel";
 import { DealsSearchHero } from "@/components/DealsSearchHero";
+import { EliteGloveCorner } from "@/components/EliteGloveCorner";
 import {
   BASEBALL_BAT_GROUP_IDS,
   CANONICAL_BASEBALL_BAT_ID,
@@ -624,7 +625,10 @@ export default function DealsPage() {
         })}
         starterImages={homepageVisuals.starterImages}
         categoryImages={homepageVisuals.categoryImages}
+        sports={shopperSports}
       />
+
+      <EliteGloveCorner />
 
       <div className="hidden justify-end lg:flex" data-testid="deal-utilities">
         {dealUtilities}
@@ -1224,6 +1228,7 @@ export default function DealsPage() {
                 <div key={d.id} className={cn("animate-float-in", idx % 5 === 0 ? "stagger-1" : idx % 5 === 1 ? "stagger-2" : idx % 5 === 2 ? "stagger-3" : idx % 5 === 3 ? "stagger-4" : "stagger-5")}>
                   <DealCard
                     deal={d}
+                    eliteCornerAction="add"
                     featured
                     ourStore={ourStoreId ? d.sourceId === ourStoreId : Boolean(sourceById.get(d.sourceId)?.isOurStore)}
                     sourceName={sourceById.get(d.sourceId)?.name}
@@ -1265,6 +1270,7 @@ export default function DealsPage() {
                 <div key={d.id} className={cn("animate-float-in", idx % 5 === 0 ? "stagger-1" : idx % 5 === 1 ? "stagger-2" : idx % 5 === 2 ? "stagger-3" : idx % 5 === 3 ? "stagger-4" : "stagger-5")}>
                   <DealCard
                     deal={d}
+                    eliteCornerAction="add"
                     featured={false}
                     ourStore={true}
                     sourceName={sourceById.get(d.sourceId)?.name ?? "Twin Seam Sports"}
@@ -1525,6 +1531,7 @@ export default function DealsPage() {
                     <DealCard
                       key={d.id}
                       deal={d}
+                      eliteCornerAction="add"
                       featured={false}
                       ourStore={ourStoreId ? d.sourceId === ourStoreId : Boolean(sourceById.get(d.sourceId)?.isOurStore)}
                       sourceName={sourceById.get(d.sourceId)?.name}
@@ -1548,6 +1555,7 @@ export default function DealsPage() {
                     <div key={d.id} className="animate-float-in">
                       <DealCard
                         deal={d}
+                        eliteCornerAction="add"
                         featured={false}
                         ourStore={ourStoreId ? d.sourceId === ourStoreId : Boolean(sourceById.get(d.sourceId)?.isOurStore)}
                         sourceName={sourceById.get(d.sourceId)?.name}

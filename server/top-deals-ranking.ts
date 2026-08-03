@@ -197,6 +197,8 @@ function hasPositiveFieldingGloveEvidence(deal: Deal): boolean {
 
 function hasTrustedEliteGloveEvidence(deal: Deal): boolean {
   const raw = (deal.raw ?? {}) as Record<string, unknown>;
+  if (raw.eliteCornerOverride === "exclude") return false;
+  if (raw.eliteCornerOverride === "include") return true;
   const evidence = `${deal.brand ?? ""} ${deal.title ?? ""} ${String(raw.premiumMaker ?? "")}`;
   if (VALUE_OR_TRAINING_GLOVE_FAMILY_PATTERN.test(evidence)) return false;
   if (raw.premiumGloveSource === true && typeof raw.premiumMaker === "string" && raw.premiumMaker.trim()) {

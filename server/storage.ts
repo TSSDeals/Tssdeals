@@ -2464,7 +2464,10 @@ export class DatabaseStorage implements IStorage {
       );
     }
 
-    if (category.brandKeywords && category.brandKeywords.length > 0) {
+    // Elite candidates must reach the full quality evaluator. A short brand
+    // allow-list here would hide specialty makers and explicit admin choices.
+    const useBrandPrefilter = category.slug !== "elite-baseball-gloves";
+    if (useBrandPrefilter && category.brandKeywords && category.brandKeywords.length > 0) {
       const brandConditions = category.brandKeywords.map((brand) =>
         or(
           ilike(deals.title, `%${brand}%`),

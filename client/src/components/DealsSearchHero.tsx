@@ -3,6 +3,7 @@ import { Camera, RefreshCcw, Search, Sparkles, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import {
   SHOPPER_MEMORABILIA_SPORT_ID,
@@ -34,6 +35,7 @@ export function DealsSearchHero({
   onCategory,
   starterImages = {},
   categoryImages = {},
+  sports = [],
 }: {
   query: string;
   recentSearches: string[];
@@ -47,6 +49,7 @@ export function DealsSearchHero({
   onCategory: (sportId: string, equipmentTypeId: string) => void;
   starterImages?: Record<string, string>;
   categoryImages?: Record<string, string>;
+  sports?: Array<{ id: string; name: string }>;
 }) {
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -233,6 +236,24 @@ export function DealsSearchHero({
           >
             Memorabilia
           </button>
+        </div>
+        <div className="mt-3 flex flex-col gap-2 rounded-2xl border border-border bg-card/70 p-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="text-sm font-bold">Shop another sport</div>
+            <div className="text-xs text-muted-foreground">Choose a sport first; its relevant gear appears with the results.</div>
+          </div>
+          <Select onValueChange={(sportId) => onCategory(sportId, "all")}>
+            <SelectTrigger className="min-h-11 w-full rounded-xl bg-background sm:w-[260px]" data-testid="other-sports-select">
+              <SelectValue placeholder="Select a sport" />
+            </SelectTrigger>
+            <SelectContent>
+              {sports
+                .filter((sport) => sport.id !== "baseball" && sport.id !== SHOPPER_MEMORABILIA_SPORT_ID)
+                .map((sport) => (
+                  <SelectItem key={sport.id} value={sport.id}>{sport.name}</SelectItem>
+                ))}
+            </SelectContent>
+          </Select>
         </div>
       </section>
     </>

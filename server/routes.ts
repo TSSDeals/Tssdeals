@@ -2289,6 +2289,24 @@ export async function registerRoutes(
     }
   });
 
+  app.patch("/api/admin/deals/:id/elite-corner", isAdmin, async (req: any, res) => {
+    try {
+      const { decision } = z.object({ decision: z.enum(["include", "exclude", "auto"]) }).parse(req.body);
+      const deal = await storage.getDeal(req.params.id);
+      if (!deal) return res.status(404).json({ message: "Deal not found" });
+      const raw = { ...((deal.raw ?? {}) as Record<string, unknown>) };
+      if (decision === "auto") delete raw.eliteCornerOverride;
+      else raw.eliteCornerOverride = decision;
+      raw.eliteCornerReviewedAt = new Date().toISOString();
+      raw.eliteCornerReviewedBy = getAuthedUserId(req);
+      const updated = await storage.updateDeal(req.params.id, { raw });
+      res.json({ ok: true, decision, deal: updated });
+    } catch (err: any) {
+      if (err instanceof z.ZodError) return res.status(400).json({ message: "Invalid Elite Corner decision" });
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.get("/api/admin/golf-taxonomy-backfill/preview", isAdmin, async (req: any, res) => {
     try {
       const { previewGolfTaxonomyBackfill } = await import("./golf-taxonomy-backfill");
