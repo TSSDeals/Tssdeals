@@ -40,11 +40,6 @@ import {
   shopperResultEquipmentTypeId,
 } from "@shared/equipment-groups";
 import {
-  BASELINE_SPORTS_NAME,
-  BASELINE_SPORTS_URL,
-  TWIN_SEAM_SOURCE_ID,
-} from "@shared/retailer-programs";
-import {
   buildZeroResultRecovery,
   type SearchRecoveryAction,
 } from "@shared/search-language";
@@ -1282,50 +1277,6 @@ export default function DealsPage() {
           )}
         </section>
       )}
-
-      {isDefaultView && <section
-        className="animate-float-in stagger-3 rounded-2xl border border-border bg-card/60 p-4"
-        data-testid="preferred-retailers"
-      >
-        <div className="mb-3">
-          <div className="font-display text-base font-bold">Preferred retailers</div>
-          <div className="text-xs text-muted-foreground">
-            Preferred placement never overrides the actual price comparison.
-          </div>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {[
-            {
-              sourceId: TWIN_SEAM_SOURCE_ID,
-              name: "Twin Seam Sports",
-              href: "https://www.twinseamsports.com",
-              label: "Our store · first preference",
-            },
-            {
-              sourceId: "baseline-sports",
-              name: BASELINE_SPORTS_NAME,
-              href: outboundRetailerUrl(BASELINE_SPORTS_URL),
-              label: "Affiliate partner · second preference",
-            },
-          ].map((retailer) => (
-            <a
-              key={retailer.sourceId}
-              href={retailer.href}
-              target="_blank"
-              rel={retailer.sourceId === "baseline-sports" ? "noopener noreferrer sponsored" : "noopener noreferrer"}
-              className="ring-focus flex min-h-16 items-center justify-between rounded-xl border border-border bg-background px-4 py-3 hover:border-primary/40 hover:shadow-sm"
-              data-testid={`preferred-retailer-${retailer.sourceId}`}
-            >
-              <div>
-                <div className="text-sm font-bold">{retailer.name}</div>
-                <div className="text-xs text-muted-foreground">{retailer.label}</div>
-              </div>
-              <ExternalLink className="h-4 w-4 text-primary" />
-            </a>
-          ))}
-        </div>
-      </section>}
-
 
       {isDefaultView ? (
         <section className="animate-float-in stagger-4 space-y-6" data-testid="default-feed">
