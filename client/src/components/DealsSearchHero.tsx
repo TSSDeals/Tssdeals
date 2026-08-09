@@ -1,5 +1,5 @@
 import { type FormEvent, type RefObject } from "react";
-import { Camera, RefreshCcw, Search, Sparkles, XCircle } from "lucide-react";
+import { Camera, RefreshCcw, Search, ShieldCheck, Sparkles, TrendingDown, XCircle, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -59,28 +59,28 @@ export function DealsSearchHero({
   return (
     <>
       <section
-        className="search-hero animate-float-in overflow-hidden rounded-[1.75rem] border border-primary/20 p-5 shadow-xl shadow-primary/10 sm:p-7 lg:p-9"
+        className="search-hero animate-float-in overflow-hidden rounded-[2rem] border border-primary/30 p-5 shadow-2xl shadow-black/30 sm:p-8 lg:p-10"
         data-testid="search-hero"
       >
-        <div className="mx-auto max-w-4xl text-center">
-          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-background/75 px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] text-primary">
+        <div className="mx-auto max-w-5xl text-center">
+          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/35 bg-primary/10 px-3.5 py-1.5 text-[11px] font-black uppercase tracking-[0.18em] text-primary sm:text-xs">
             <Sparkles className="h-3.5 w-3.5" />
-            Search the way parents and players talk
+            Smarter gear shopping starts here
           </div>
-          <h1 className="mx-auto text-3xl font-bold leading-[1.08] sm:text-4xl lg:text-5xl">
+          <h1 className="mx-auto max-w-4xl text-4xl font-black leading-[0.98] tracking-[-0.035em] sm:text-5xl lg:text-6xl">
             <span className="block">Find the right gear.</span>
-            <span className="block">Compare the real deal.</span>
+            <span className="mt-1 block text-primary">Pay the right price.</span>
           </h1>
-          <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">
-            Type a model, size, drop, or throw hand. TwinSeam matches shopping shorthand such as 27/17, -10, LHT, and RHT.
+          <p className="mx-auto mt-5 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base lg:text-lg">
+            Search baseball and softball equipment across trusted retailers in one place. Compare deals by model, size, drop, throw hand, condition, and more.
           </p>
         </div>
 
-        <form className="mt-6" onSubmit={submit} data-testid="hero-search-form">
+        <form className="mx-auto mt-7 max-w-5xl" onSubmit={submit} data-testid="hero-search-form">
           <Label htmlFor="hero-q" className="sr-only">Search sporting goods</Label>
-          <div className="flex flex-col gap-2 sm:flex-row">
+          <div className="flex flex-col gap-2.5 sm:flex-row">
             <div className="relative min-w-0 flex-1">
-              <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-primary" />
+              <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-primary sm:left-5 sm:h-6 sm:w-6" />
               <Input
                 id="hero-q"
                 value={query}
@@ -88,7 +88,7 @@ export function DealsSearchHero({
                 placeholder="Try “27/17 Louisville Supra”"
                 autoComplete="off"
                 enterKeyHint="search"
-                className="ring-focus h-14 rounded-2xl border-primary/25 bg-background/95 pl-12 pr-12 text-base shadow-lg shadow-black/5 sm:h-16 sm:text-lg"
+                className="ring-focus h-14 rounded-2xl border-white/15 bg-background/95 pl-12 pr-12 text-base font-semibold shadow-xl shadow-black/20 sm:h-[4.5rem] sm:pl-14 sm:text-lg"
                 data-testid="hero-search"
               />
               <button
@@ -97,7 +97,7 @@ export function DealsSearchHero({
                 title="Search by photo"
                 disabled={photoSearching}
                 onClick={() => photoInputRef.current?.click()}
-                className="ring-focus absolute right-2.5 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+                className="ring-focus absolute right-2.5 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary disabled:opacity-50 sm:right-3.5 sm:h-11 sm:w-11"
                 data-testid="button-photo-search"
               >
                 {photoSearching ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
@@ -115,16 +115,22 @@ export function DealsSearchHero({
                 data-testid="input-photo-file"
               />
             </div>
-            <Button type="submit" className="ring-focus h-14 rounded-2xl px-7 text-base font-bold shadow-lg shadow-primary/20 sm:h-16" data-testid="hero-search-submit">
+            <Button type="submit" className="ring-focus h-14 rounded-2xl px-8 text-base font-black shadow-xl shadow-primary/25 sm:h-[4.5rem] sm:px-9" data-testid="hero-search-submit">
               <Search className="mr-2 h-5 w-5" />
-              Search deals
+              Search gear
             </Button>
           </div>
         </form>
 
+        <div className="mx-auto mt-4 flex max-w-4xl flex-wrap items-center justify-center gap-x-5 gap-y-2 text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground sm:text-xs">
+          <span className="inline-flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5 text-primary" /> Trusted retailers</span>
+          <span className="inline-flex items-center gap-1.5"><TrendingDown className="h-3.5 w-3.5 text-primary" /> Price-first comparison</span>
+          <span className="inline-flex items-center gap-1.5"><Zap className="h-3.5 w-3.5 text-primary" /> New + preowned</span>
+        </div>
+
         {(photoSearching || photoIdentified) && (
-          <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground" aria-live="polite">
-            <Sparkles className={cn("h-3.5 w-3.5", photoSearching && "animate-pulse")} />
+          <div className="mx-auto mt-3 flex max-w-5xl items-center gap-2 text-xs text-muted-foreground" aria-live="polite">
+            <Sparkles className={cn("h-3.5 w-3.5 text-primary", photoSearching && "animate-pulse")} />
             <span>{photoSearching ? "Analyzing photo…" : photoIdentified}</span>
             {photoIdentified && !photoSearching && (
               <button
@@ -140,16 +146,16 @@ export function DealsSearchHero({
           </div>
         )}
 
-        <div className="mt-5 grid gap-3 lg:grid-cols-[1fr_auto] lg:items-end">
+        <div className="mx-auto mt-6 grid max-w-5xl gap-4 border-t border-white/10 pt-5 lg:grid-cols-[1fr_auto] lg:items-end">
           <div>
-            <div className="mb-2 text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Starter searches</div>
+            <div className="mb-2 text-[11px] font-black uppercase tracking-[0.16em] text-muted-foreground">Popular searches</div>
             <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide" data-testid="starter-searches">
               {SHOPPER_STARTER_SEARCHES.map((starter) => (
                 <button
                   key={starter.query}
                   type="button"
                   onClick={() => onSearch(starter.query)}
-                  className="ring-focus flex min-h-11 shrink-0 items-center gap-2 rounded-xl border border-border bg-background/80 px-2.5 py-2 text-left transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:bg-background hover:shadow-md sm:min-h-14"
+                  className="ring-focus flex min-h-11 shrink-0 items-center gap-2 rounded-xl border border-white/10 bg-background/70 px-2.5 py-2 text-left transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:bg-background hover:shadow-lg sm:min-h-14"
                   data-testid={`starter-${starter.query.replace(/\W+/g, "-").toLowerCase()}`}
                 >
                   {starterImages[starter.query] && (
@@ -163,7 +169,7 @@ export function DealsSearchHero({
                     </span>
                   )}
                   <span>
-                    <span className="block text-xs font-bold">{starter.label}</span>
+                    <span className="block text-xs font-black">{starter.label}</span>
                     <span className="block text-[11px] text-muted-foreground">{starter.detail}</span>
                   </span>
                 </button>
@@ -172,14 +178,14 @@ export function DealsSearchHero({
           </div>
           {recentSearches.length > 0 && (
             <div className="lg:max-w-[250px]" data-testid="recent-searches">
-              <div className="mb-2 text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">Recent on this device</div>
+              <div className="mb-2 text-[11px] font-black uppercase tracking-[0.16em] text-muted-foreground">Recent on this device</div>
               <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide lg:flex-wrap">
                 {recentSearches.map((recent) => (
                   <button
                     key={recent}
                     type="button"
                     onClick={() => onSearch(recent)}
-                    className="ring-focus min-h-10 shrink-0 rounded-full border border-border bg-background/70 px-3 text-xs font-semibold hover:border-primary/40"
+                    className="ring-focus min-h-10 shrink-0 rounded-full border border-white/10 bg-background/70 px-3 text-xs font-bold hover:border-primary/50"
                   >
                     {recent}
                   </button>
@@ -191,13 +197,14 @@ export function DealsSearchHero({
       </section>
 
       <section className="animate-float-in" data-testid="baseball-category-browser">
-        <div className="mb-3">
+        <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 className="text-xl font-bold sm:text-2xl">Shop baseball</h2>
-            <p className="text-xs text-muted-foreground sm:text-sm">A concise equipment menu—no global taxonomy clutter.</p>
+            <div className="mb-1 text-[11px] font-black uppercase tracking-[0.16em] text-primary">Start with the game</div>
+            <h2 className="text-2xl font-black sm:text-3xl">Shop baseball</h2>
+            <p className="mt-1 text-xs text-muted-foreground sm:text-sm">Choose the gear you need and get straight to relevant listings.</p>
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-6">
           {BASEBALL_QUICK_CATEGORIES.map((category) => (
             (() => {
               const categoryImage = categoryImages[category.id]
@@ -207,20 +214,20 @@ export function DealsSearchHero({
               key={category.id}
               type="button"
               onClick={() => onCategory("baseball", category.id)}
-              className="ring-focus group relative min-h-14 rounded-2xl overflow-hidden border border-border bg-card px-3 py-3 text-left text-sm font-bold shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-md sm:min-h-20"
+              className="ring-focus group relative min-h-16 overflow-hidden rounded-2xl border border-border bg-card px-3 py-3 text-left text-sm font-black shadow-sm transition-all hover:-translate-y-1 hover:border-primary/50 hover:shadow-xl hover:shadow-black/20 sm:min-h-24"
               data-testid={`quick-category-${category.id}`}
             >
-              <span className={cn("relative z-10 block max-w-[70%]", categoryImage && "drop-shadow-[0_1px_0_rgba(255,255,255,0.9)]")}>
+              <span className={cn("relative z-10 block max-w-[70%]", categoryImage && "drop-shadow-[0_1px_0_rgba(0,0,0,0.35)]")}>
                 {category.name}
               </span>
               {categoryImage && (
                 <>
-                  <span className="absolute inset-y-0 right-0 w-1/2 bg-gradient-to-l from-card via-card/85 to-transparent" />
+                  <span className="absolute inset-y-0 right-0 w-3/5 bg-gradient-to-l from-card via-card/80 to-transparent" />
                   <img
                     src={categoryImage}
                     alt=""
                     loading="lazy"
-                    className="absolute right-1 top-1/2 h-[72px] w-[72px] -translate-y-1/2 object-contain opacity-90 transition-transform group-hover:scale-105"
+                    className="absolute right-1 top-1/2 h-[78px] w-[78px] -translate-y-1/2 object-contain opacity-90 transition-transform duration-300 group-hover:scale-110 sm:h-[88px] sm:w-[88px]"
                   />
                 </>
               )}
@@ -231,16 +238,16 @@ export function DealsSearchHero({
           <button
             type="button"
             onClick={() => onCategory(SHOPPER_MEMORABILIA_SPORT_ID, "all")}
-            className="ring-focus min-h-14 rounded-2xl border border-border bg-card px-3 py-3 text-left text-sm font-bold shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-md sm:min-h-20"
+            className="ring-focus min-h-16 rounded-2xl border border-border bg-card px-3 py-3 text-left text-sm font-black shadow-sm transition-all hover:-translate-y-1 hover:border-primary/50 hover:shadow-xl hover:shadow-black/20 sm:min-h-24"
             data-testid="browse-sport-memorabilia"
           >
             Memorabilia
           </button>
         </div>
-        <div className="mt-3 flex flex-col gap-2 rounded-2xl border border-border bg-card/70 p-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-3 flex flex-col gap-2 rounded-2xl border border-border bg-card/75 p-3.5 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <div className="text-sm font-bold">Shop another sport</div>
-            <div className="text-xs text-muted-foreground">Choose a sport first; its relevant gear appears with the results.</div>
+            <div className="text-sm font-black">Shopping another sport?</div>
+            <div className="text-xs text-muted-foreground">Pick a sport and TSSDeals will narrow the equipment choices for you.</div>
           </div>
           <Select onValueChange={(sportId) => onCategory(sportId, "all")}>
             <SelectTrigger className="min-h-11 w-full rounded-xl bg-background sm:w-[260px]" data-testid="other-sports-select">
