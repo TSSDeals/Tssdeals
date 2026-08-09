@@ -188,9 +188,21 @@ h6,
 
 [data-testid="mobile-logo-home"] img,
 [data-testid="img-tss-logo-sidebar"] {
+  content: url('/images/tssdeals-mark.svg');
+  object-fit: contain !important;
+  background: radial-gradient(circle at 50% 32%, rgba(239,68,68,.16), rgba(8,8,10,.96) 62%);
+  padding: .3rem;
   border: 1px solid rgba(255,255,255,.12);
   box-shadow: 0 0 0 1px rgba(239,68,68,.18), 0 14px 30px -18px rgba(239,68,68,.75);
-  filter: saturate(.92) contrast(1.06);
+  filter: none;
+}
+
+[data-testid="mobile-logo-home"] img {
+  border-radius: .85rem;
+}
+
+[data-testid="img-tss-logo-sidebar"] {
+  border-radius: 1.25rem !important;
 }
 
 [data-testid="mobile-logo-home"] span {
