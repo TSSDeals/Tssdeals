@@ -110,3 +110,25 @@ test("an attached MMS photo overrides a blocked retailer image", async () => {
   assert.equal(captured.imageUrl, "/api/sms-deal-media/SMaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/MEbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
   assert.equal(captured.raw.submittedImageUrl, captured.imageUrl);
 });
+
+test("email submissions retain their owner-inbox identity and attached image", async () => {
+  let captured: any;
+  await processSmsDealUrl("https://a.co/d/email-example", {
+    getPreview: async () => ({ title: null, description: null, images: [], priceCents: null, currency: null }),
+    ensureSource: async () => undefined,
+    upsert: async (deals, label) => {
+      captured = { deal: deals[0], label };
+      return { created: 0, updated: 1 };
+    },
+  }, {
+    title: "Marucci Cypress Catcher's Mitt",
+    priceCents: 18006,
+    imageUrl: "/api/email-deal-media/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    submittedVia: "email-deal-inbox",
+  });
+
+  assert.equal(captured.label, "email-deal-inbox");
+  assert.equal(captured.deal.raw.submittedVia, "email-deal-inbox");
+  assert.equal(captured.deal.imageUrl, "/api/email-deal-media/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+  assert.equal(captured.deal.isFeatured, true);
+});

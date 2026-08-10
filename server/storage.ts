@@ -1124,7 +1124,8 @@ export class DatabaseStorage implements IStorage {
         }
 
         const now = new Date();
-        const smsInboxUpdate = syncSourceLabel === "sms-deal-inbox"
+        const ownerInboxUpdate = syncSourceLabel === "sms-deal-inbox"
+          || syncSourceLabel === "email-deal-inbox"
           ? {
               isFeatured: true,
               autoIncluded: true,
@@ -1159,7 +1160,7 @@ export class DatabaseStorage implements IStorage {
             subFilterId: deal.subFilterId ?? null,
             dropWeight: deal.dropWeight ?? null,
             sizeNumber: deal.sizeNumber ?? null,
-            ...smsInboxUpdate,
+            ...ownerInboxUpdate,
           })
           .where(eq(deals.id, ex.id));
 
@@ -2448,7 +2449,7 @@ export class DatabaseStorage implements IStorage {
     const whereParts: any[] = [];
     const ownerKnownGlovePick = and(
       eq(deals.isFeatured, true),
-      dsql`${deals.raw}->>'submittedVia' = 'sms-deal-inbox'`,
+      dsql`${deals.raw}->>'submittedVia' IN ('sms-deal-inbox', 'email-deal-inbox')`,
       or(
         ilike(deals.title, "%A2000%"),
         ilike(deals.title, "%A2K%"),
@@ -2601,7 +2602,7 @@ export class DatabaseStorage implements IStorage {
       .from(deals)
       .where(and(
         eq(deals.isFeatured, true),
-        dsql`${deals.raw}->>'submittedVia' = 'sms-deal-inbox'`,
+        dsql`${deals.raw}->>'submittedVia' IN ('sms-deal-inbox', 'email-deal-inbox')`,
         gte(deals.priceCents, 100),
       ))
       .orderBy(desc(deals.lastSeenAt), desc(deals.foundAt))
@@ -2619,7 +2620,7 @@ export class DatabaseStorage implements IStorage {
       .from(deals)
       .where(and(
         eq(deals.isFeatured, true),
-        dsql`${deals.raw}->>'submittedVia' = 'sms-deal-inbox'`,
+        dsql`${deals.raw}->>'submittedVia' IN ('sms-deal-inbox', 'email-deal-inbox')`,
         gte(deals.priceCents, 100),
       ))
       .orderBy(desc(deals.lastSeenAt), desc(deals.foundAt))
