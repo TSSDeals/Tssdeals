@@ -46,6 +46,7 @@ import {
   approvedDealSmsSenders,
   extractDealUrls,
   normalizeSmsPhone,
+  parseSmsDealHints,
   processSmsDealUrl,
   smsDealReply,
 } from "./sms-deal-inbox";
@@ -1405,7 +1406,7 @@ export async function registerRoutes(
         const result = await processSmsDealUrl(urls[0], {
           ensureSource: (id, name, baseUrl) => storage.ensureSource(id, name, baseUrl),
           upsert: (deals, label) => storage.bulkUpsertDeals(deals, label),
-        });
+        }, parseSmsDealHints(body));
         res.type("text/xml").send(smsDealReply(result.message));
         return;
       }

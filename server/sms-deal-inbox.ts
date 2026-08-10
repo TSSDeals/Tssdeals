@@ -25,6 +25,8 @@ export function extractDealUrls(body: string): string[] {
 function sourceForUrl(rawUrl: string) {
   const hostname = new URL(rawUrl).hostname.toLowerCase().replace(/^www\./, "");
   const known: Record<string, { sourceId: string; sourceName: string }> = {
+    "a.co": { sourceId: "amazon", sourceName: "Amazon" },
+    "amazon.com": { sourceId: "amazon", sourceName: "Amazon" },
     "ebay.com": { sourceId: "ebay", sourceName: "eBay" },
     "baselinesports.us": { sourceId: "baseline-sports", sourceName: "Baseline Sports" },
     "twinseamsports.com": { sourceId: "twin-seam-sports", sourceName: "Twin Seam Sports" },
@@ -34,6 +36,20 @@ function sourceForUrl(rawUrl: string) {
   if (match) return { ...match[1], baseUrl: `https://${match[0]}` };
   const clean = hostname.replace(/\.(com|net|org|co|io|us)$/i, "").replace(/[^a-z0-9]+/g, "-");
   return { sourceId: `manual-${clean}`, sourceName: hostname, baseUrl: `https://${hostname}` };
+}
+
+export type SmsDealHints = { title: string | null; priceCents: number | null };
+
+export function parseSmsDealHints(body: string): SmsDealHints {
+  const withoutUrls = body.replace(URL_PATTERN, " ");
+  const priceMatch = withoutUrls.match(/(?:\$|usd\s*)(\d{1,6}(?:\.\d{1,2})?)/i);
+  const priceCents = priceMatch ? Math.round(Number(priceMatch[1]) * 100) : null;
+  const title = withoutUrls
+    .replace(/(?:\$|usd\s*)\d{1,6}(?:\.\d{1,2})?/gi, " ")
+    .replace(/\b(?:add|deal)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return { title: title || null, priceCents: priceCents && priceCents > 0 ? priceCents : null };
 }
 
 function twimlSafe(value: string): string {
@@ -50,18 +66,23 @@ export type DealInboxDependencies = {
   getPreview?: typeof fetchLinkPreview;
 };
 
-export async function processSmsDealUrl(url: string, dependencies: DealInboxDependencies) {
+export async function processSmsDealUrl(url: string, dependencies: DealInboxDependencies, hints?: SmsDealHints) {
   const preview = await (dependencies.getPreview ?? fetchLinkPreview)(url);
-  if (!preview.title || !preview.priceCents) {
-    return { ok: false as const, message: "I could not verify a product title and price from that page. Nothing was added." };
+  const title = hints?.title ?? preview.title;
+  const priceCents = hints?.priceCents ?? preview.priceCents;
+  if (!title || !priceCents) {
+    return {
+      ok: false as const,
+      message: "That site hid its product details. Send again as: $29.99 Product name https://product-link",
+    };
   }
   const source = sourceForUrl(url);
-  const classification = classifyDeterministicProduct(`${preview.title} ${preview.description ?? ""}`);
+  const classification = classifyDeterministicProduct(`${title} ${preview.description ?? ""}`);
   await dependencies.ensureSource(source.sourceId, source.sourceName, source.baseUrl);
 
   const deal: InsertDeal = {
     sourceId: source.sourceId,
-    title: preview.title,
+    title,
     brand: null,
     url,
     imageUrl: preview.images[0] ?? null,
@@ -70,7 +91,7 @@ export async function processSmsDealUrl(url: string, dependencies: DealInboxDepe
     condition: /\b(?:used|preowned|pre-owned)\b/i.test(`${preview.title} ${preview.description ?? ""}`) ? "preowned" : "new",
     currency: preview.currency ?? "USD",
     msrpCents: null,
-    priceCents: preview.priceCents,
+    priceCents,
     percentOff: null,
     isBuyItNow: true,
     isFeatured: true,
