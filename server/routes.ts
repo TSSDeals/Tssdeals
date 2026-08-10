@@ -42,6 +42,13 @@ import { getStopEpoch, stopRequestedSince, requestStopAll, getLastStopAt } from 
 import { configurePush, getVapidPublicKey, isPushConfigured, sendPushToUser } from "./push-notifications";
 import { configureSms, isSmsConfigured, sendSms, sendWelcomeSms, sendSmsBatch } from "./sms-notifications";
 import { fetchLinkPreview, generateWriteup, generateSlug } from "./sms-campaigns";
+import {
+  approvedDealSmsSenders,
+  extractDealUrls,
+  normalizeSmsPhone,
+  processSmsDealUrl,
+  smsDealReply,
+} from "./sms-deal-inbox";
 import { registerMagicLinkRoutes } from "./magic-link-auth";
 import { registerSmsAuthRoutes } from "./sms-auth";
 import { registerTeamStatsRoutes } from "./team-stats";
@@ -1366,6 +1373,20 @@ export async function registerRoutes(
       const from = req.body?.From || "";
       const optOutKeywords = ["stop", "stopall", "cancel", "end", "quit", "unsubscribe", "revoke", "optout"];
       const helpKeywords = ["help", "info"];
+      const authToken = process.env.TWILIO_AUTH_TOKEN;
+      if (authToken && process.env.NODE_ENV === "production") {
+        const signature = req.header("X-Twilio-Signature") || "";
+        const proto = req.header("X-Forwarded-Proto") || req.protocol;
+        const host = req.header("X-Forwarded-Host") || req.get("host");
+        const webhookUrl = `${proto}://${host}${req.originalUrl}`;
+        const { default: twilio } = await import("twilio");
+        if (!twilio.validateRequest(authToken, signature, webhookUrl, req.body || {})) {
+          console.warn(`[sms-deal-inbox] rejected invalid Twilio signature`);
+          res.status(403).type("text/xml").send("<Response></Response>");
+          return;
+        }
+      }
+
       if (helpKeywords.includes(body.toLowerCase())) {
         res.type("text/xml").send('<Response><Message>TSSDeals: For help, contact tssdeals@twinseamsports.com. Msg &amp; data rates may apply. Reply STOP to cancel.</Message></Response>');
         return;
@@ -1374,6 +1395,28 @@ export async function registerRoutes(
         const count = await storage.optOutSmsByPhone(from);
         const subCount = await storage.optOutSmsSubscriberByPhone(from);
         console.log(`[sms] SMS opt-out received from ${from}: ${count} user(s) + ${subCount} subscriber(s) opted out`);
+        res.type("text/xml").send("<Response></Response>");
+        return;
+      }
+
+      const normalizedFrom = normalizeSmsPhone(from);
+      const urls = extractDealUrls(body);
+      if (urls.length && approvedDealSmsSenders().has(normalizedFrom)) {
+        const result = await processSmsDealUrl(urls[0], {
+          ensureSource: (id, name, baseUrl) => storage.ensureSource(id, name, baseUrl),
+          upsert: (deals, label) => storage.bulkUpsertDeals(deals, label),
+        });
+        res.type("text/xml").send(smsDealReply(result.message));
+        return;
+      }
+      if (urls.length) {
+        console.warn(`[sms-deal-inbox] ignored link from unapproved sender ${normalizedFrom}`);
+        res.type("text/xml").send("<Response></Response>");
+        return;
+      }
+      if (approvedDealSmsSenders().has(normalizedFrom)) {
+        res.type("text/xml").send(smsDealReply("Text a product link and TSSDeals will verify and add it. One link per message."));
+        return;
       }
       res.type("text/xml").send("<Response></Response>");
     } catch (err: any) {
