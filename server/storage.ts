@@ -2624,7 +2624,9 @@ export class DatabaseStorage implements IStorage {
       ))
       .orderBy(desc(deals.lastSeenAt), desc(deals.foundAt))
       .limit(500);
-    const texted = rankTopDeals(textPool, { limit: 500 });
+    // Owner submissions are deliberate editorial choices. Do not require a
+    // complete taxonomy classification or a discount before showing them.
+    const texted = textPool;
 
     const twinSeamPool = await db
       .select()

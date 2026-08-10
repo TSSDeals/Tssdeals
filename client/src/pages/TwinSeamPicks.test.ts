@@ -14,3 +14,9 @@ test("app navigation places Twin Seam Picks after Top Deals", () => {
   const source = readFileSync(new URL("../components/AppShell.tsx", import.meta.url), "utf8");
   assert.match(source, /Top Deals[\s\S]*Twin Seam Picks[\s\S]*Buyer's Guide/);
 });
+
+test("every owner text submission enters Picks without a ranking gate", () => {
+  const source = readFileSync(new URL("../../../server/storage.ts", import.meta.url), "utf8");
+  assert.match(source, /const texted = textPool/);
+  assert.doesNotMatch(source, /const texted = rankTopDeals\(textPool/);
+});
