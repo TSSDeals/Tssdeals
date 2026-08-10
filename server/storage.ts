@@ -2634,7 +2634,14 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(deals.sourceId, "twin-seam-sports"), gte(deals.priceCents, 100)))
       .orderBy(desc(deals.lastPriceConfirmedAt), desc(deals.lastSeenAt), desc(deals.foundAt))
       .limit(250);
-    const twinSeamSports = rankTopDeals(twinSeamPool, { limit: 2 });
+    const rankedTwinSeamSports = rankTopDeals(twinSeamPool, { limit: 2 });
+    // Our store belongs in Picks even when its strongest current products do
+    // not carry a verified discount/history signal yet.
+    const twinSeamSports = rankedTwinSeamSports.length >= 2
+      ? rankedTwinSeamSports
+      : [...rankedTwinSeamSports, ...twinSeamPool.filter((deal) =>
+          !rankedTwinSeamSports.some((ranked) => ranked.id === deal.id),
+        )].slice(0, 2);
 
     const eliteCategory = await this.getDealCategory("elite-baseball-gloves");
     const eliteGloves = eliteCategory
