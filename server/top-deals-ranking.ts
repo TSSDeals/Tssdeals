@@ -13,7 +13,7 @@ const FIELDING_GLOVE_CATEGORY_PATTERN =
 const FIELDING_GLOVE_EQUIPMENT_PATTERN =
   /^(?:(?:bb|fp|sp)-(?:gloves?|fielding-gloves?)|baseball-gloves?|softball-gloves?|fielding-gloves?|gloves?)$/i;
 const FIELDING_GLOVE_TITLE_PATTERN =
-  /\b(?:(?:baseball|softball|fastpitch|slowpitch)\s+(?:fielding\s+)?(?:gloves?|mitts?)|(?:infield(?:er)?|outfield(?:er)?|pitcher(?:'s)?|fielding)\s+(?:gloves?|mitts?)|catcher(?:'s)?\s+mitts?|first[\s-]*base(?:man(?:'s)?)?\s+mitts?|a(?:1000|2000|2k)\b|heart\s+of\s+the\s+hide|pro\s+preferred)\b/i;
+  /\b(?:(?:baseball|softball|fastpitch|slowpitch)\s+(?:fielding\s+)?(?:gloves?|mitts?)|(?:infield(?:er)?|outfield(?:er)?|pitcher(?:'s)?|fielding)\s+(?:gloves?|mitts?)|catcher(?:'s)?\s+mitts?|first[\s-]*base(?:man(?:'s)?)?\s+mitts?|a(?:1000|2000|2k)\b|heart\s+of\s+the\s+hide|pro\s+preferred|marucci\s+cypress|rawlings\s+foundation)\b/i;
 const FIELDING_GLOVE_STRUCTURED_PATTERN =
   /\b(?:baseball|softball|fastpitch|slowpitch|fielding|infield|outfield|pitcher|catcher|first[\s-]*base)\b[\s\S]*\b(?:gloves?|mitts?)\b|\b(?:gloves?|mitts?)\b[\s\S]*\b(?:baseball|softball|fastpitch|slowpitch|fielding|infield|outfield|pitcher|catcher|first[\s-]*base)\b/i;
 const FIELDING_GLOVE_EXCLUSION_PATTERN =
@@ -274,7 +274,7 @@ export function matchesTopDealCategoryBoundary(deal: Deal, context: TopDealsCont
   const title = deal.title ?? "";
   if (isFieldingGloveCategory(context)) {
     if (FIELDING_GLOVE_EXCLUSION_PATTERN.test(title)) return false;
-    if (!FIELDING_GLOVE_EQUIPMENT_PATTERN.test(deal.equipmentTypeId ?? "")) return false;
+    if (!FIELDING_GLOVE_EQUIPMENT_PATTERN.test(deal.equipmentTypeId ?? "") && !(isOwnerCurated(deal) && FIELDING_GLOVE_TITLE_PATTERN.test(title))) return false;
     if (!hasPositiveFieldingGloveEvidence(deal)) return false;
     if (isEliteGloveCategory(context) && !hasTrustedEliteGloveEvidence(deal)) return false;
     return true;

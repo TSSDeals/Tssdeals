@@ -16,6 +16,14 @@ const NON_FIELDING_GLOVE =
   /\b(?:batting|golf|boxing|work|winter|rain|football|receiver|goalkeeper)\s+gloves?\b|\bsliding\s+mitt\b|\b(?:glove|mitt)\s+(?:laces?|repair\s+kits?|care|conditioner|mallet|wrap|accessor(?:y|ies))\b/i;
 const FIELDING_GLOVE =
   /\b(?:baseball|fielding|infield|outfield|pitcher(?:'s)?|catcher(?:'s)?|first[ -]?base)\b.{0,60}\b(?:glove|mitt)s?\b|\b(?:glove|mitt)s?\b.{0,60}\b(?:baseball|fielding|infield|outfield|pitcher(?:'s)?|catcher(?:'s)?|first[ -]?base)\b/i;
+const KNOWN_BASEBALL_GLOVE_MODEL =
+  /\b(?:wilson\s+(?:a2000|a2k|staff)|a2000\s+\d{3,4}|marucci\s+cypress|rawlings\s+(?:foundation|pro\s+preferred|heart\s+of\s+the\s+hide|hoh|r9|gg\s+elite)|mizuno\s+pro)\b/i;
+
+export function isKnownBaseballFieldingGloveModel(text: string): boolean {
+  return KNOWN_BASEBALL_GLOVE_MODEL.test(text)
+    && !SIGNED_OR_DISPLAY.test(text)
+    && !NON_FIELDING_GLOVE.test(text);
+}
 const FASTPITCH_BAT =
   /\bfast\s*pitch\b.{0,60}\bbats?\b|\bbats?\b.{0,60}\bfast\s*pitch\b/i;
 const SLOWPITCH_BAT =
@@ -60,7 +68,7 @@ export function classifyDeterministicProduct(text: string): DeterministicProduct
   const value = text.replace(/\s+/g, " ").trim();
   if (!value || SIGNED_OR_DISPLAY.test(value)) return null;
 
-  if (!NON_FIELDING_GLOVE.test(value) && FIELDING_GLOVE.test(value)) {
+  if (!NON_FIELDING_GLOVE.test(value) && (FIELDING_GLOVE.test(value) || isKnownBaseballFieldingGloveModel(value))) {
     if (/\bfast\s*pitch\b/i.test(value)) {
       return category("fastpitch-softball", "fp-gloves", "explicit softball fielding glove");
     }

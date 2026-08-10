@@ -176,6 +176,29 @@ test("owner SMS picks enter their matching Top Deals category without requiring 
   assert.equal(ranked[0].topDealReasons.some((reason) => reason.code === "owner-curated"), true);
 });
 
+test("model-only owner glove picks recover into the glove category", () => {
+  const context = {
+    now,
+    category: {
+      name: "Baseball & Softball Fielding Glove Deals",
+      slug: "baseball-softball-gloves",
+      sportId: "baseball",
+      equipmentTypeId: null,
+      searchQuery: "glove mitt",
+    },
+  };
+  const fixtures = ["Marucci Cypress", "Wilson A2000 1810", "Rawlings Foundation Aaron Judge 12.5"].map((title, index) => deal({
+    id: `owner-model-${index}`,
+    title,
+    equipmentTypeId: null,
+    sportId: null,
+    isFeatured: true,
+    raw: { submittedVia: "sms-deal-inbox" },
+  }));
+
+  assert.equal(rankTopDeals(fixtures, context).length, 3);
+});
+
 test("elite glove categories require trusted premium family or source evidence", () => {
   const context = {
     now,

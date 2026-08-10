@@ -56,6 +56,17 @@ function usePopularSearches() {
   });
 }
 
+function useTwinSeamPicks() {
+  return useQuery({
+    queryKey: ["/api/twin-seam-picks"],
+    queryFn: async () => {
+      const res = await fetch("/api/twin-seam-picks", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch Twin Seam picks");
+      return res.json();
+    },
+  });
+}
+
 function CategoryCard({
   category,
   onClick,
@@ -324,6 +335,7 @@ export default function TopDealsPage() {
 
   const categories = useCategories();
   const popularSearches = usePopularSearches();
+  const twinSeamPicks = useTwinSeamPicks();
 
   const predefined = useMemo(
     () => (categories.data ?? []).filter((c: any) => c.isPredefined),
@@ -363,6 +375,29 @@ export default function TopDealsPage() {
         />
       ) : (
         <div className="space-y-8">
+          {(twinSeamPicks.data?.deals ?? []).length > 0 ? (
+            <section className="rounded-3xl border border-primary/25 bg-primary/5 p-4 sm:p-5" data-testid="twin-seam-picks">
+              <div className="mb-4 flex items-center gap-3">
+                <div className="grid h-11 w-11 place-items-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/20">
+                  <Sparkles className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="font-display text-xl font-bold">Twin Seam Picks</h2>
+                  <p className="text-xs text-muted-foreground">Deals personally submitted by Twin Seam Sports</p>
+                </div>
+              </div>
+              <div className="flex snap-x gap-4 overflow-x-auto pb-2">
+                {(twinSeamPicks.data.deals as any[]).map((deal: any, idx: number) => {
+                  return (
+                    <div key={deal.id} className="min-w-[min(88vw,360px)] snap-start sm:min-w-[360px]">
+                      <DealCard deal={deal} data-testid={`twin-seam-pick-${idx}`} />
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          ) : null}
+
           {eliteCategory ? (
             <EliteGloveCorner
               onOpen={() => handleSelectCategory(eliteCategory.slug)}
