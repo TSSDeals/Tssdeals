@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { approvedDealSmsSenders, extractDealUrls, normalizeSmsPhone, parseSmsDealHints, processSmsDealUrl, smsDealReply } from "./sms-deal-inbox";
+import { approvedDealSmsSenders, extractDealUrls, normalizeSmsPhone, parseSmsDealHints, processSmsDealUrl, smsDealReply, twilioMediaProxyPath } from "./sms-deal-inbox";
 
 test("normalizes and restricts deal inbox senders", () => {
   assert.equal(normalizeSmsPhone("865-919-3419"), "+18659193419");
@@ -25,6 +25,17 @@ test("parses manual title and price hints for retailer pages that block previews
     parseSmsDealHints("$34.99 Wilson A2000 1786 https://a.co/d/example"),
     { title: "Wilson A2000 1786", priceCents: 3499 },
   );
+});
+
+test("accepts only a canonical Twilio MMS image URL for the deal image proxy", () => {
+  const messageSid = `SM${"a".repeat(32)}`;
+  const mediaSid = `ME${"b".repeat(32)}`;
+  assert.equal(
+    twilioMediaProxyPath(`https://api.twilio.com/2010-04-01/Accounts/AC${"c".repeat(32)}/Messages/${messageSid}/Media/${mediaSid}`),
+    `/api/sms-deal-media/${messageSid}/${mediaSid}`,
+  );
+  assert.equal(twilioMediaProxyPath("https://example.com/not-twilio.jpg"), null);
+  assert.equal(twilioMediaProxyPath("https://api.twilio.com/invalid"), null);
 });
 
 test("verified links become featured deals through the bounded inbox pipeline", async () => {
@@ -80,4 +91,22 @@ test("manual hints safely recover a blocked Amazon product preview", async () =>
   assert.equal(captured.sourceId, "amazon");
   assert.equal(captured.title, "Rawlings Pro Preferred 11.5 Glove");
   assert.equal(captured.priceCents, 29999);
+});
+
+test("an attached MMS photo overrides a blocked retailer image", async () => {
+  let captured: any;
+  await processSmsDealUrl("https://a.co/d/example", {
+    getPreview: async () => ({ title: null, description: null, images: [], priceCents: null, currency: null }),
+    ensureSource: async () => undefined,
+    upsert: async (deals) => {
+      captured = deals[0];
+      return { created: 1, updated: 0 };
+    },
+  }, {
+    title: "Wilson A2000 1810",
+    priceCents: 16231,
+    imageUrl: "/api/sms-deal-media/SMaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/MEbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  });
+  assert.equal(captured.imageUrl, "/api/sms-deal-media/SMaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/MEbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+  assert.equal(captured.raw.submittedImageUrl, captured.imageUrl);
 });
