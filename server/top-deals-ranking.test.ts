@@ -136,6 +136,46 @@ test("fielding-glove categories keep position gloves and exclude adjacent gear",
   );
 });
 
+test("owner SMS picks enter their matching Top Deals category without requiring a discount", () => {
+  const context = {
+    now,
+    category: {
+      name: "Baseball & Softball Fielding Glove Deals",
+      slug: "baseball-softball-gloves",
+      sportId: "baseball",
+      equipmentTypeId: null,
+      searchQuery: "glove mitt",
+    },
+  };
+  const ownerPick = deal({
+    id: "owner-pick",
+    title: 'Rawlings R9 11.5" Baseball Fielding Glove',
+    msrpCents: null,
+    manufacturerMsrpCents: null,
+    msrpVerified: false,
+    originalPriceCents: 12999,
+    priceCents: 12999,
+    percentOff: null,
+    hasPriceDrop: false,
+    priceDropPercent: null,
+    isLow30d: false,
+    isLow60d: false,
+    isLow90d: false,
+    isFeatured: true,
+    raw: { submittedVia: "sms-deal-inbox" },
+  });
+  const wrongCategory = deal({
+    id: "owner-batting-gloves",
+    title: "Franklin CFX Pro Baseball Batting Gloves",
+    isFeatured: true,
+    raw: { submittedVia: "sms-deal-inbox" },
+  });
+
+  const ranked = rankTopDeals([ownerPick, wrongCategory], context);
+  assert.deepEqual(ranked.map((item) => item.id), ["owner-pick"]);
+  assert.equal(ranked[0].topDealReasons.some((reason) => reason.code === "owner-curated"), true);
+});
+
 test("elite glove categories require trusted premium family or source evidence", () => {
   const context = {
     now,

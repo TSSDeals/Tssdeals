@@ -56,7 +56,8 @@ export type TopDealReasonCode =
   | "verified-savings"
   | "strong-market-value"
   | "popular-with-shoppers"
-  | "fresh-listing";
+  | "fresh-listing"
+  | "owner-curated";
 
 export type RankedTopDeal = Deal & {
   topDealScore: number;
@@ -104,6 +105,11 @@ function rawBoolean(deal: Deal, keys: string[]): boolean | undefined {
     }
   }
   return undefined;
+}
+
+function isOwnerCurated(deal: Deal): boolean {
+  const raw = (deal.raw ?? {}) as Record<string, unknown>;
+  return deal.isFeatured === true && raw.submittedVia === "sms-deal-inbox";
 }
 
 function shippingCents(deal: Deal): number {
@@ -415,6 +421,10 @@ function scoreDeal(deal: Deal, context: TopDealsContext, now: Date): RankedTopDe
   const claimedDiscount = Number(deal.percentOff ?? 0);
 
   let value = 0;
+  if (isOwnerCurated(deal)) {
+    value += 22;
+    reasons.push({ code: "owner-curated", label: "Twin Seam pick" });
+  }
   if (deal.hasPriceDrop && Number(deal.priceDropPercent ?? 0) >= 5) {
     value += Math.min(18, 8 + Number(deal.priceDropPercent) / 3);
     reasons.push({ code: "verified-price-drop", label: "Verified price drop" });
@@ -501,6 +511,8 @@ export function rankTopDeals(pool: Deal[], context: TopDealsContext = {}): Ranke
     .filter((deal) =>
       deal.topDealScore >= 28 &&
       (
+        isOwnerCurated(deal)
+        ||
         isEliteGloveCategory(context)
         || deal.topDealReasons.some((reason) =>
           ["verified-price-drop", "historical-low", "verified-savings", "strong-market-value"].includes(reason.code),
