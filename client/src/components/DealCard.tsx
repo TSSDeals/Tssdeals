@@ -693,7 +693,7 @@ export function DealCard({
                 )}
                 data-testid="edit-save"
               >
-                {upd.isPending ? "Saving…" : "Save changes"}
+                {adminUpdateMutation.isPending ? "Saving…" : "Save changes"}
               </Button>
             </div>
           </div>
