@@ -194,7 +194,8 @@ h6,
   line-height: 1.5;
 }
 
-[data-testid="baseball-category-browser"] .category-tile {
+[data-testid="baseball-category-browser"] .category-tile,
+[data-testid="golf-category-browser"] .category-tile {
   position: relative;
   min-height: 6.5rem;
   overflow: hidden;
@@ -208,7 +209,8 @@ h6,
   transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease, background .2s ease;
 }
 
-[data-testid="baseball-category-browser"] .category-tile:hover {
+[data-testid="baseball-category-browser"] .category-tile:hover,
+[data-testid="golf-category-browser"] .category-tile:hover {
   transform: translateY(-2px);
   border-color: rgba(255,89,98,.58);
   background: linear-gradient(145deg, rgba(31,28,31,.98), rgba(16,14,17,.99));
@@ -261,7 +263,8 @@ h6,
     font-size: .84rem;
   }
 
-  [data-testid="baseball-category-browser"] .category-tile {
+  [data-testid="baseball-category-browser"] .category-tile,
+  [data-testid="golf-category-browser"] .category-tile {
     min-height: 5.75rem;
     padding: .8rem;
   }

@@ -56,6 +56,16 @@ const SHOPPER_BASEBALL_EQUIPMENT = [
   },
 ] as const;
 
+export const SHOPPER_GOLF_EQUIPMENT = [
+  { id: "golf-drivers", name: "Drivers" },
+  { id: "golf-irons", name: "Irons, Woods & Hybrids" },
+  { id: "golf-iron-sets", name: "Iron Sets" },
+  { id: "golf-wedges", name: "Wedges" },
+  { id: "golf-putters", name: "Putters" },
+  { id: "golf-balls", name: "Golf Balls" },
+  { id: "golf-bags", name: "Golf Bags" },
+] as const;
+
 const SHOPPER_BASEBALL_BY_ID = new Map<string, readonly string[]>(
   SHOPPER_BASEBALL_EQUIPMENT.map(({ id, backingIds }) => [id, backingIds]),
 );
@@ -241,6 +251,15 @@ export function curateShopperEquipmentTypes<T extends EquipmentTypeLike>(types: 
       sportId: normalizedSportId,
       virtual: true,
     })) as unknown as T[];
+  }
+  if (normalizedSportId === "golf") {
+    const fallback = types[0] ?? { id: "", name: "", sportId: "golf" };
+    return SHOPPER_GOLF_EQUIPMENT.map(({ id, name }) => ({
+      ...(types.find((type) => type.id === id) ?? fallback),
+      id,
+      name,
+      sportId: "golf",
+    })) as T[];
   }
   if (normalizedSportId !== "baseball") return types;
 
