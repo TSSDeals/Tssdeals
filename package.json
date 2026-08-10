@@ -8,7 +8,7 @@
     "build": "tsx script/build.ts",
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
-    "test:search": "tsx --test server/deal-search.test.ts shared/equipment-groups.test.ts shared/search-language.test.ts",
+    "test:search": "tsx --test server/deal-search.test.ts server/twin-seam-search-visibility.test.ts shared/equipment-groups.test.ts shared/search-language.test.ts",
     "test:top-deals": "tsx --test server/top-deals-ranking.test.ts server/top-deals-endpoint-contract.test.ts client/src/lib/deal-card-pricing.test.ts client/src/lib/top-deals-page.test.ts client/src/pages/TopDeals.route.test.ts",
     "test:baseline-sports": "tsx --test shared/retailer-programs.test.ts server/baseline-sports-sync.test.ts client/src/lib/baseline-coupon-display.test.ts",
     "test:shopify-collective": "tsx --test server/shopify-collective-sync.test.ts shared/retailer-programs.test.ts",

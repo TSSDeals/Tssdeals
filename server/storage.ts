@@ -751,6 +751,10 @@ export class DatabaseStorage implements IStorage {
       gte(deals.percentOff, String(minPercentOff)),
       eq(deals.autoIncluded, true),
       amzBypass,
+      // Twin Seam inventory is first-party inventory, not an affiliate feed.
+      // It must remain searchable even when Shopify has no compare-at price or
+      // the product is not discounted enough for the general deals feed.
+      eq(deals.sourceId, "twin-seam-sports"),
     ];
     if (params.ebaySeller) {
       discountConditions.push(
@@ -785,14 +789,6 @@ export class DatabaseStorage implements IStorage {
       whereParts.push(eq(deals.isFeatured, true));
     } else if (params.source) {
       whereParts.push(eq(deals.sourceId, params.source));
-      if (params.source === "twin-seam-sports") {
-        whereParts.push(
-          or(
-            dsql`${deals.raw}->>'shopifyVendor' = 'Twin Seam Sports'`,
-            gte(deals.percentOff, String(45)),
-          )
-        );
-      }
     }
 
     if (params.priceDropOnly) {
