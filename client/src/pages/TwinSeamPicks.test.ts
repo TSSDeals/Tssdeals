@@ -25,4 +25,5 @@ test("TwinSeamSports inventory has a two-item fallback without a discount gate",
   const source = readFileSync(new URL("../../../server/storage.ts", import.meta.url), "utf8");
   assert.match(source, /rankedTwinSeamSports\.length >= 2/);
   assert.match(source, /\.slice\(0, 2\)/);
+  assert.match(source, /\["twin-seam-sports", "shopify-collective"\]/);
 });
