@@ -348,6 +348,27 @@ export async function syncShopifyStore(
     }
   }
 
+  if (totalProducts === 0 && !filterSportId) {
+    try {
+      log.push("Public collections returned no products; using the authenticated public-store catalog...");
+      const { fetchCollectiveProductsBulk, publicTwinSeamProductToDeals } = await import("./shopify-collective-sync");
+      const products = await fetchCollectiveProductsBulk();
+      const publicProducts = products.filter((product) => product.status === "ACTIVE" && Boolean(product.onlineStoreUrl));
+      for (const product of publicProducts) {
+        const productDeals = publicTwinSeamProductToDeals(product);
+        if (productDeals.length === 0) {
+          skipped++;
+          continue;
+        }
+        totalProducts++;
+        dealsToInsert.push(...productDeals);
+      }
+      log.push(`  ${publicProducts.length} public products fetched, ${dealsToInsert.length} sporting-goods variants accepted`);
+    } catch (err: any) {
+      log.push(`  Authenticated public-store catalog error: ${err.message}`);
+    }
+  }
+
   if (dealsToInsert.length > 0) {
     log.push(`Upserting ${dealsToInsert.length} sporting goods deals...`);
     const result = await bulkUpsertDeals(dealsToInsert);
