@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback, useEffect } from "react";
+import { type WheelEvent, useRef, useState, useCallback, useEffect } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DealCard } from "./DealCard";
@@ -43,6 +43,15 @@ export function DealCarousel({ deals, sportId, sourceById, ourStoreId }: DealCar
     el.scrollBy({ left: dir === "left" ? -cardWidth : cardWidth, behavior: "smooth" });
   };
 
+  const handleWheel = (event: WheelEvent<HTMLDivElement>) => {
+    const el = trackRef.current;
+    if (!el || el.scrollWidth <= el.clientWidth) return;
+    if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
+      event.preventDefault();
+      el.scrollBy({ left: event.deltaY, behavior: "auto" });
+    }
+  };
+
   return (
     <div className="relative -mx-4 sm:-mx-6 lg:-mx-8">
       {/* Left fade overlay */}
@@ -74,6 +83,7 @@ export function DealCarousel({ deals, sportId, sourceById, ourStoreId }: DealCar
       {/* Scrollable track */}
       <div
         ref={trackRef}
+        onWheel={handleWheel}
         className="scrollbar-hide flex gap-3 overflow-x-auto scroll-smooth pb-3 px-4 sm:px-6 lg:px-8"
         style={{ scrollSnapType: "x mandatory" }}
         data-testid={`carousel-track-${sportId}`}

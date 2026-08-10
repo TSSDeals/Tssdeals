@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Club, Gem, MessageSquareText, Sparkles, Store } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { DealCard } from "@/components/DealCard";
+import { HorizontalCarousel } from "@/components/HorizontalCarousel";
 import { useSources } from "@/hooks/use-taxonomy";
 
 type PicksSectionKey = "texted" | "twinSeamSports" | "eliteGloves" | "batsAndGolf";
@@ -96,11 +97,11 @@ export default function TwinSeamPicks() {
                   <p className="text-xs text-muted-foreground">{section.description}</p>
                 </div>
               </div>
-              <div className="flex snap-x gap-4 overflow-x-auto pb-3 scrollbar-hide">
+              <HorizontalCarousel label={section.title} testId={`picks-carousel-${section.key}`}>
                 {sectionDeals.map((deal, index) => {
                   const source = sourceById.get(deal.sourceId);
                   return (
-                    <div key={deal.id} className="w-[88%] shrink-0 snap-start sm:w-[390px]">
+                    <div key={deal.id} data-carousel-card className="w-[88%] shrink-0 snap-start sm:w-[390px]">
                       <DealCard
                         deal={deal}
                         sourceName={source?.name}
@@ -110,7 +111,7 @@ export default function TwinSeamPicks() {
                     </div>
                   );
                 })}
-              </div>
+              </HorizontalCarousel>
             </section>
           );
         })}

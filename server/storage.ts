@@ -106,8 +106,16 @@ import { db } from "./db";
 import { assertTaxonomyApproval, type TaxonomyApprovalContext } from "./taxonomy-approval";
 import { rankTopDeals } from "./top-deals-ranking";
 import { attachBaselineCouponRecommendations } from "@shared/retailer-programs";
+import { stripEmailSignature } from "./email-deal-inbox";
 
 const defaultSeedDatabase = db;
+
+function cleanOwnerInboxTitle(deal: Deal): Deal {
+  const submittedVia = (deal.raw as Record<string, unknown> | null)?.submittedVia;
+  if (submittedVia !== "email-deal-inbox") return deal;
+  const title = stripEmailSignature(deal.title);
+  return title && title !== deal.title ? { ...deal, title } : deal;
+}
 
 export interface IStorage {
   getAppSetting(key: string): Promise<string | null>;
@@ -2597,7 +2605,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getOwnerCuratedDeals(limit = 24): Promise<Deal[]> {
-    return await db
+    const ownerDeals = await db
       .select()
       .from(deals)
       .where(and(
@@ -2607,6 +2615,7 @@ export class DatabaseStorage implements IStorage {
       ))
       .orderBy(desc(deals.lastSeenAt), desc(deals.foundAt))
       .limit(limit);
+    return ownerDeals.map(cleanOwnerInboxTitle);
   }
 
   async getTwinSeamPicks(): Promise<{
@@ -2627,7 +2636,7 @@ export class DatabaseStorage implements IStorage {
       .limit(500);
     // Owner submissions are deliberate editorial choices. Do not require a
     // complete taxonomy classification or a discount before showing them.
-    const texted = textPool;
+    const texted = textPool.map(cleanOwnerInboxTitle);
 
     const twinSeamPool = await db
       .select()

@@ -7,6 +7,7 @@ import {
   dealEmailMediaId,
   normalizeDealEmail,
   selectDealEmailImage,
+  stripEmailSignature,
   validDealInboxToken,
 } from "./email-deal-inbox";
 
@@ -38,6 +39,17 @@ test("media identity is deterministic and does not expose file contents", () => 
   const id = dealEmailMediaId(Buffer.from("private image bytes"));
   assert.match(id, /^[a-f0-9]{40}$/);
   assert.equal(id, dealEmailMediaId(Buffer.from("private image bytes")));
+});
+
+test("strips forwarded email signatures from product titles", () => {
+  assert.equal(
+    stripEmailSignature("Marucci Cypress > -- > Best Regards, > Justin Shirk > Twin Seam Sports"),
+    "Marucci Cypress",
+  );
+  assert.equal(
+    stripEmailSignature("Rawlings Foundation Aaron Judge 12.5 OF Glove\nJustin Shirk\nTwin Seam Sports"),
+    "Rawlings Foundation Aaron Judge 12.5 OF Glove",
+  );
 });
 
 test("owner-curated queries and updates treat email like SMS intake", () => {

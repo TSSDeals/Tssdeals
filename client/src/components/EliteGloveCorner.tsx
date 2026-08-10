@@ -4,6 +4,7 @@ import { Link } from "wouter";
 import { ChevronRight, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DealCard } from "@/components/DealCard";
+import { HorizontalCarousel } from "@/components/HorizontalCarousel";
 import { useSources } from "@/hooks/use-taxonomy";
 
 export function EliteGloveCorner() {
@@ -40,16 +41,16 @@ export function EliteGloveCorner() {
         </Link>
       </div>
       {deals.length > 0 ? (
-        <div className="mt-5 flex snap-x gap-4 overflow-x-auto pb-2 scrollbar-hide" data-testid="elite-glove-preview">
+        <HorizontalCarousel className="mt-5" label="Elite Glove Corner" testId="elite-glove-preview">
           {deals.map((deal: any, index: number) => {
             const source = sourceById.get(deal.sourceId);
             return (
-              <div key={deal.id} className="w-[88%] shrink-0 snap-start text-foreground sm:w-[390px]">
+              <div key={deal.id} data-carousel-card className="w-[88%] shrink-0 snap-start text-foreground sm:w-[390px]">
                 <DealCard deal={deal} sourceName={source?.name} ourStore={source?.isOurStore} eliteCornerAction="remove" data-testid={`elite-preview-card-${index}`} />
               </div>
             );
           })}
-        </div>
+        </HorizontalCarousel>
       ) : (
         <div className="mt-5 rounded-2xl border border-dashed border-white/30 bg-white/5 px-4 py-5 text-sm text-slate-200">The Brain is checking current fielding-glove listings against the Elite standard.</div>
       )}

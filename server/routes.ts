@@ -1476,7 +1476,8 @@ export async function registerRoutes(
 
       const subject = String(req.body?.subject ?? "").trim();
       const textBody = String(req.body?.text ?? "").trim();
-      const message = `${subject}\n${textBody}`.trim();
+      const { stripEmailSignature } = await import("./email-deal-inbox");
+      const message = stripEmailSignature(`${subject}\n${textBody}`);
       const urls = extractDealUrls(message);
       if (urls.length === 0) {
         console.warn(`[email-deal-inbox] approved message from ${sender} contained no product URL`);

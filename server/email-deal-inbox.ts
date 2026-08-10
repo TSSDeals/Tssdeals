@@ -38,3 +38,11 @@ export function selectDealEmailImage(files: Express.Multer.File[]): Express.Mult
 export function dealEmailMediaId(bytes: Buffer): string {
   return crypto.createHash("sha256").update(bytes).digest("hex").slice(0, 40);
 }
+
+export function stripEmailSignature(value: string): string {
+  const signatureStart = /(?:\s*>?\s*)?(?:--\s*>?|best regards,?|kind regards,?|regards,?|sincerely,?|sent from my\b|justin shirk\b)/i;
+  return value.split(signatureStart, 1)[0]
+    .replace(/(?:\s*>\s*)+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
