@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import test from "node:test";
 import {
   approvedDealEmailSenders,
@@ -36,4 +38,13 @@ test("media identity is deterministic and does not expose file contents", () => 
   const id = dealEmailMediaId(Buffer.from("private image bytes"));
   assert.match(id, /^[a-f0-9]{40}$/);
   assert.equal(id, dealEmailMediaId(Buffer.from("private image bytes")));
+});
+
+test("owner-curated queries and updates treat email like SMS intake", () => {
+  const storageSource = readFileSync(join(process.cwd(), "server", "storage.ts"), "utf8");
+  assert.match(storageSource, /syncSourceLabel === "email-deal-inbox"/);
+  assert.equal(
+    (storageSource.match(/submittedVia' IN \('sms-deal-inbox', 'email-deal-inbox'\)/g) ?? []).length,
+    3,
+  );
 });
