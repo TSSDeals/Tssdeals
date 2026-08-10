@@ -172,6 +172,12 @@ export interface IStorage {
   getDealCategory(slug: string): Promise<DealCategory | undefined>;
   getCategoryDeals(category: DealCategory, limit?: number): Promise<Deal[]>;
   getOwnerCuratedDeals(limit?: number): Promise<Deal[]>;
+  getTwinSeamPicks(): Promise<{
+    texted: Deal[];
+    twinSeamSports: Deal[];
+    eliteGloves: Deal[];
+    batsAndGolf: Deal[];
+  }>;
   trackSearch(query: string, userId?: string): Promise<void>;
   getPopularSearches(limit?: number, sinceDays?: number): Promise<{ query: string; count: number }[]>;
   ensureDynamicCategories(): Promise<void>;
@@ -2600,6 +2606,65 @@ export class DatabaseStorage implements IStorage {
       ))
       .orderBy(desc(deals.lastSeenAt), desc(deals.foundAt))
       .limit(limit);
+  }
+
+  async getTwinSeamPicks(): Promise<{
+    texted: Deal[];
+    twinSeamSports: Deal[];
+    eliteGloves: Deal[];
+    batsAndGolf: Deal[];
+  }> {
+    const textPool = await db
+      .select()
+      .from(deals)
+      .where(and(
+        eq(deals.isFeatured, true),
+        dsql`${deals.raw}->>'submittedVia' = 'sms-deal-inbox'`,
+        gte(deals.priceCents, 100),
+      ))
+      .orderBy(desc(deals.lastSeenAt), desc(deals.foundAt))
+      .limit(500);
+    const texted = rankTopDeals(textPool, { limit: 500 });
+
+    const twinSeamPool = await db
+      .select()
+      .from(deals)
+      .where(and(eq(deals.sourceId, "twin-seam-sports"), gte(deals.priceCents, 100)))
+      .orderBy(desc(deals.lastPriceConfirmedAt), desc(deals.lastSeenAt), desc(deals.foundAt))
+      .limit(250);
+    const twinSeamSports = rankTopDeals(twinSeamPool, { limit: 2 });
+
+    const eliteCategory = await this.getDealCategory("elite-baseball-gloves");
+    const eliteGloves = eliteCategory
+      ? (await this.getCategoryDeals(eliteCategory, 500)).slice(0, 5)
+      : [];
+
+    const [batCategory, golfCategory] = await Promise.all([
+      this.getDealCategory("baseball-bats"),
+      this.getDealCategory("golf-clubs"),
+    ]);
+    const [batDeals, golfDeals] = await Promise.all([
+      batCategory ? this.getCategoryDeals(batCategory, 40) : Promise.resolve([]),
+      golfCategory ? this.getCategoryDeals(golfCategory, 40) : Promise.resolve([]),
+    ]);
+    const batsAndGolf = [
+      ...batDeals.filter((deal) => deal.priceCents >= 15_000).slice(0, 3),
+      ...golfDeals.filter((deal) => deal.priceCents >= 15_000).slice(0, 3),
+    ];
+
+    const seen = new Set<string>();
+    const unique = (list: Deal[]) => list.filter((deal) => {
+      if (seen.has(deal.id)) return false;
+      seen.add(deal.id);
+      return true;
+    });
+
+    return {
+      texted: unique(texted),
+      twinSeamSports: unique(twinSeamSports),
+      eliteGloves: unique(eliteGloves),
+      batsAndGolf: unique(batsAndGolf),
+    };
   }
 
   async trackSearch(query: string, userId?: string): Promise<void> {
