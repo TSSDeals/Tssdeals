@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { approvedDealSmsSenders, extractDealUrls, normalizeSmsPhone, processSmsDealUrl, smsDealReply } from "./sms-deal-inbox";
+import { approvedDealSmsSenders, extractDealUrls, normalizeSmsPhone, parseSmsDealHints, processSmsDealUrl, smsDealReply } from "./sms-deal-inbox";
 
 test("normalizes and restricts deal inbox senders", () => {
   assert.equal(normalizeSmsPhone("865-919-3419"), "+18659193419");
@@ -18,6 +18,13 @@ test("extracts unique product links and removes message punctuation", () => {
 
 test("escapes SMS replies as valid TwiML", () => {
   assert.equal(smsDealReply("A & B <deal>"), "<Response><Message>A &amp; B &lt;deal&gt;</Message></Response>");
+});
+
+test("parses manual title and price hints for retailer pages that block previews", () => {
+  assert.deepEqual(
+    parseSmsDealHints("$34.99 Wilson A2000 1786 https://a.co/d/example"),
+    { title: "Wilson A2000 1786", priceCents: 3499 },
+  );
 });
 
 test("verified links become featured deals through the bounded inbox pipeline", async () => {
@@ -57,4 +64,20 @@ test("unverifiable links never create a deal", async () => {
   });
   assert.equal(result.ok, false);
   assert.equal(upserted, false);
+});
+
+test("manual hints safely recover a blocked Amazon product preview", async () => {
+  let captured: any;
+  const result = await processSmsDealUrl("https://a.co/d/example", {
+    getPreview: async () => ({ title: null, description: null, images: [], priceCents: null, currency: null }),
+    ensureSource: async () => undefined,
+    upsert: async (deals) => {
+      captured = deals[0];
+      return { created: 1, updated: 0 };
+    },
+  }, { title: "Rawlings Pro Preferred 11.5 Glove", priceCents: 29999 });
+  assert.equal(result.ok, true);
+  assert.equal(captured.sourceId, "amazon");
+  assert.equal(captured.title, "Rawlings Pro Preferred 11.5 Glove");
+  assert.equal(captured.priceCents, 29999);
 });
