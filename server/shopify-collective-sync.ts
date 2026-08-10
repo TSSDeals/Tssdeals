@@ -252,6 +252,54 @@ export function collectiveProductToDeals(product: CollectiveProduct): InsertDeal
     .filter((deal): deal is InsertDeal => deal !== null);
 }
 
+export function publicTwinSeamProductToDeals(product: CollectiveProduct): InsertDeal[] {
+  if (product.status !== "ACTIVE" || !product.onlineStoreUrl) return [];
+  const publicUrl = new URL(product.onlineStoreUrl);
+  if (!/(^|\.)twinseamsports\.com$/i.test(publicUrl.hostname)) return [];
+  const category = collectiveCategory(product);
+  if (!category) return [];
+  const image = product.featuredMedia?.preview?.image;
+
+  return product.variants.nodes
+    .filter((variant) => variant.availableForSale && Number(variant.price) > 0)
+    .map((variant) => {
+      const publicProduct: ShopifyProduct = {
+        id: Number(product.legacyResourceId),
+        title: /^default title$/i.test(variant.title) ? product.title : `${product.title} — ${variant.title}`,
+        handle: product.handle,
+        vendor: product.vendor,
+        product_type: product.productType,
+        tags: product.tags,
+        variants: [shopifyVariant(variant)],
+        images: image ? [{ id: 0, src: image.url, width: image.width, height: image.height }] : [],
+        created_at: "",
+        updated_at: "",
+      };
+      const deal = shopifyProductToDeal(
+        publicProduct,
+        category.sportId,
+        category.equipmentTypeId,
+        SHOPIFY_COLLECTIVE_STOREFRONT,
+        "twin-seam-sports",
+      );
+      if (!deal) return null;
+      deal.sportId = category.sportId;
+      deal.equipmentTypeId = category.equipmentTypeId;
+      deal.url = variantUrl(product, variant);
+      deal.raw = {
+        ...(deal.raw as Record<string, unknown>),
+        catalogAdapter: "shopify-admin-public",
+        shopifyProductGid: product.id,
+        shopifyVariantGid: variant.id,
+        shopifyProductStatus: product.status,
+        shopifyTaxonomyCategory: product.category?.fullName ?? null,
+        shopifySalesChannel: "online-store",
+      };
+      return deal;
+    })
+    .filter((deal): deal is InsertDeal => deal !== null);
+}
+
 export function collectiveSyncEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   return env[SHOPIFY_COLLECTIVE_FEATURE_FLAG] === "true";
 }

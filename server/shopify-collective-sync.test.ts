@@ -5,6 +5,7 @@ import {
   collectiveProductToDeals,
   fetchCollectiveProductsBulk,
   getShopifyAdminAccessToken,
+  publicTwinSeamProductToDeals,
   syncShopifyCollective,
   type CollectiveProduct,
 } from "./shopify-collective-sync";
@@ -26,6 +27,27 @@ const glove: CollectiveProduct = {
     { id: "gid://shopify/ProductVariant/102", legacyResourceId: "102", title: "LHT", sku: "A2000-LHT", price: "299.99", compareAtPrice: null, availableForSale: false },
   ] },
 };
+
+test("Public Twin Seam adapter exposes only active published store products", () => {
+  const published = {
+    ...glove,
+    onlineStoreUrl: "https://www.twinseamsports.com/products/wilson-a2000-1786",
+  };
+  const deals = publicTwinSeamProductToDeals(published);
+  assert.equal(deals.length, 1);
+  assert.equal(deals[0].sourceId, "twin-seam-sports");
+  assert.equal(deals[0].equipmentTypeId, "bb-gloves");
+  assert.equal(deals[0].url, "https://www.twinseamsports.com/products/wilson-a2000-1786?variant=101");
+  assert.equal((deals[0].raw as any).shopifySalesChannel, "online-store");
+
+  assert.deepEqual(publicTwinSeamProductToDeals({ ...published, status: "DRAFT" }), []);
+  assert.deepEqual(publicTwinSeamProductToDeals({ ...published, onlineStoreUrl: null }), []);
+  assert.deepEqual(publicTwinSeamProductToDeals({ ...published, onlineStoreUrl: "https://supplier.example/products/glove" }), []);
+  assert.deepEqual(publicTwinSeamProductToDeals({
+    ...published,
+    variants: { nodes: published.variants.nodes.map((variant) => ({ ...variant, availableForSale: false })) },
+  }), []);
+});
 
 test("Collective adapter accepts available sporting variants and uses a Shop route", () => {
   const deals = collectiveProductToDeals(glove);
