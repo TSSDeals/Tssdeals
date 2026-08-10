@@ -77,6 +77,12 @@ export const STARTUP_MIGRATION_MANIFEST = [
     kind: "structural",
     description: "Encrypted private OneDrive authorization and ledger sync state",
   },
+  {
+    id: "20260810_012_email_deal_inbox_media",
+    checksum: "97867aa5c96aecce57d7520c618d076d54584cb2a3feab27aaf2870051fa25f7",
+    kind: "structural",
+    description: "Durable media storage for owner-approved emailed deal submissions",
+  },
 ] as const;
 
 export type ApprovedSeedState = "empty" | "satisfied" | "partial";

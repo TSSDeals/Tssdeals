@@ -38,7 +38,12 @@ function sourceForUrl(rawUrl: string) {
   return { sourceId: `manual-${clean}`, sourceName: hostname, baseUrl: `https://${hostname}` };
 }
 
-export type SmsDealHints = { title: string | null; priceCents: number | null; imageUrl?: string | null };
+export type SmsDealHints = {
+  title: string | null;
+  priceCents: number | null;
+  imageUrl?: string | null;
+  submittedVia?: "sms-deal-inbox" | "email-deal-inbox";
+};
 
 const TWILIO_MESSAGE_SID = /^SM[a-f0-9]{32}$/i;
 const TWILIO_MEDIA_SID = /^ME[a-f0-9]{32}$/i;
@@ -93,6 +98,7 @@ export async function processSmsDealUrl(url: string, dependencies: DealInboxDepe
     };
   }
   const source = sourceForUrl(url);
+  const submittedVia = hints?.submittedVia ?? "sms-deal-inbox";
   const classification = classifyDeterministicProduct(`${title} ${preview.description ?? ""}`);
   await dependencies.ensureSource(source.sourceId, source.sourceName, source.baseUrl);
 
@@ -115,13 +121,13 @@ export async function processSmsDealUrl(url: string, dependencies: DealInboxDepe
     classificationSource: classification ? "rules" : null,
     classificationConfidence: classification ? "high" : null,
     raw: {
-      submittedVia: "sms-deal-inbox",
+      submittedVia,
       submittedAt: new Date().toISOString(),
       originalUrl: url,
       submittedImageUrl: hints?.imageUrl ?? null,
     },
   };
-  const result = await dependencies.upsert([deal], "sms-deal-inbox");
+  const result = await dependencies.upsert([deal], submittedVia);
   const price = new Intl.NumberFormat("en-US", { style: "currency", currency: deal.currency }).format(deal.priceCents / 100);
   return {
     ok: true as const,
