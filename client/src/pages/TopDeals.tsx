@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { AppShell } from "@/components/AppShell";
 import { DealCard } from "@/components/DealCard";
+import { HorizontalCarousel } from "@/components/HorizontalCarousel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -170,11 +171,11 @@ function EliteGloveCorner({
       </div>
 
       {deals.length > 0 ? (
-        <div className="mt-5 flex snap-x gap-4 overflow-x-auto pb-2 scrollbar-hide" data-testid="elite-glove-preview">
+        <HorizontalCarousel className="mt-5" label="Elite Glove Corner" testId="elite-glove-preview">
           {deals.map((deal: any, idx: number) => {
             const source = sourceById.get(deal.sourceId);
             return (
-              <div key={deal.id} className="w-[88%] shrink-0 snap-start text-foreground sm:w-[390px]">
+              <div key={deal.id} data-carousel-card className="w-[88%] shrink-0 snap-start text-foreground sm:w-[390px]">
                 <DealCard
                   deal={deal}
                   sourceName={source?.name}
@@ -184,7 +185,7 @@ function EliteGloveCorner({
               </div>
             );
           })}
-        </div>
+        </HorizontalCarousel>
       ) : (
         <button
           type="button"
@@ -386,15 +387,15 @@ export default function TopDealsPage() {
                   <p className="text-xs text-muted-foreground">Deals personally submitted by Twin Seam Sports</p>
                 </div>
               </div>
-              <div className="flex snap-x gap-4 overflow-x-auto pb-2">
+              <HorizontalCarousel label="Twin Seam Picks" testId="top-deals-twin-seam-picks-carousel">
                 {(twinSeamPicks.data.deals as any[]).map((deal: any, idx: number) => {
                   return (
-                    <div key={deal.id} className="min-w-[min(88vw,360px)] snap-start sm:min-w-[360px]">
+                    <div key={deal.id} data-carousel-card className="min-w-[min(88vw,360px)] snap-start sm:min-w-[360px]">
                       <DealCard deal={deal} data-testid={`twin-seam-pick-${idx}`} />
                     </div>
                   );
                 })}
-              </div>
+              </HorizontalCarousel>
             </section>
           ) : null}
 

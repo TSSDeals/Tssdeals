@@ -10,6 +10,12 @@ test("Twin Seam Picks exposes every requested collection", () => {
   assert.match(source, /Premium Bat & Golf Deals/);
 });
 
+test("Twin Seam Picks uses the shared accessible carousel", () => {
+  const source = readFileSync(new URL("./TwinSeamPicks.tsx", import.meta.url), "utf8");
+  assert.match(source, /HorizontalCarousel/);
+  assert.match(source, /data-carousel-card/);
+});
+
 test("app navigation places Twin Seam Picks after Top Deals", () => {
   const source = readFileSync(new URL("../components/AppShell.tsx", import.meta.url), "utf8");
   assert.match(source, /Top Deals[\s\S]*Twin Seam Picks[\s\S]*Buyer's Guide/);
