@@ -251,6 +251,24 @@ test("concurrent startup runners serialize and apply a migration once", async ()
   assert.match(startupSource, /pg_advisory_xact_lock/);
 });
 
+test("email deal media has a distinct idempotent repair migration", () => {
+  const policySource = readFileSync(
+    join(process.cwd(), "server", "startup-migration-policy.ts"),
+    "utf8",
+  );
+  const startupSource = readFileSync(
+    join(process.cwd(), "server", "startup-migrations.ts"),
+    "utf8",
+  );
+
+  assert.match(policySource, /20260810_013_repair_email_deal_inbox_media/);
+  assert.equal(
+    (startupSource.match(/CREATE TABLE IF NOT EXISTS deal_inbox_media/g) ?? []).length,
+    2,
+  );
+  assert.match(startupSource, /STARTUP_MIGRATION_MANIFEST\[12\]/);
+});
+
 test("migration failure exposes failed readiness and requests nonzero termination", async () => {
   const readiness = createStartupReadiness();
   let initialized = false;
