@@ -151,6 +151,7 @@ export const deals = pgTable(
     currency: varchar("currency", { length: 8 }).notNull().default("USD"),
     msrpCents: integer("msrp_cents"),
     manufacturerMsrpCents: integer("manufacturer_msrp_cents"),
+    normalSellingPriceCents: integer("normal_selling_price_cents"),
     msrpSource: varchar("msrp_source", { length: 16 }),
     msrpVerified: boolean("msrp_verified").notNull().default(false),
     priceCents: integer("price_cents").notNull(),

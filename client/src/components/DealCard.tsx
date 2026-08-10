@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { useDeleteDeal, useUpdateDeal } from "@/hooks/use-deals";
+import { useDeleteDeal } from "@/hooks/use-deals";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { useMagicLink } from "./MagicLinkDialog";
@@ -73,7 +73,6 @@ export function DealCard({
 }) {
   const { toast } = useToast();
   const del = useDeleteDeal();
-  const upd = useUpdateDeal();
   const { isAuthenticated, user } = useAuth();
   const isAdmin = (user as any)?.isAdmin === true;
   const { openDealPrompt } = useMagicLink();
@@ -149,6 +148,11 @@ export function DealCard({
     onError: (error: any) => toast({ title: "Elite Corner update failed", description: error?.message ?? "Please try again.", variant: "destructive" }),
   });
 
+  const adminUpdateMutation = useMutation({
+    mutationFn: (updates: Record<string, unknown>) =>
+      apiRequest("PATCH", `/api/admin/deals/${deal.id}`, updates),
+  });
+
   const handleShare = async () => {
     const dealUrl = outboundRetailerUrl(deal?.url);
     const price = derived.price;
@@ -184,13 +188,12 @@ export function DealCard({
     isBuyItNow: Boolean(deal?.isBuyItNow ?? true),
     priceCents: deal?.priceCents ?? 0,
     msrpCents: deal?.msrpCents ?? undefined,
+    normalSellingPriceCents: deal?.normalSellingPriceCents ?? undefined,
   }));
 
   const onSave = async () => {
     try {
-      await upd.mutateAsync({
-        id: String(deal.id),
-        updates: {
+      const updates = {
           title: form.title,
           brand: form.brand || null,
           url: form.url,
@@ -200,8 +203,13 @@ export function DealCard({
           msrpCents: form.msrpCents === undefined || form.msrpCents === null || form.msrpCents === ("" as any)
             ? null
             : Number(form.msrpCents),
-        },
-      });
+          normalSellingPriceCents: form.normalSellingPriceCents === undefined || form.normalSellingPriceCents === null || form.normalSellingPriceCents === ("" as any)
+            ? null
+            : Number(form.normalSellingPriceCents),
+        };
+      await adminUpdateMutation.mutateAsync(updates);
+      queryClient.invalidateQueries({ queryKey: ["/api/deals"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/deal-categories"] });
       toast({ title: "Saved", description: "Deal updated." });
       setEditOpen(false);
     } catch (e: any) {
@@ -474,6 +482,12 @@ export function DealCard({
                   ) : null}
                 </div>
               ) : null}
+              {derived.hasNormalSellingPrice ? (
+                <div className="flex items-baseline gap-1 text-[11px] text-muted-foreground" data-testid="deal-normal-selling-price">
+                  <span>Normally</span>
+                  <span className="font-semibold">{derived.normalSellingPrice}</span>
+                </div>
+              ) : null}
             </div>
 
             <div className="flex items-center gap-2">
@@ -597,7 +611,7 @@ export function DealCard({
               />
             </div>
 
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
               <div className="grid gap-2">
                 <Label htmlFor="price">Price (cents)</Label>
                 <Input
@@ -610,19 +624,39 @@ export function DealCard({
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="msrp">MSRP (cents)</Label>
+                <Label htmlFor="msrp">MSRP ($)</Label>
                 <Input
                   id="msrp"
                   type="number"
-                  value={form.msrpCents === undefined || form.msrpCents === null ? "" : String(form.msrpCents)}
+                  step="0.01"
+                  value={form.msrpCents === undefined || form.msrpCents === null ? "" : String(Number(form.msrpCents) / 100)}
                   onChange={(e) =>
                     setForm((p) => ({
                       ...p,
-                      msrpCents: e.target.value === "" ? undefined : Number(e.target.value),
+                      msrpCents: e.target.value === "" ? undefined : Math.round(Number(e.target.value) * 100),
                     }))
                   }
                   className="ring-focus rounded-xl"
                   data-testid="edit-msrp"
+                />
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="normal-selling-price">Normal selling price ($)</Label>
+                <Input
+                  id="normal-selling-price"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.normalSellingPriceCents === undefined || form.normalSellingPriceCents === null ? "" : String(Number(form.normalSellingPriceCents) / 100)}
+                  onChange={(e) =>
+                    setForm((p) => ({
+                      ...p,
+                      normalSellingPriceCents: e.target.value === "" ? undefined : Math.round(Number(e.target.value) * 100),
+                    }))
+                  }
+                  className="ring-focus rounded-xl"
+                  data-testid="edit-normal-selling-price"
                 />
               </div>
 
@@ -650,7 +684,7 @@ export function DealCard({
               </Button>
               <Button
                 onClick={onSave}
-                disabled={upd.isPending}
+                disabled={adminUpdateMutation.isPending}
                 className={cn(
                   "ring-focus rounded-xl",
                   "bg-gradient-to-r from-primary to-primary/80 text-primary-foreground",
