@@ -188,7 +188,7 @@ h6,
 
 [data-testid="mobile-logo-home"] img,
 [data-testid="img-tss-logo-sidebar"] {
-  content: url('/images/tssdeals-mark.svg');
+  content: url('/images/tssdeals-mark.svg?v=2');
   object-fit: contain !important;
   background: radial-gradient(circle at 50% 32%, rgba(239,68,68,.16), rgba(8,8,10,.96) 62%);
   padding: .3rem;
