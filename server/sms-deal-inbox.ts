@@ -38,7 +38,23 @@ function sourceForUrl(rawUrl: string) {
   return { sourceId: `manual-${clean}`, sourceName: hostname, baseUrl: `https://${hostname}` };
 }
 
-export type SmsDealHints = { title: string | null; priceCents: number | null };
+export type SmsDealHints = { title: string | null; priceCents: number | null; imageUrl?: string | null };
+
+const TWILIO_MESSAGE_SID = /^SM[a-f0-9]{32}$/i;
+const TWILIO_MEDIA_SID = /^ME[a-f0-9]{32}$/i;
+
+export function twilioMediaProxyPath(mediaUrl: string | null | undefined): string | null {
+  if (!mediaUrl) return null;
+  try {
+    const parsed = new URL(mediaUrl);
+    if (parsed.protocol !== "https:" || parsed.hostname !== "api.twilio.com") return null;
+    const match = parsed.pathname.match(/\/Messages\/(SM[a-f0-9]{32})\/Media\/(ME[a-f0-9]{32})(?:\/|$)/i);
+    if (!match || !TWILIO_MESSAGE_SID.test(match[1]) || !TWILIO_MEDIA_SID.test(match[2])) return null;
+    return `/api/sms-deal-media/${match[1]}/${match[2]}`;
+  } catch {
+    return null;
+  }
+}
 
 export function parseSmsDealHints(body: string): SmsDealHints {
   const withoutUrls = body.replace(URL_PATTERN, " ");
@@ -85,7 +101,7 @@ export async function processSmsDealUrl(url: string, dependencies: DealInboxDepe
     title,
     brand: null,
     url,
-    imageUrl: preview.images[0] ?? null,
+    imageUrl: hints?.imageUrl ?? preview.images[0] ?? null,
     sportId: classification?.sportId ?? null,
     equipmentTypeId: classification?.equipmentTypeId ?? null,
     condition: /\b(?:used|preowned|pre-owned)\b/i.test(`${preview.title} ${preview.description ?? ""}`) ? "preowned" : "new",
@@ -98,7 +114,12 @@ export async function processSmsDealUrl(url: string, dependencies: DealInboxDepe
     autoIncluded: true,
     classificationSource: classification ? "rules" : null,
     classificationConfidence: classification ? "high" : null,
-    raw: { submittedVia: "sms-deal-inbox", submittedAt: new Date().toISOString(), originalUrl: url },
+    raw: {
+      submittedVia: "sms-deal-inbox",
+      submittedAt: new Date().toISOString(),
+      originalUrl: url,
+      submittedImageUrl: hints?.imageUrl ?? null,
+    },
   };
   const result = await dependencies.upsert([deal], "sms-deal-inbox");
   const price = new Intl.NumberFormat("en-US", { style: "currency", currency: deal.currency }).format(deal.priceCents / 100);

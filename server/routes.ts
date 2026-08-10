@@ -49,6 +49,7 @@ import {
   parseSmsDealHints,
   processSmsDealUrl,
   smsDealReply,
+  twilioMediaProxyPath,
 } from "./sms-deal-inbox";
 import { registerMagicLinkRoutes } from "./magic-link-auth";
 import { registerSmsAuthRoutes } from "./sms-auth";
@@ -1408,10 +1409,14 @@ export async function registerRoutes(
       const normalizedFrom = normalizeSmsPhone(from);
       const urls = extractDealUrls(body);
       if (urls.length && approvedDealSmsSenders().has(normalizedFrom)) {
+        const mediaCount = Math.max(0, Number.parseInt(String(req.body?.NumMedia ?? "0"), 10) || 0);
+        const submittedImageUrl = mediaCount > 0
+          ? twilioMediaProxyPath(req.body?.MediaUrl0)
+          : null;
         const result = await processSmsDealUrl(urls[0], {
           ensureSource: (id, name, baseUrl) => storage.ensureSource(id, name, baseUrl),
           upsert: (deals, label) => storage.bulkUpsertDeals(deals, label),
-        }, parseSmsDealHints(body));
+        }, { ...parseSmsDealHints(body), imageUrl: submittedImageUrl });
         res.type("text/xml").send(smsDealReply(result.message));
         return;
       }
@@ -1421,13 +1426,42 @@ export async function registerRoutes(
         return;
       }
       if (approvedDealSmsSenders().has(normalizedFrom)) {
-        res.type("text/xml").send(smsDealReply("Text a product link and TSSDeals will verify and add it. One link per message."));
+        res.type("text/xml").send(smsDealReply("Send one photo with: $29.99 Product name https://product-link. TSSDeals will verify and add it."));
         return;
       }
       res.type("text/xml").send("<Response></Response>");
     } catch (err: any) {
       console.error(`[sms] SMS webhook error: ${err.message}`);
       res.type("text/xml").send("<Response></Response>");
+    }
+  });
+
+  app.get("/api/sms-deal-media/:messageSid/:mediaSid", async (req, res) => {
+    const accountSid = process.env.TWILIO_ACCOUNT_SID;
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
+    const { messageSid, mediaSid } = req.params;
+    if (!accountSid || !authToken || !/^SM[a-f0-9]{32}$/i.test(messageSid) || !/^ME[a-f0-9]{32}$/i.test(mediaSid)) {
+      return res.status(404).end();
+    }
+    try {
+      const upstream = await fetch(
+        `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages/${messageSid}/Media/${mediaSid}`,
+        { headers: { Authorization: `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString("base64")}` } },
+      );
+      if (!upstream.ok) return res.status(404).end();
+      const contentType = upstream.headers.get("content-type")?.split(";")[0].trim().toLowerCase() ?? "";
+      const allowed = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "image/heic", "image/heif"]);
+      if (!allowed.has(contentType)) return res.status(415).end();
+      const declaredLength = Number(upstream.headers.get("content-length") || 0);
+      if (declaredLength > 8 * 1024 * 1024) return res.status(413).end();
+      const bytes = Buffer.from(await upstream.arrayBuffer());
+      if (bytes.length > 8 * 1024 * 1024) return res.status(413).end();
+      res.setHeader("Content-Type", contentType);
+      res.setHeader("Cache-Control", "public, max-age=3600, stale-while-revalidate=86400");
+      return res.send(bytes);
+    } catch (error) {
+      console.error(`[sms-deal-inbox] media proxy failed: ${error instanceof Error ? error.message : "unknown error"}`);
+      return res.status(502).end();
     }
   });
 
