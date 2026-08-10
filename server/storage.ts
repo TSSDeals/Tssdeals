@@ -2631,7 +2631,10 @@ export class DatabaseStorage implements IStorage {
     const twinSeamPool = await db
       .select()
       .from(deals)
-      .where(and(eq(deals.sourceId, "twin-seam-sports"), gte(deals.priceCents, 100)))
+      .where(and(
+        inArray(deals.sourceId, ["twin-seam-sports", "shopify-collective"]),
+        gte(deals.priceCents, 100),
+      ))
       .orderBy(desc(deals.lastPriceConfirmedAt), desc(deals.lastSeenAt), desc(deals.foundAt))
       .limit(250);
     const rankedTwinSeamSports = rankTopDeals(twinSeamPool, { limit: 2 });
