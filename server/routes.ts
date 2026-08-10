@@ -51,6 +51,13 @@ import {
   smsDealReply,
   twilioMediaProxyPath,
 } from "./sms-deal-inbox";
+import {
+  approvedDealEmailSenders,
+  dealEmailMediaId,
+  normalizeDealEmail,
+  selectDealEmailImage,
+  validDealInboxToken,
+} from "./email-deal-inbox";
 import { registerMagicLinkRoutes } from "./magic-link-auth";
 import { registerSmsAuthRoutes } from "./sms-auth";
 import { registerTeamStatsRoutes } from "./team-stats";
@@ -1438,6 +1445,91 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error(`[sms] SMS webhook error: ${err.message}`);
       res.type("text/xml").send("<Response></Response>");
+    }
+  });
+
+  // SendGrid Inbound Parse target. tssadmin@twinseamsports.com forwards to
+  // the private parse subdomain while the public mailbox remains unchanged.
+  // The approved owner explicitly authorized one attached product image to be
+  // served publicly as the resulting deal image.
+  app.post("/api/email-deal-inbox", async (req: any, res) => {
+    if (!validDealInboxToken(req.query?.token)) {
+      console.warn("[email-deal-inbox] rejected invalid webhook token");
+      return res.status(403).end();
+    }
+
+    try {
+      const multer = (await import("multer")).default;
+      const upload = multer({
+        storage: multer.memoryStorage(),
+        limits: { fileSize: 8 * 1024 * 1024, files: 10, fields: 40 },
+      });
+      await new Promise<void>((resolve, reject) => {
+        upload.any()(req, res as any, (error) => error ? reject(error) : resolve());
+      });
+
+      const sender = normalizeDealEmail(String(req.body?.from ?? ""));
+      if (!approvedDealEmailSenders().has(sender)) {
+        console.warn(`[email-deal-inbox] ignored message from unapproved sender ${sender || "unknown"}`);
+        return res.status(204).end();
+      }
+
+      const subject = String(req.body?.subject ?? "").trim();
+      const textBody = String(req.body?.text ?? "").trim();
+      const message = `${subject}\n${textBody}`.trim();
+      const urls = extractDealUrls(message);
+      if (urls.length === 0) {
+        console.warn(`[email-deal-inbox] approved message from ${sender} contained no product URL`);
+        return res.status(204).end();
+      }
+
+      const files = Array.isArray(req.files) ? req.files as Express.Multer.File[] : [];
+      const image = selectDealEmailImage(files);
+      let imageUrl: string | null = null;
+      if (image) {
+        const id = dealEmailMediaId(image.buffer);
+        const { db } = await import("./db");
+        const { sql } = await import("drizzle-orm");
+        await db.execute(sql`
+          INSERT INTO deal_inbox_media (id, content_type, content, submitted_by)
+          VALUES (${id}, ${image.mimetype.toLowerCase()}, ${image.buffer}, ${sender})
+          ON CONFLICT (id) DO NOTHING
+        `);
+        imageUrl = `/api/email-deal-media/${id}`;
+      }
+
+      const result = await processSmsDealUrl(urls[0], {
+        ensureSource: (id, name, baseUrl) => storage.ensureSource(id, name, baseUrl),
+        upsert: (deals, label) => storage.bulkUpsertDeals(deals, label),
+      }, {
+        ...parseSmsDealHints(message),
+        imageUrl,
+        submittedVia: "email-deal-inbox",
+      });
+      console.log(`[email-deal-inbox] ${result.ok ? "accepted" : "rejected"} ${sender}: ${result.message}`);
+      return res.status(204).end();
+    } catch (error) {
+      console.error(`[email-deal-inbox] processing failed: ${error instanceof Error ? error.message : "unknown error"}`);
+      return res.status(500).end();
+    }
+  });
+
+  app.get("/api/email-deal-media/:id", async (req, res) => {
+    if (!/^[a-f0-9]{40}$/.test(req.params.id)) return res.status(404).end();
+    try {
+      const { db } = await import("./db");
+      const { sql } = await import("drizzle-orm");
+      const result = await db.execute(sql`
+        SELECT content_type, content FROM deal_inbox_media WHERE id = ${req.params.id} LIMIT 1
+      `);
+      const row = (result as any).rows?.[0];
+      if (!row) return res.status(404).end();
+      res.setHeader("Content-Type", row.content_type);
+      res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      return res.send(row.content);
+    } catch (error) {
+      console.error(`[email-deal-inbox] media read failed: ${error instanceof Error ? error.message : "unknown error"}`);
+      return res.status(502).end();
     }
   });
 
