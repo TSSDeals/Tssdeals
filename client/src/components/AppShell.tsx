@@ -170,6 +170,7 @@ export function AppShell({
   const nav = [
     { href: "/app/deals", label: "Deals", icon: Compass },
     { href: "/app/top-deals", label: "Top Deals", icon: Trophy },
+    { href: "/app/twin-seam-picks", label: "Twin Seam Picks", icon: Sparkles },
     { href: "/guides", label: "Buyer's Guide", icon: GraduationCap },
     { href: "/app/blog", label: "Blog & Reviews", icon: BookOpen },
     ...(!isGuest ? [{ href: "/app/preferences", label: "Preferences", icon: Settings2 }] : []),

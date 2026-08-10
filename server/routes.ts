@@ -1174,8 +1174,13 @@ export async function registerRoutes(
   });
 
   app.get("/api/twin-seam-picks", async (_req, res) => {
-    const deals = await storage.getOwnerCuratedDeals(24);
-    res.json({ deals });
+    const sections = await storage.getTwinSeamPicks();
+    res.json({ sections, deals: [
+      ...sections.texted,
+      ...sections.twinSeamSports,
+      ...sections.eliteGloves,
+      ...sections.batsAndGolf,
+    ] });
   });
 
   app.get("/api/popular-searches", async (_req, res) => {
