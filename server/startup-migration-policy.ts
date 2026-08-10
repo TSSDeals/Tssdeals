@@ -83,6 +83,12 @@ export const STARTUP_MIGRATION_MANIFEST = [
     kind: "structural",
     description: "Durable media storage for owner-approved emailed deal submissions",
   },
+  {
+    id: "20260810_013_repair_email_deal_inbox_media",
+    checksum: "8a3fefc67125d4dd7e3b9b933133e98448972c0e0e6aa65f41dbe87d9f6d968d",
+    kind: "structural",
+    description: "Idempotently repair missing emailed-deal media storage",
+  },
 ] as const;
 
 export type ApprovedSeedState = "empty" | "satisfied" | "partial";
