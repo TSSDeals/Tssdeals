@@ -182,6 +182,8 @@ export type LinkPreview = {
   title: string | null;
   description: string | null;
   images: string[];
+  priceCents: number | null;
+  currency: string | null;
 };
 
 function decodeEntities(s: string): string {
@@ -231,7 +233,7 @@ export async function fetchLinkPreview(url: string): Promise<LinkPreview> {
     clearTimeout(timeout);
   }
 
-  if (!html) return { title: null, description: null, images: [] };
+  if (!html) return { title: null, description: null, images: [], priceCents: null, currency: null };
 
   const title =
     metaContent(html, "property", "og:title") ||
@@ -241,6 +243,19 @@ export async function fetchLinkPreview(url: string): Promise<LinkPreview> {
     metaContent(html, "property", "og:description") ||
     metaContent(html, "name", "twitter:description") ||
     metaContent(html, "name", "description");
+  const priceText =
+    metaContent(html, "property", "product:price:amount")
+    || metaContent(html, "property", "og:price:amount")
+    || metaContent(html, "name", "twitter:data1")
+    || html.match(/["']price["']\s*:\s*["']?([0-9]+(?:\.[0-9]{1,2})?)/i)?.[1]
+    || null;
+  const parsedPrice = priceText ? Number(priceText.replace(/[^0-9.]/g, "")) : NaN;
+  const priceCents = Number.isFinite(parsedPrice) && parsedPrice > 0 ? Math.round(parsedPrice * 100) : null;
+  const currency =
+    metaContent(html, "property", "product:price:currency")
+    || metaContent(html, "property", "og:price:currency")
+    || html.match(/["']priceCurrency["']\s*:\s*["']([A-Z]{3})["']/i)?.[1]
+    || null;
 
   const images: string[] = [];
   const seen = new Set<string>();
@@ -255,7 +270,7 @@ export async function fetchLinkPreview(url: string): Promise<LinkPreview> {
     if (images.length >= 6) break;
   }
 
-  return { title: title ? decodeEntities(title) : null, description, images };
+  return { title: title ? decodeEntities(title) : null, description, images, priceCents, currency };
 }
 
 // Generate a short, punchy promotional blurb for the deal landing page.

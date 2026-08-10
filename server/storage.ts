@@ -1117,6 +1117,16 @@ export class DatabaseStorage implements IStorage {
         }
 
         const now = new Date();
+        const smsInboxUpdate = syncSourceLabel === "sms-deal-inbox"
+          ? {
+              isFeatured: true,
+              autoIncluded: true,
+              sportId: deal.sportId ?? undefined,
+              equipmentTypeId: deal.equipmentTypeId ?? undefined,
+              classificationSource: deal.classificationSource ?? undefined,
+              classificationConfidence: deal.classificationConfidence ?? undefined,
+            }
+          : {};
         await db
           .update(deals)
           .set({
@@ -1142,6 +1152,7 @@ export class DatabaseStorage implements IStorage {
             subFilterId: deal.subFilterId ?? null,
             dropWeight: deal.dropWeight ?? null,
             sizeNumber: deal.sizeNumber ?? null,
+            ...smsInboxUpdate,
           })
           .where(eq(deals.id, ex.id));
 
