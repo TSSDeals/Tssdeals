@@ -197,14 +197,14 @@ export function DealsSearchHero({
       </section>
 
       <section className="animate-float-in" data-testid="baseball-category-browser">
-        <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+        <div className="mb-5 flex flex-col gap-1.5 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <div className="mb-1 text-[11px] font-black uppercase tracking-[0.16em] text-primary">Start with the game</div>
-            <h2 className="text-2xl font-black sm:text-3xl">Shop baseball</h2>
-            <p className="mt-1 text-xs text-muted-foreground sm:text-sm">Choose the gear you need and get straight to relevant listings.</p>
+            <div className="category-browser-eyebrow">Start with the game</div>
+            <h2 className="category-browser-title">Shop baseball</h2>
+            <p className="category-browser-description">Choose the gear you need and get straight to relevant listings.</p>
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-6">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
           {BASEBALL_QUICK_CATEGORIES.map((category) => (
             (() => {
               const categoryImage = categoryImages[category.id]
@@ -214,22 +214,21 @@ export function DealsSearchHero({
               key={category.id}
               type="button"
               onClick={() => onCategory("baseball", category.id)}
-              className="ring-focus group relative min-h-16 overflow-hidden rounded-2xl border border-border bg-card px-3 py-3 text-left text-sm font-black shadow-sm transition-all hover:-translate-y-1 hover:border-primary/50 hover:shadow-xl hover:shadow-black/20 sm:min-h-24"
+              className="category-tile ring-focus group"
               data-testid={`quick-category-${category.id}`}
             >
-              <span className={cn("relative z-10 block max-w-[70%]", categoryImage && "drop-shadow-[0_1px_0_rgba(0,0,0,0.35)]")}>
+              <span className={cn("category-tile-label", categoryImage && "category-tile-label-with-image")}>
                 {category.name}
               </span>
               {categoryImage && (
-                <>
-                  <span className="absolute inset-y-0 right-0 w-3/5 bg-gradient-to-l from-card via-card/80 to-transparent" />
+                <span className="category-tile-image-frame" aria-hidden="true">
                   <img
                     src={categoryImage}
                     alt=""
                     loading="lazy"
-                    className="absolute right-1 top-1/2 h-[78px] w-[78px] -translate-y-1/2 object-contain opacity-90 transition-transform duration-300 group-hover:scale-110 sm:h-[88px] sm:w-[88px]"
+                    className="category-tile-image"
                   />
-                </>
+                </span>
               )}
             </button>
               );
@@ -238,10 +237,10 @@ export function DealsSearchHero({
           <button
             type="button"
             onClick={() => onCategory(SHOPPER_MEMORABILIA_SPORT_ID, "all")}
-            className="ring-focus min-h-16 rounded-2xl border border-border bg-card px-3 py-3 text-left text-sm font-black shadow-sm transition-all hover:-translate-y-1 hover:border-primary/50 hover:shadow-xl hover:shadow-black/20 sm:min-h-24"
+            className="category-tile ring-focus group"
             data-testid="browse-sport-memorabilia"
           >
-            Memorabilia
+            <span className="category-tile-label">Memorabilia</span>
           </button>
         </div>
         <div className="mt-3 flex flex-col gap-2 rounded-2xl border border-border bg-card/75 p-3.5 sm:flex-row sm:items-center sm:justify-between">
