@@ -15,26 +15,26 @@ const sectionCopy: Array<{
 }> = [
   {
     key: "texted",
-    title: "Sent by Twin Seam",
-    description: "Deals Justin submitted directly by text. These stay visible while the listing remains current.",
+    title: "Top Deals Found Around the Web",
+    description: "Hand-picked finds sent directly by Twin Seam.",
     icon: MessageSquareText,
   },
   {
     key: "twinSeamSports",
     title: "From TwinSeamSports.com",
-    description: "A couple of the strongest current values from the Twin Seam Sports store.",
+    description: "Standout values from our own shop.",
     icon: Store,
   },
   {
     key: "eliteGloves",
-    title: "Elite Glove Picks",
-    description: "The five strongest verified listings from the complete Elite Glove Corner.",
+    title: "Incredible Deals on Incredible Gloves",
+    description: "Five elite gloves worth a closer look.",
     icon: Gem,
   },
   {
     key: "batsAndGolf",
-    title: "Premium Bats & Golf Clubs",
-    description: "The best current bat and golf-club opportunities priced above $150.",
+    title: "Premium Bat & Golf Deals",
+    description: "Our strongest bat and golf-club values over $150.",
     icon: Club,
   },
 ];

@@ -4,10 +4,10 @@ import { readFileSync } from "node:fs";
 
 test("Twin Seam Picks exposes every requested collection", () => {
   const source = readFileSync(new URL("./TwinSeamPicks.tsx", import.meta.url), "utf8");
-  assert.match(source, /Sent by Twin Seam/);
+  assert.match(source, /Top Deals Found Around the Web/);
   assert.match(source, /From TwinSeamSports\.com/);
-  assert.match(source, /Elite Glove Picks/);
-  assert.match(source, /Premium Bats & Golf Clubs/);
+  assert.match(source, /Incredible Deals on Incredible Gloves/);
+  assert.match(source, /Premium Bat & Golf Deals/);
 });
 
 test("app navigation places Twin Seam Picks after Top Deals", () => {
