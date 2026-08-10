@@ -20,6 +20,19 @@ test("Top Deals suppress untrusted MSRP and percent savings without mojibake", (
   assert.equal(Object.values(pricing).some((value) => String(value).includes("â")), false);
 });
 
+test("manual normal selling price is formatted independently from MSRP", () => {
+  const pricing = deriveDealCardPricing({
+    priceCents: 19999,
+    msrpCents: 29999,
+    normalSellingPriceCents: 24999,
+    currency: "USD",
+  });
+  assert.equal(pricing.hasNormalSellingPrice, true);
+  assert.match(pricing.normalSellingPrice, /250/);
+  assert.match(pricing.msrp, /300/);
+  assert.equal(pricing.percent, "20%");
+});
+
 test("ordinary cards preserve trusted savings display", () => {
   const pricing = deriveDealCardPricing({
     priceCents: 19999,

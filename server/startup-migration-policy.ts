@@ -89,6 +89,12 @@ export const STARTUP_MIGRATION_MANIFEST = [
     kind: "structural",
     description: "Idempotently repair missing emailed-deal media storage",
   },
+  {
+    id: "20260810_014_manual_deal_reference_prices",
+    checksum: "d45347d6c66e1c2148c43602d3d3de405550a780121279bcbb997f347b4aa0ca",
+    kind: "structural",
+    description: "Manual MSRP and normal selling price fields for administrator deal editing",
+  },
 ] as const;
 
 export type ApprovedSeedState = "empty" | "satisfied" | "partial";

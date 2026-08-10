@@ -539,11 +539,18 @@ export async function registerRoutes(
         sizeNumber: z.string().trim().max(20).nullable().optional(),
         condition: z.enum(["new", "preowned"]).optional(),
         isFeatured: z.boolean().optional(),
+        msrpCents: z.number().int().positive().nullable().optional(),
+        normalSellingPriceCents: z.number().int().positive().nullable().optional(),
       });
       const parsed = schema.parse(req.body);
       const subFilterIds = parsed.subFilterIds;
       const updates: any = { ...parsed };
       delete updates.subFilterIds;
+      if (parsed.msrpCents !== undefined) {
+        updates.manufacturerMsrpCents = parsed.msrpCents;
+        updates.msrpSource = parsed.msrpCents == null ? null : "manual";
+        updates.msrpVerified = parsed.msrpCents != null;
+      }
       // If the caller sent the explicit multi-tag list, the legacy column tracks
       // the first entry. Otherwise, leave subFilterId behavior unchanged.
       if (Array.isArray(subFilterIds)) {

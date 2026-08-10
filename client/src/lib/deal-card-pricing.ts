@@ -20,9 +20,16 @@ function formatPercent(percent: unknown) {
 
 export function deriveDealCardPricing(deal: any) {
   const suppressUntrustedSavings = deal?.topDealSavingsTrusted === false;
-  const percent = suppressUntrustedSavings ? "\u2014" : formatPercent(deal?.percentOff);
+  let percent = suppressUntrustedSavings ? "\u2014" : formatPercent(deal?.percentOff);
   const price = formatMoney(deal?.priceCents, deal?.currency);
   const msrp = formatMoney(deal?.msrpCents, deal?.currency);
+  const normalSellingPrice = formatMoney(deal?.normalSellingPriceCents, deal?.currency);
+  const hasNormalSellingPrice = deal?.normalSellingPriceCents != null && deal.normalSellingPriceCents > 0;
+  if (!suppressUntrustedSavings && hasNormalSellingPrice && deal?.priceCents > 0 && deal.normalSellingPriceCents > deal.priceCents) {
+    percent = formatPercent(
+      (((deal.normalSellingPriceCents - deal.priceCents) / deal.normalSellingPriceCents) * 100).toFixed(3),
+    );
+  }
   const hasMsrp = !suppressUntrustedSavings && deal?.msrpCents !== null && deal?.msrpCents !== undefined;
   const msrpVerified = Boolean(deal?.msrpVerified);
   const msrpSource = deal?.msrpSource ?? "retailer";
@@ -44,6 +51,8 @@ export function deriveDealCardPricing(deal: any) {
     percent,
     price,
     msrp,
+    normalSellingPrice,
+    hasNormalSellingPrice,
     hasMsrp,
     msrpVerified,
     msrpSource,
