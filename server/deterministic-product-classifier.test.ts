@@ -2,6 +2,16 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { classifyDeterministicProduct } from "./deterministic-product-classifier";
 
+test("recognizes trusted baseball glove model names without requiring the word glove", () => {
+  for (const title of [
+    "Marucci Cypress",
+    "Wilson A2000 1810",
+    "Rawlings Foundation Aaron Judge 12.5",
+  ]) {
+    assert.deepEqual(classifyDeterministicProduct(title)?.equipmentTypeId, "bb-gloves");
+  }
+});
+
 test("fielding gloves are separated from batting, golf, rain, and sliding gloves", () => {
   assert.equal(classifyDeterministicProduct("Wilson Staff Model Golf Glove"), null);
   assert.equal(classifyDeterministicProduct("Wilson Rain Gloves"), null);

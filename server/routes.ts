@@ -1172,6 +1172,11 @@ export async function registerRoutes(
     res.json({ category: shopperTopDealCategory(category), deals });
   });
 
+  app.get("/api/twin-seam-picks", async (_req, res) => {
+    const deals = await storage.getOwnerCuratedDeals(24);
+    res.json({ deals });
+  });
+
   app.get("/api/popular-searches", async (_req, res) => {
     const popular = await storage.getPopularSearches(20, 7);
     res.json(popular);

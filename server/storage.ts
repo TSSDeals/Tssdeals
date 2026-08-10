@@ -171,6 +171,7 @@ export interface IStorage {
   listDealCategories(enabledOnly?: boolean): Promise<DealCategory[]>;
   getDealCategory(slug: string): Promise<DealCategory | undefined>;
   getCategoryDeals(category: DealCategory, limit?: number): Promise<Deal[]>;
+  getOwnerCuratedDeals(limit?: number): Promise<Deal[]>;
   trackSearch(query: string, userId?: string): Promise<void>;
   getPopularSearches(limit?: number, sinceDays?: number): Promise<{ query: string; count: number }[]>;
   ensureDynamicCategories(): Promise<void>;
@@ -2439,11 +2440,30 @@ export class DatabaseStorage implements IStorage {
 
   async getCategoryDeals(category: DealCategory, limit = 20): Promise<Deal[]> {
     const whereParts: any[] = [];
+    const ownerKnownGlovePick = and(
+      eq(deals.isFeatured, true),
+      dsql`${deals.raw}->>'submittedVia' = 'sms-deal-inbox'`,
+      or(
+        ilike(deals.title, "%A2000%"),
+        ilike(deals.title, "%A2K%"),
+        ilike(deals.title, "%Marucci Cypress%"),
+        ilike(deals.title, "%Rawlings Foundation%"),
+        ilike(deals.title, "%Pro Preferred%"),
+        ilike(deals.title, "%Heart of the Hide%"),
+        ilike(deals.title, "%baseball glove%"),
+        ilike(deals.title, "%catcher's mitt%"),
+        ilike(deals.title, "%catcher mitt%"),
+        ilike(deals.title, "%first base mitt%"),
+      ),
+    );
+    const includeKnownOwnerGlovePicks = category.slug === "baseball-softball-gloves";
 
     whereParts.push(gte(deals.priceCents, 100));
 
     if (category.sportId) {
-      whereParts.push(eq(deals.sportId, category.sportId));
+      whereParts.push(includeKnownOwnerGlovePicks
+        ? or(eq(deals.sportId, category.sportId), ownerKnownGlovePick)
+        : eq(deals.sportId, category.sportId));
     }
     if (category.equipmentTypeId) {
       whereParts.push(eq(deals.equipmentTypeId, category.equipmentTypeId));
@@ -2461,7 +2481,9 @@ export class DatabaseStorage implements IStorage {
           ilike(deals.equipmentTypeId, `%${term}%`),
         )
       );
-      whereParts.push(or(...termConditions));
+      whereParts.push(includeKnownOwnerGlovePicks
+        ? or(or(...termConditions), ownerKnownGlovePick)
+        : or(...termConditions));
     }
 
     const BATTING_GLOVE_EQ_IDS = ["bb-batting-gloves", "fp-batting-gloves", "sp-batting-gloves"];
@@ -2565,6 +2587,19 @@ export class DatabaseStorage implements IStorage {
       clickCounts,
       limit: effectiveLimit,
     });
+  }
+
+  async getOwnerCuratedDeals(limit = 24): Promise<Deal[]> {
+    return await db
+      .select()
+      .from(deals)
+      .where(and(
+        eq(deals.isFeatured, true),
+        dsql`${deals.raw}->>'submittedVia' = 'sms-deal-inbox'`,
+        gte(deals.priceCents, 100),
+      ))
+      .orderBy(desc(deals.lastSeenAt), desc(deals.foundAt))
+      .limit(limit);
   }
 
   async trackSearch(query: string, userId?: string): Promise<void> {
