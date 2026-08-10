@@ -9,6 +9,7 @@ import {
   SHOPPER_BASEBALL_APPAREL_ID,
   SHOPPER_BASEBALL_BATTING_HELMETS_ID,
   SHOPPER_BASEBALL_CATCHERS_GEAR_ID,
+  SHOPPER_GOLF_EQUIPMENT,
   SHOPPER_MEMORABILIA_EQUIPMENT,
   SHOPPER_MEMORABILIA_SPORT_ID,
   canonicalEquipmentTypeLabel,
@@ -67,6 +68,19 @@ test("fastpitch and slowpitch taxonomy remains separate", () => {
   ];
   assert.deepEqual(curateShopperEquipmentTypes(types, "fastpitch-softball"), types);
   assert.deepEqual(expandEquipmentTypeIds("fastpitch-softball", ["fp-bats"]), ["fp-bats"]);
+});
+
+test("shopper taxonomy presents golf as concise equipment families", () => {
+  const result = curateShopperEquipmentTypes([
+    { id: "golf-drivers", name: "Golf Drivers", sportId: "golf" },
+    { id: "golf-irons", name: "Irons", sportId: "golf" },
+    { id: "golf-other", name: "Other", sportId: "golf" },
+  ], "golf");
+  assert.deepEqual(
+    result.map(({ id, name }) => ({ id, name })),
+    SHOPPER_GOLF_EQUIPMENT.map(({ id, name }) => ({ id, name })),
+  );
+  assert.equal(result.some(({ id }) => id === "golf-other"), false);
 });
 
 test("canonical baseball glove selection expands legacy fielding-glove IDs only", () => {

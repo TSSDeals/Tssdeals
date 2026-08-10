@@ -15,11 +15,21 @@ const BASEBALL_QUICK_CATEGORIES = curateShopperEquipmentTypes<
   { id: string; name: string; sportId: string }
 >([], "baseball");
 
+const GOLF_QUICK_CATEGORIES = curateShopperEquipmentTypes<
+  { id: string; name: string; sportId: string }
+>([], "golf");
+
 const BASEBALL_CATEGORY_IMAGE_FALLBACKS: Record<string, string> = {
   "bb-bats": "/images/products/bbcor-bat-composite.png",
   "bb-gloves": "/images/products/wilson-a2000-glove.png",
   "bb-cleats": "/images/products/baseball-cleats.png",
   "bb-training": "/images/products/pitching-machine.png",
+};
+
+const GOLF_CATEGORY_IMAGE_FALLBACKS: Record<string, string> = {
+  "golf-drivers": "/images/products/golf-driver.png",
+  "golf-iron-sets": "/images/products/golf-iron-set.png",
+  "golf-wedges": "/images/products/golf-wedge.png",
 };
 
 export function DealsSearchHero({
@@ -260,6 +270,45 @@ export function DealsSearchHero({
                 ))}
             </SelectContent>
           </Select>
+        </div>
+      </section>
+
+      <section className="animate-float-in" data-testid="golf-category-browser">
+        <div className="mb-5 flex flex-col gap-1.5 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <div className="category-browser-eyebrow">Next on the tee</div>
+            <h2 className="category-browser-title">Shop golf</h2>
+            <p className="category-browser-description">Compare the clubs and course essentials golfers actually shop for.</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-7">
+          {GOLF_QUICK_CATEGORIES.map((category) => {
+            const categoryImage = categoryImages[category.id]
+              ?? GOLF_CATEGORY_IMAGE_FALLBACKS[category.id];
+            return (
+              <button
+                key={category.id}
+                type="button"
+                onClick={() => onCategory("golf", category.id)}
+                className="category-tile ring-focus group"
+                data-testid={`quick-category-${category.id}`}
+              >
+                <span className={cn("category-tile-label", categoryImage && "category-tile-label-with-image")}>
+                  {category.name}
+                </span>
+                {categoryImage && (
+                  <span className="category-tile-image-frame" aria-hidden="true">
+                    <img
+                      src={categoryImage}
+                      alt=""
+                      loading="lazy"
+                      className="category-tile-image"
+                    />
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       </section>
     </>
