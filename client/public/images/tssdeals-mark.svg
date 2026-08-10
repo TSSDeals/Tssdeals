@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" role="img" aria-labelledby="title desc">
   <title id="title">TSSDeals</title>
-  <desc id="desc">TSSDeals black, white and red sports-tech shield mark.</desc>
+  <desc id="desc">TSSDeals shield with a baseball, TSS monogram, and complete Deals wordmark.</desc>
   <defs>
     <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#1a1a1f"/>
@@ -11,16 +11,28 @@
       <stop offset="1" stop-color="#c51628"/>
     </linearGradient>
   </defs>
-  <path d="M320 36 548 122v194c0 137-83 231-228 288C175 547 92 453 92 316V122L320 36Z" fill="url(#panel)" stroke="#f4f4f5" stroke-width="14"/>
-  <path d="M320 64 520 139v174c0 120-71 202-200 254-129-52-200-134-200-254V139L320 64Z" fill="none" stroke="#e11d2e" stroke-width="10"/>
-  <circle cx="320" cy="174" r="63" fill="#f4f4f5"/>
-  <path d="M281 132c18 15 31 38 31 64s-13 49-31 64M359 132c-18 15-31 38-31 64s13 49 31 64" fill="none" stroke="#d61f2c" stroke-width="7" stroke-linecap="round" stroke-dasharray="8 13"/>
-  <g transform="translate(86 266)">
-    <path d="M0 24h238l-18 52h-77v128H80V76H0Z" fill="#f4f4f5"/>
-    <path d="M215 24h172c55 0 93 28 93 76 0 47-34 71-83 75l77 79h-78l-72-76h-44v76h-61V24Zm61 51v56h103c22 0 36-10 36-28 0-19-14-28-36-28H276Z" fill="#f4f4f5"/>
-    <path d="M401 24h79v230h-79Z" fill="url(#red)" transform="skewX(-10)"/>
-  </g>
-  <path d="M136 483h368" stroke="#e11d2e" stroke-width="9" stroke-linecap="round"/>
-  <text x="320" y="534" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="48" font-weight="900" letter-spacing="5" fill="#f4f4f5">DEALS.COM</text>
-  <text x="320" y="578" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" letter-spacing="3" fill="#a1a1aa">SEARCH SMARTER • PAY LESS</text>
+
+  <path d="M320 36 548 122v194c0 137-83 231-228 288C175 547 92 453 92 316V122L320 36Z"
+        fill="url(#panel)" stroke="#f4f4f5" stroke-width="14"/>
+  <path d="M320 64 520 139v174c0 120-71 202-200 254-129-52-200-134-200-254V139L320 64Z"
+        fill="none" stroke="#e11d2e" stroke-width="10"/>
+
+  <circle cx="320" cy="166" r="58" fill="#f4f4f5"/>
+  <path d="M285 128c17 14 28 35 28 59s-11 45-28 59M355 128c-17 14-28 35-28 59s11 45 28 59"
+        fill="none" stroke="#d61f2c" stroke-width="7" stroke-linecap="round" stroke-dasharray="8 13"/>
+
+  <text x="320" y="363" text-anchor="middle"
+        font-family="Arial Black, Arial, Helvetica, sans-serif" font-size="132" font-weight="900"
+        letter-spacing="-10" fill="#f4f4f5">TSS</text>
+  <path d="M151 395h338" stroke="url(#red)" stroke-width="12" stroke-linecap="round"/>
+
+  <text x="320" y="477" text-anchor="middle"
+        font-family="Arial Black, Arial, Helvetica, sans-serif" font-size="68" font-weight="900"
+        letter-spacing="7" fill="#f4f4f5">DEALS</text>
+  <text x="320" y="522" text-anchor="middle"
+        font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700"
+        letter-spacing="4" fill="#e11d2e">TSSDEALS.COM</text>
+  <text x="320" y="559" text-anchor="middle"
+        font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700"
+        letter-spacing="3" fill="#a1a1aa">SEARCH SMARTER · PAY LESS</text>
 </svg>
