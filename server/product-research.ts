@@ -156,6 +156,13 @@ export const PRODUCT_RESEARCH_CATEGORIES: Record<ProductResearchFocus, ReadonlyA
       categoryId: "115280",
       categoryLabel: "Golf Clubs",
     },
+    {
+      researchKey: "category:golf-balls",
+      label: "Golf Balls",
+      queryText: "Golf Balls dozen -used -recycled -refinished",
+      categoryId: "18924",
+      categoryLabel: "Golf Balls",
+    },
   ],
 };
 

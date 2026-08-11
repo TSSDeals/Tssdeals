@@ -30,7 +30,7 @@ test("Product Research accepts supported demand and baseline windows", () => {
   assert.equal(productResearchWindow("not-a-window"), 30);
 });
 
-test("Product Research exposes a separate, club-only golf track", () => {
+test("Product Research exposes a separate golf track for clubs and balls", () => {
   assert.equal(productResearchFocus("golf"), "golf");
   assert.equal(productResearchFocus("unknown"), "baseball");
   assert.deepEqual(
@@ -41,11 +41,14 @@ test("Product Research exposes a separate, club-only golf track", () => {
       "category:golf-iron-sets",
       "category:golf-wedges",
       "category:golf-putters",
+      "category:golf-balls",
     ],
   );
-  assert.equal(PRODUCT_RESEARCH_CATEGORIES.golf.every(
+  assert.equal(PRODUCT_RESEARCH_CATEGORIES.golf.slice(0, 5).every(
     (category) => category.categoryId === "115280",
   ), true);
+  assert.equal(PRODUCT_RESEARCH_CATEGORIES.golf[5].categoryId, "18924");
+  assert.match(PRODUCT_RESEARCH_CATEGORIES.golf[5].queryText, /-used/);
 });
 
 test("Product Research accepts decimal eBay percentages and stores database-safe values", () => {
