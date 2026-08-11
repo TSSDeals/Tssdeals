@@ -908,12 +908,15 @@ export interface DealsQueryParams {
   maxPrice?: number;
   source?: string;
   brand?: string;
+  golfHand?: "left" | "right";
+  golfFlex?: "ladies" | "senior" | "regular" | "stiff" | "x-stiff";
+  golfLoft?: string;
   featured?: boolean;
   priceDropOnly?: boolean;
   limit?: number | "all";
   offset?: number;
   currency?: string;
-  sortBy?: "newest" | "oldest" | "price-low" | "price-high" | "discount-high" | "a-z" | "z-a";
+  sortBy?: "newest" | "oldest" | "price-low" | "price-high" | "delivered-low" | "discount-high" | "a-z" | "z-a";
   userId?: string;
 }
 

@@ -24,6 +24,9 @@ function toQueryString(input?: DealsListInput | null) {
   if (typeof input.minPercentOff === "number") params.set("minPercentOff", String(input.minPercentOff));
   if (input.source) params.set("source", input.source);
   if (input.brand) params.set("brand", input.brand);
+  if (input.golfHand) params.set("golfHand", input.golfHand);
+  if (input.golfFlex) params.set("golfFlex", input.golfFlex);
+  if (input.golfLoft) params.set("golfLoft", input.golfLoft);
   if (input.currency) params.set("currency", input.currency);
   if (typeof input.featured === "boolean") params.set("featured", input.featured ? "true" : "false");
   if (typeof input.priceDropOnly === "boolean") params.set("priceDropOnly", input.priceDropOnly ? "true" : "false");

@@ -779,6 +779,19 @@ export class DatabaseStorage implements IStorage {
       whereParts.push(or(eq(deals.condition, params.condition), amzBypass));
     }
 
+    // Golf attributes are often embedded in retailer titles rather than
+    // normalized columns. Keep these filters explicit and evidence-based so
+    // choosing a hand, flex, or loft never broadens into unrelated equipment.
+    if (params.sportId === "golf" && params.golfHand) {
+      whereParts.push(dsql`${deals.title} ~* ${GOLF_HAND_PATTERNS[params.golfHand]}`);
+    }
+    if (params.sportId === "golf" && params.golfFlex) {
+      whereParts.push(dsql`${deals.title} ~* ${GOLF_FLEX_PATTERNS[params.golfFlex]}`);
+    }
+    if (params.sportId === "golf" && params.golfLoft) {
+      whereParts.push(dsql`${deals.title} ~* ${golfLoftPattern(params.golfLoft)}`);
+    }
+
     const marketplaceSources = ["ebay", "sidelineswap"];
 
     const minPercentOff =
@@ -863,6 +876,21 @@ export class DatabaseStorage implements IStorage {
     const limit = isAll ? 10000 : Math.max(1, Math.min(200, (typeof params.limit === "number" ? params.limit : 50)));
     const offset = isAll ? 0 : Math.max(0, Math.min(10000, params.offset ?? 0));
 
+    // Prefer the shopper's actual total when a source supplies shipping. Bad
+    // or absent source data safely falls back to item price instead of making
+    // the query fail or inventing a shipping charge.
+    const shippingCents = dsql`CASE
+      WHEN COALESCE(${deals.raw}->>'shippingCostCents', '') ~ '^[0-9]+(?:[.][0-9]+)?$'
+        THEN ROUND((${deals.raw}->>'shippingCostCents')::numeric)
+      WHEN COALESCE(${deals.raw}->'shipping'->>'costCents', '') ~ '^[0-9]+(?:[.][0-9]+)?$'
+        THEN ROUND((${deals.raw}->'shipping'->>'costCents')::numeric)
+      WHEN COALESCE(${deals.raw}->>'shippingCost', '') ~ '^[0-9]+(?:[.][0-9]+)?$'
+        THEN ROUND((${deals.raw}->>'shippingCost')::numeric * 100)
+      WHEN COALESCE(${deals.raw}->'shipping'->>'value', '') ~ '^[0-9]+(?:[.][0-9]+)?$'
+        THEN ROUND((${deals.raw}->'shipping'->>'value')::numeric * 100)
+      ELSE 0 END`;
+    const deliveredPriceCents = dsql`(${deals.priceCents} + ${shippingCents})`;
+
     let orderClause: any[];
     if (params.q) {
       const searchTerms = (normalizedSearch?.rankQuery || params.q).split(/\s+/).filter(Boolean);
@@ -925,6 +953,9 @@ export class DatabaseStorage implements IStorage {
           case "price-low":
             orderClause = [desc(matchQuality), asc(deals.priceCents), desc(ftsRank), desc(deals.foundAt)];
             break;
+          case "delivered-low":
+            orderClause = [desc(matchQuality), asc(deliveredPriceCents), desc(ftsRank), desc(deals.foundAt)];
+            break;
           case "price-high":
             orderClause = [desc(matchQuality), desc(deals.priceCents), desc(ftsRank), desc(deals.foundAt)];
             break;
@@ -976,6 +1007,9 @@ export class DatabaseStorage implements IStorage {
           break;
         case "price-low":
           orderClause = [asc(deals.priceCents), desc(deals.foundAt)];
+          break;
+        case "delivered-low":
+          orderClause = [asc(deliveredPriceCents), desc(deals.foundAt)];
           break;
         case "price-high":
           orderClause = [desc(deals.priceCents), desc(deals.foundAt)];
