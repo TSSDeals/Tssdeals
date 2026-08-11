@@ -164,6 +164,9 @@ export const api = {
           maxPrice: z.coerce.number().min(0).optional(),
           source: z.string().optional(),
           brand: z.string().optional(),
+          golfHand: z.enum(["left", "right"]).optional(),
+          golfFlex: z.enum(["ladies", "senior", "regular", "stiff", "x-stiff"]).optional(),
+          golfLoft: z.string().regex(/^\d{1,2}(?:\.\d)?$/).optional(),
           currency: z.string().optional(),
           featured: z
             .union([z.literal("true"), z.literal("false"), z.boolean()])
@@ -175,7 +178,7 @@ export const api = {
             .optional(),
           limit: z.union([z.literal("all"), z.coerce.number().min(1).max(200)]).optional(),
           offset: z.coerce.number().int().min(0).max(10000).optional(),
-          sortBy: z.enum(["newest", "oldest", "price-low", "price-high", "discount-high", "a-z", "z-a"]).optional(),
+          sortBy: z.enum(["newest", "oldest", "price-low", "price-high", "delivered-low", "discount-high", "a-z", "z-a"]).optional(),
         })
         .optional(),
       responses: {

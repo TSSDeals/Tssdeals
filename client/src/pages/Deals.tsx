@@ -64,7 +64,7 @@ import {
   nextDealsOffset,
 } from "@/lib/deals-pagination";
 
-type SortOption = "newest" | "oldest" | "price-low" | "price-high" | "discount-high" | "a-z" | "z-a";
+type SortOption = "newest" | "oldest" | "price-low" | "price-high" | "delivered-low" | "discount-high" | "a-z" | "z-a";
 
 type FilterState = {
   q: string;
@@ -77,6 +77,9 @@ type FilterState = {
   maxPrice: number;
   source: string;
   brand: string;
+  golfHand: "all" | "left" | "right";
+  golfFlex: "all" | "ladies" | "senior" | "regular" | "stiff" | "x-stiff";
+  golfLoft: string;
   priceDropOnly: boolean;
   limitValue: string;
   sortBy: SortOption;
@@ -93,6 +96,9 @@ const DEFAULT_FILTERS: FilterState = {
   maxPrice: 0,
   source: "all",
   brand: "all",
+  golfHand: "all",
+  golfFlex: "all",
+  golfLoft: "all",
   priceDropOnly: false,
   limitValue: String(DEALS_PAGE_SIZE),
   sortBy: "newest",
@@ -323,6 +329,9 @@ export default function DealsPage({ storefront }: { storefront?: StorefrontConfi
       applied.ebaySeller === "all" &&
       applied.source === "all" &&
       applied.brand === "all" &&
+      applied.golfHand === "all" &&
+      applied.golfFlex === "all" &&
+      applied.golfLoft === "all" &&
       !applied.priceDropOnly &&
       applied.maxPrice === 0 &&
       applied.minPercentOff === 50 &&
@@ -397,6 +406,9 @@ export default function DealsPage({ storefront }: { storefront?: StorefrontConfi
       maxPrice: applied.maxPrice > 0 ? applied.maxPrice : undefined,
       source: applied.source === "all" ? undefined : applied.source,
       brand: applied.brand === "all" ? undefined : applied.brand,
+      golfHand: applied.sportId === "golf" && applied.golfHand !== "all" ? applied.golfHand : undefined,
+      golfFlex: applied.sportId === "golf" && applied.golfFlex !== "all" ? applied.golfFlex : undefined,
+      golfLoft: applied.sportId === "golf" && applied.golfLoft !== "all" ? applied.golfLoft : undefined,
       priceDropOnly: applied.priceDropOnly || undefined,
       featured: undefined,
       limit: applied.limitValue === "all" ? "all" as const : Number(applied.limitValue),
@@ -819,7 +831,7 @@ export default function DealsPage({ storefront }: { storefront?: StorefrontConfi
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_0.8fr_1fr_auto] xl:items-end" data-testid="primary-filters">
             <div className="grid gap-1.5">
               <Label>Sport</Label>
-              <Select value={pending.sportId} onValueChange={(value) => setPending((current) => ({ ...current, sportId: value, equipmentTypeId: "all", subFilterId: "all", brand: "all" }))}>
+              <Select value={pending.sportId} onValueChange={(value) => setPending((current) => ({ ...current, sportId: value, equipmentTypeId: "all", subFilterId: "all", brand: "all", golfHand: "all", golfFlex: "all", golfLoft: "all" }))}>
                 <SelectTrigger className="ring-focus min-h-11 rounded-xl" data-testid="sport-primary">
                   <SelectValue placeholder="All sports" />
                 </SelectTrigger>
@@ -879,6 +891,54 @@ export default function DealsPage({ storefront }: { storefront?: StorefrontConfi
               {hasUnapplied ? "Show results" : "Up to date"}
             </Button>
           </div>
+
+          {pending.sportId === "golf" && (
+            <div className="rounded-2xl border border-primary/15 bg-primary/[0.035] p-3 sm:p-4" data-testid="golf-shopper-filters">
+              <div className="mb-3">
+                <div className="text-sm font-bold">Golf club details</div>
+                <div className="text-xs text-muted-foreground">Choose only what matters. Leave any field at “Any” to keep more matches visible.</div>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="grid gap-1.5">
+                  <Label>Handedness</Label>
+                  <Select value={pending.golfHand} onValueChange={(value) => setPending((current) => ({ ...current, golfHand: value as FilterState["golfHand"] }))}>
+                    <SelectTrigger className="ring-focus min-h-11 rounded-xl" data-testid="golf-hand"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Any hand</SelectItem>
+                      <SelectItem value="right">Right-handed</SelectItem>
+                      <SelectItem value="left">Left-handed</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-1.5">
+                  <Label>Shaft flex</Label>
+                  <Select value={pending.golfFlex} onValueChange={(value) => setPending((current) => ({ ...current, golfFlex: value as FilterState["golfFlex"] }))}>
+                    <SelectTrigger className="ring-focus min-h-11 rounded-xl" data-testid="golf-flex"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Any flex</SelectItem>
+                      <SelectItem value="ladies">Ladies</SelectItem>
+                      <SelectItem value="senior">Senior</SelectItem>
+                      <SelectItem value="regular">Regular</SelectItem>
+                      <SelectItem value="stiff">Stiff</SelectItem>
+                      <SelectItem value="x-stiff">X-Stiff</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-1.5">
+                  <Label>Loft</Label>
+                  <Select value={pending.golfLoft} onValueChange={(value) => setPending((current) => ({ ...current, golfLoft: value }))}>
+                    <SelectTrigger className="ring-focus min-h-11 rounded-xl" data-testid="golf-loft"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Any loft</SelectItem>
+                      {["7.5", "8", "8.5", "9", "9.5", "10", "10.5", "11", "12", "13.5", "15", "16.5", "18", "21", "24", "46", "48", "50", "52", "54", "56", "58", "60"].map((loft) => (
+                        <SelectItem key={loft} value={loft}>{loft}°</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+          )}
 
           {categoryRefinements.length > 0 && (
             <div className="space-y-3 rounded-2xl border border-primary/15 bg-primary/[0.035] p-3 sm:p-4" data-testid="category-refinements">
@@ -1075,6 +1135,7 @@ export default function DealsPage({ storefront }: { storefront?: StorefrontConfi
                   <SelectItem value="newest">Newest first</SelectItem>
                   <SelectItem value="oldest">Oldest first</SelectItem>
                   <SelectItem value="price-low">Price: Low to High</SelectItem>
+                  <SelectItem value="delivered-low">Total price: Low to High</SelectItem>
                   <SelectItem value="price-high">Price: High to Low</SelectItem>
                   <SelectItem value="discount-high">Discount: High to Low</SelectItem>
                   <SelectItem value="a-z">Name: A to Z</SelectItem>
