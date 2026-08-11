@@ -7,6 +7,7 @@ import {
   normalizeShopperSportId,
   shopperMemorabiliaEquipmentId,
 } from "../shared/equipment-groups";
+import { classifyGolfClubProduct } from "./golf-product-classifier";
 import {
   batSizeTitlePattern,
   extractBatSizeIntent,
@@ -409,6 +410,16 @@ export function matchesDealClassificationFilters(
   if (baseballGloveRequest && hasBaseballGloveNegativeEvidence(deal)) return false;
   const exactSport = !normalizedSportId || deal.sportId === normalizedSportId;
   const exactEquipment = requestedEquipment.length === 0 || requestedEquipment.includes(deal.equipmentTypeId ?? "");
+  if (normalizedSportId === "golf") {
+    const requestedClubFamily = requestedEquipment.some((id) =>
+      ["golf-drivers", "golf-irons", "golf-iron-sets", "golf-wedges", "golf-putters", "golf-other"].includes(id),
+    );
+    if (!requestedClubFamily) return exactSport && exactEquipment;
+    const golfClub = classifyGolfClubProduct(`${deal.title ?? ""} ${deal.brand ?? ""}`);
+    if (!golfClub) return false;
+    return requestedEquipment.includes(golfClub.equipmentTypeId);
+  }
+
   if (exactSport && exactEquipment) return true;
 
   if (normalizedSportId !== "baseball") return false;
