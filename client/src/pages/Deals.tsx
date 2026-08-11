@@ -1196,7 +1196,8 @@ export default function DealsPage() {
       </section>
 
       <p ref={resultsRef} className="scroll-mt-4 text-center text-xs text-muted-foreground/70" data-testid="text-affiliate-disclosure">
-        As an affiliate, TSSDeals may earn a commission on purchases made through links on this site at no extra cost to you.
+        TSSDeals compares offers and sends you to the retailer to complete your purchase. We do not operate a shopping cart or checkout.
+        {" "}We may earn a commission from qualifying purchases at no extra cost to you.
       </p>
 
       {/* Featured - only shown when admin has curated deals */}

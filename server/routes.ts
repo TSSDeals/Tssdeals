@@ -7,7 +7,7 @@ import { storage } from "./storage";
 import { shopperTopDealCategory } from "./top-deals-ranking";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { searchCJProducts, searchCJProductsPaginated, cjProductToDeal, getSportKeywords, getCJPartners } from "./cj-affiliate";
-import { searchEbayProducts, ebayItemToDeal, getEbaySportKeywords, getEbayCategorySyncs, searchEbayDealItems, ebayDealItemToDeal, getEbayDealCategorySyncs } from "./ebay-api";
+import { searchEbayProducts, ebayItemToDeal, getEbaySportKeywords, searchEbayDealItems, ebayDealItemToDeal, getEbayDealCategorySyncs } from "./ebay-api";
 import { syncShopifyStore } from "./shopify-sync";
 import { syncNameOfTheGame } from "./woocommerce-sync";
 import { syncBaseballResale } from "./baseball-resale-sync";
@@ -2004,7 +2004,7 @@ export async function registerRoutes(
       let totalSkipped = 0;
       let totalErrors = 0;
       const syncLog: string[] = [];
-      const browseBudget = createEbayBrowseBudget("targeted admin sync", 100);
+      const browseBudget = createEbayBrowseBudget("targeted admin sync", 20);
       let rateLimited = false;
 
       const eqTypeKeywordMap: Record<string, Record<string, string[]>> = {
@@ -2249,55 +2249,13 @@ export async function registerRoutes(
 
   app.post("/api/ebay/category-sync", isAdmin, async (req: any, res) => {
     try {
-      const clientId = process.env.EBAY_CLIENT_ID;
-      const clientSecret = process.env.EBAY_CLIENT_SECRET;
-
-      if (!clientId || !clientSecret) {
-        return res.status(500).json({ message: "eBay API credentials not configured." });
-      }
-
-      const categorySyncs = getEbayCategorySyncs();
-      let totalCreated = 0;
-      let totalUpdated = 0;
-      let totalErrors = 0;
-      const syncLog: string[] = [];
-
-      for (const catSync of categorySyncs) {
-        try {
-          const items = await searchEbayProducts(clientId, clientSecret, {
-            keywords: catSync.keywords || "",
-            sportId: catSync.sportId,
-            equipmentTypeId: catSync.equipmentTypeId,
-            condition: "all",
-            maxResults: 2000,
-            categoryId: catSync.categoryId,
-          });
-
-          const dealsToInsert = items
-            .map((item) => ebayItemToDeal(item, catSync.sportId, catSync.equipmentTypeId))
-            .filter((d): d is NonNullable<typeof d> => d !== null);
-
-          if (dealsToInsert.length > 0) {
-            await storage.ensureSource("ebay", "eBay", "https://www.ebay.com");
-            const result = await storage.bulkUpsertDeals(dealsToInsert);
-            totalCreated += result.created;
-            totalUpdated += result.updated;
-            syncLog.push(`${catSync.categoryName} (${catSync.categoryId}): ${items.length} items, ${dealsToInsert.length} deals (${result.created} new, ${result.updated} updated)`);
-          } else {
-            syncLog.push(`${catSync.categoryName} (${catSync.categoryId}): ${items.length} items, 0 qualifying deals`);
-          }
-        } catch (err: any) {
-          totalErrors++;
-          syncLog.push(`${catSync.categoryName} (${catSync.categoryId}): ERROR - ${err.message}`);
-        }
-      }
-
-      res.json({
+      const started = await queueEbayPublicSync(storage);
+      res.status(started ? 202 : 200).json({
         ok: true,
-        created: totalCreated,
-        updated: totalUpdated,
-        errors: totalErrors,
-        log: syncLog,
+        queued: started,
+        message: started
+          ? "Quota-efficient eBay discovery was queued."
+          : "An eBay discovery run is already active or awaiting recovery.",
       });
     } catch (err: any) {
       res.status(500).json({ message: err.message });

@@ -396,8 +396,9 @@ export function TermsOfService() {
         <p>
           TwinSeam Deals is a sporting goods deal aggregation platform that displays product listings
           and pricing information from various third-party retailers and marketplaces. We do not sell
-          products directly through this Service (except for Twin Seam Sports' own inventory).
-          Purchases are completed on the respective retailer's website.
+          products directly through this Service. Products from Twin Seam Sports are also presented as
+          outbound links to its separate Shopify store. TSSDeals has no shopping cart or checkout;
+          every purchase is completed independently on the respective retailer or marketplace website.
         </p>
       </Section>
 

@@ -514,8 +514,8 @@ export function DealCard({
               ) : null}
 
               {deal?.isBuyItNow ? (
-                <Badge className="border-border bg-muted text-foreground/80" data-testid="deal-buynow">
-                  Buy It Now
+                <Badge className="border-border bg-muted text-foreground/80" data-testid="deal-fixed-price">
+                  Fixed price
                 </Badge>
               ) : (
                 <Badge className="border-border bg-muted text-foreground/80" data-testid="deal-nonbuynow">
@@ -533,7 +533,7 @@ export function DealCard({
                   With {baselineCoupon.code}: {baselineCoupon.checkoutPrice}
                 </div>
                 <div className="text-muted-foreground">
-                  Estimated checkout price{baselineCoupon.shippingComplete ? " including known shipping" : " from known price components"} · Use at checkout
+                  Estimated retailer price{baselineCoupon.shippingComplete ? " including known shipping" : " from known price components"} · Apply on the retailer site
                 </div>
               </div>
             ) : null}
@@ -550,7 +550,7 @@ export function DealCard({
                 data-testid="deal-view"
               >
                 <ExternalLink className="mr-2 h-4 w-4" />
-                View deal
+                View at retailer
               </Button>
             </div>
           </div>
@@ -662,8 +662,8 @@ export function DealCard({
 
               <div className="flex items-end justify-between rounded-2xl border border-border bg-muted/40 px-4 py-3">
                 <div className="space-y-0.5">
-                  <div className="text-sm font-semibold">Buy It Now</div>
-                  <div className="text-xs text-muted-foreground">Ebay-style instant checkout</div>
+                  <div className="text-sm font-semibold">Fixed-price listing</div>
+                  <div className="text-xs text-muted-foreground">Listing format shown for comparison only</div>
                 </div>
                 <Switch
                   checked={form.isBuyItNow}

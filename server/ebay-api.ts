@@ -1,6 +1,7 @@
 import type { InsertDeal } from "@shared/schema";
 import { classifyDealAttributes } from "./sub-filter-classifier";
 import { classifyGolfClubProduct } from "./golf-product-classifier";
+import { classifyDeterministicProduct } from "./deterministic-product-classifier";
 import { EbayIntegrationError, ebayErrorFromResponse, logEbayError } from "./ebay-errors";
 import {
   fetchEbayBrowseJson,
@@ -47,13 +48,14 @@ interface EbaySearchResponse {
   errors?: Array<{ message: string; errorId: number }>;
 }
 
-interface EbaySyncOptions {
+export interface EbaySyncOptions {
   keywords: string;
   sportId: string;
   equipmentTypeId: string;
   maxResults?: number;
   condition?: "new" | "preowned" | "all";
   maxPrice?: number;
+  minPrice?: number;
   sellerUsername?: string;
   categoryId?: string;
   browseBudget?: EbayBrowseBudget;
@@ -101,7 +103,10 @@ export async function searchEbayProducts(
 ): Promise<EbayItemSummary[]> {
   const token = await getEbayToken(clientId, clientSecret);
   const pageSize = 200;
-  const maxTotal = options.maxResults || 10000;
+  const requestedTotal = options.maxResults || 10000;
+  const maxTotal = options.browsePurpose === "public_feed"
+    ? Math.min(requestedTotal, pageSize)
+    : requestedTotal;
   const maxPages = Math.ceil(maxTotal / pageSize);
 
   const baseParams = new URLSearchParams({
@@ -124,8 +129,8 @@ export async function searchEbayProducts(
     filters.push("conditions:{USED|VERY_GOOD|GOOD|ACCEPTABLE}");
   }
 
-  if (options.maxPrice) {
-    filters.push(`price:[..${options.maxPrice}],priceCurrency:USD`);
+  if (options.minPrice || options.maxPrice) {
+    filters.push(`price:[${options.minPrice ?? ""}..${options.maxPrice ?? ""}],priceCurrency:USD`);
   }
 
   if (options.sellerUsername) {
@@ -161,6 +166,7 @@ export async function searchEbayProducts(
         purpose: options.browsePurpose,
         budget: options.browseBudget,
         maxRetries: options.browseMaxRetries,
+        cacheTtlMs: options.browsePurpose === "public_feed" ? 6 * 60 * 60 * 1000 : undefined,
       });
     } catch (error) {
       if (error instanceof EbayIntegrationError && error.upstreamStatus === 401) {
@@ -224,6 +230,7 @@ export function ebayItemToDeal(
   equipmentTypeId: string,
 ): InsertDeal | null {
   if (isCollectible(item.title)) return null;
+  if (equipmentTypeId.endsWith("-gloves") && /\b(?:vintage|game[ -]?used)\b/i.test(item.title)) return null;
 
   const priceCents = Math.round(parseFloat(item.price.value) * 100);
   if (priceCents <= 0) return null;
@@ -298,6 +305,12 @@ export function ebayItemToDeal(
       ebaySellerFeedback: item.seller?.feedbackPercentage,
     },
   };
+}
+
+export function ebayItemToClassifiedDeal(item: EbayItemSummary): InsertDeal | null {
+  const classification = classifyDeterministicProduct(item.title);
+  if (!classification) return null;
+  return ebayItemToDeal(item, classification.sportId, classification.equipmentTypeId);
 }
 
 const KNOWN_BRANDS = [

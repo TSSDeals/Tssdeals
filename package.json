@@ -17,6 +17,8 @@
     "test:ebay-public-sync": "tsx --test server/ebay-public-sync.test.ts",
     "test:deal-validation-policy": "tsx --test server/deal-validation-policy.test.ts",
     "test:ebay-browse": "tsx --test server/ebay-browse-client.test.ts",
+    "test:affiliate-only-commerce": "tsx --test client/src/lib/affiliate-only-commerce.test.ts",
+    "test:ebay-quota-policy": "tsx --test server/ebay-quota-policy.test.ts server/ebay-browse-client.test.ts server/ebay-public-sync.test.ts",
     "test:ebay-pricing": "tsx --test server/ebay-pricing-analysis.test.ts",
     "test:wholesale-autocomplete": "tsx --test client/src/lib/wholesale-autocomplete.test.ts",
     "test:product-research": "tsx --test server/product-research.test.ts server/demand-brain.test.ts",
