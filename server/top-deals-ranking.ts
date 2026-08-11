@@ -1,6 +1,7 @@
 import type { Deal, DealCategory } from "@shared/schema";
 import { preferredRetailerRank } from "@shared/retailer-programs";
 import { classifyGolfClubProduct } from "./golf-product-classifier";
+import { isPlausibleGolfPriceReference } from "@shared/golf-price-reference";
 
 const DAY_MS = 86_400_000;
 const NOISE_PATTERN =
@@ -352,13 +353,19 @@ function trustedSavings(deal: Deal): { trusted: boolean; percent: number; suspic
   const manufacturerAnchor = Number(deal.manufacturerMsrpCents);
   const retailerAnchor = Number(deal.msrpCents);
   const anchor =
-    deal.msrpVerified && manufacturerAnchor > price
+    deal.msrpVerified && isPlausibleGolfPriceReference({ ...deal, referenceCents: manufacturerAnchor })
       ? manufacturerAnchor
-      : deal.msrpVerified && retailerAnchor > price
+      : deal.msrpVerified && isPlausibleGolfPriceReference({ ...deal, referenceCents: retailerAnchor })
         ? retailerAnchor
         : 0;
+  const claimedAnchor = Math.max(manufacturerAnchor, retailerAnchor);
   const percent = anchor > 0 ? ((anchor - price) / anchor) * 100 : 0;
-  return { trusted: anchor > 0 && percent > 0 && percent < 85, percent, suspicious: percent >= 85 };
+  const suspiciousPercent = claimedAnchor > price ? ((claimedAnchor - price) / claimedAnchor) * 100 : 0;
+  return {
+    trusted: anchor > 0 && percent > 0 && percent < 85,
+    percent,
+    suspicious: suspiciousPercent >= 85 || (claimedAnchor > price && anchor === 0),
+  };
 }
 
 function historicalLowDays(deal: Deal): number {

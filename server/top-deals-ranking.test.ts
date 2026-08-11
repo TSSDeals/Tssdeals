@@ -425,6 +425,31 @@ test("golf clubs require actual club form and cap non-USD results", () => {
   assert.ok(ranked.filter((item) => item.currency === "EUR").length <= 2);
 });
 
+test("individual golf irons never inherit a complete-set MSRP", () => {
+  const singleIron = deal({
+    id: "single-titleist-iron",
+    title: "Titleist T250 Black Vapor Irons - GW - Left Hand",
+    brand: "Titleist",
+    sportId: "golf",
+    equipmentTypeId: "golf-irons",
+    priceCents: 28_500,
+    msrpCents: 130_000,
+    manufacturerMsrpCents: 130_000,
+    percentOff: "78.08",
+    hasPriceDrop: false,
+    isLow30d: false,
+    isLow60d: false,
+    isLow90d: true,
+  });
+  const ranked = rankTopDeals([singleIron], {
+    now,
+    category: { name: "Golf Club Deals", slug: "golf-clubs", sportId: "golf" },
+  });
+
+  assert.equal(ranked[0]?.topDealSavingsTrusted, false);
+  assert.equal(ranked[0]?.topDealReasons.some((reason) => reason.code === "verified-savings"), false);
+});
+
 test("golf family pages reclassify stale rows at read time", () => {
   const driverContext = { now, category: { name: "Drivers", sportId: "golf", equipmentTypeId: "golf-drivers" } };
   const putterContext = { now, category: { name: "Putters", sportId: "golf", equipmentTypeId: "golf-putters" } };

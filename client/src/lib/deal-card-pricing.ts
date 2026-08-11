@@ -19,7 +19,17 @@ function formatPercent(percent: unknown) {
 }
 
 export function deriveDealCardPricing(deal: any) {
-  const suppressUntrustedSavings = deal?.topDealSavingsTrusted === false;
+  const manufacturerReferencePlausible = isPlausibleGolfPriceReference({
+    ...deal,
+    referenceCents: deal?.manufacturerMsrpCents,
+  });
+  const retailerReferencePlausible = isPlausibleGolfPriceReference({
+    ...deal,
+    referenceCents: deal?.msrpCents,
+  });
+  const suppressUntrustedSavings = deal?.topDealSavingsTrusted === false
+    || (deal?.manufacturerMsrpCents != null && !manufacturerReferencePlausible)
+    || (deal?.msrpVerified && deal?.msrpCents != null && !retailerReferencePlausible);
   let percent = suppressUntrustedSavings ? "\u2014" : formatPercent(deal?.percentOff);
   const price = formatMoney(deal?.priceCents, deal?.currency);
   const msrp = formatMoney(deal?.msrpCents, deal?.currency);
@@ -62,3 +72,4 @@ export function deriveDealCardPricing(deal: any) {
     showDualPricing,
   };
 }
+import { isPlausibleGolfPriceReference } from "@shared/golf-price-reference";
