@@ -77,6 +77,18 @@ const FAMILY_PATTERNS: Array<[RegExp, string, FamilyKind]> = [
   [/\bai[\s-]?one\b/i, "Ai-One", "golf"],
   [/\bscotty\s+cameron\s+phantom\b/i, "Scotty Cameron Phantom", "golf"],
   [/\bscotty\s+cameron\s+(?:studio\s+style\s+)?newport\b/i, "Scotty Cameron Newport", "golf"],
+  [/\bp[\s-]?790\b/i, "P790", "golf"],
+  [/\bp[\s-]?770\b/i, "P770", "golf"],
+  [/\b(?:apex\s+pro|apex\s+dcb|apex)\b/i, "Apex", "golf"],
+  [/\bt[\s-]?(?:100|150|200|250|350)\b/i, "Titleist T-Series", "golf"],
+  [/\bi[\s-]?(?:230|530)\b/i, "PING i-Series", "golf"],
+  [/\bjpx[\s-]?(?:923|925)(?:\s+hot\s+metal)?\b/i, "JPX 925/923", "golf"],
+  [/\bzx[\s-]?(?:4|5|7)(?:\s+mk\s*ii)?\b/i, "Srixon ZX", "golf"],
+  [/\bking\s+(?:tour|forged\s+tec|cb|mb)\b/i, "Cobra King", "golf"],
+  [/\brtx[\s-]?(?:6|zipcore)\b/i, "RTX", "golf"],
+  [/\bjaws\s+(?:raw|full\s+toe)\b/i, "Jaws", "golf"],
+  [/\bwhite\s+hot\s+(?:og|versa)\b/i, "White Hot", "golf"],
+  [/\bpld\s+(?:milled|anser|ds72)\b/i, "PING PLD", "golf"],
 ];
 
 const GENERIC_MODEL_WORDS = new Set([

@@ -30,6 +30,8 @@ test("rejects golf accessories, replacement shafts, and tool drivers", () => {
     "Golf Club Brush and Groove Cleaner",
     "Golf Pride Putter Grip Kit",
     "Callaway Driver Adapter Sleeve",
+    "TaylorMade Qi10 Driver Head Only 10.5 Degree",
+    "Callaway Paradym Triple Diamond Driver Head",
     "20V Cordless Impact Driver Tool Set",
     "Golf Rangefinder with Slope",
   ];
