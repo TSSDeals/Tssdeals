@@ -8,6 +8,7 @@ import {
 export type ProductIdentityRunStatus = {
   running: boolean;
   mode: "preview" | "apply" | null;
+  focus: "all" | "baseball" | "golf";
   phase: "idle" | "scanning" | "storing" | "complete" | "error";
   startedAt: string | null;
   finishedAt: string | null;
@@ -28,6 +29,7 @@ function freshStatus(): ProductIdentityRunStatus {
   return {
     running: false,
     mode: null,
+    focus: "all",
     phase: "idle",
     startedAt: null,
     finishedAt: null,
@@ -47,7 +49,10 @@ export function getProductIdentityRunStatus(): ProductIdentityRunStatus {
   return { ...status, sample: [...status.sample] };
 }
 
-export function startProductIdentityRun(mode: "preview" | "apply"): {
+export function startProductIdentityRun(
+  mode: "preview" | "apply",
+  focus: "all" | "baseball" | "golf" = "all",
+): {
   started: boolean;
   status: ProductIdentityRunStatus;
 } {
@@ -56,14 +61,18 @@ export function startProductIdentityRun(mode: "preview" | "apply"): {
     ...freshStatus(),
     running: true,
     mode,
+    focus,
     phase: "scanning",
     startedAt: new Date().toISOString(),
   };
-  void run(mode);
+  void run(mode, focus);
   return { started: true, status: getProductIdentityRunStatus() };
 }
 
-async function run(mode: "preview" | "apply"): Promise<void> {
+async function run(
+  mode: "preview" | "apply",
+  focus: "all" | "baseball" | "golf",
+): Promise<void> {
   const client = await pool.connect();
   const proposals: ProductIdentityProposal[] = [];
   const sourceTitles = new Map<string, string>();
@@ -79,9 +88,10 @@ async function run(mode: "preview" | "apply"): Promise<void> {
                 drop_weight AS "dropWeight", size_number AS "sizeNumber", raw
            FROM deals
           WHERE id > $1
+            AND ($2 = 'all' OR sport_id = $2)
           ORDER BY id
           LIMIT 5000`,
-        [cursor],
+        [cursor, focus],
       );
       if (result.rows.length === 0) break;
       status.scannedDeals += result.rows.length;
@@ -157,8 +167,8 @@ async function run(mode: "preview" | "apply"): Promise<void> {
     }
     status.phase = "complete";
     status.message = mode === "apply"
-      ? `${status.storedProposals.toLocaleString()} safe proposals stored for review`
-      : `${status.highConfidence.toLocaleString()} safe proposals found; no changes made`;
+      ? `${status.storedProposals.toLocaleString()} safe ${focus === "all" ? "" : `${focus} `}proposals stored for review`
+      : `${status.highConfidence.toLocaleString()} safe ${focus === "all" ? "" : `${focus} `}proposals found; no changes made`;
   } catch (error: any) {
     try { await client.query("ROLLBACK"); } catch {}
     status.phase = "error";

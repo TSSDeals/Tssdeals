@@ -975,8 +975,15 @@ export default function AdminPage() {
     enabled: !!isAdmin,
   });
 
+  const [productIdentityFocus, setProductIdentityFocus] = useState<"all" | "baseball" | "golf">("golf");
+
   const productIdentityReviewQuery = useQuery<any[]>({
-    queryKey: ["/api/admin/product-identities/review"],
+    queryKey: ["/api/admin/product-identities/review", productIdentityFocus],
+    queryFn: async () => {
+      const response = await fetch(`/api/admin/product-identities/review?focus=${productIdentityFocus}`, { credentials: "include" });
+      if (!response.ok) throw new Error("Could not load identity review queue");
+      return response.json();
+    },
     enabled: !!isAdmin,
   });
 
@@ -993,7 +1000,7 @@ export default function AdminPage() {
   const previewSafeIdentityBatch = async () => {
     setLoadingSafeIdentityBatch(true);
     try {
-      const response = await fetch("/api/admin/product-identities/safe-batch?limit=25", {
+      const response = await fetch(`/api/admin/product-identities/safe-batch?limit=25&focus=${productIdentityFocus}`, {
         credentials: "include",
       });
       if (!response.ok) throw new Error("Could not preview safe identity batch");
@@ -1081,11 +1088,11 @@ export default function AdminPage() {
 
   const runProductIdentity = async (mode: "preview" | "apply") => {
     try {
-      await apiRequest("POST", "/api/admin/product-identities/run", { mode });
+      await apiRequest("POST", "/api/admin/product-identities/run", { mode, focus: productIdentityFocus });
       await productIdentityRunQuery.refetch();
       toast({
         title: mode === "apply" ? "Safe proposal run started" : "Identity preview started",
-        description: "This runs in the background. The panel will update automatically.",
+        description: `This ${productIdentityFocus === "all" ? "cross-sport" : `${productIdentityFocus}-only`} run works in the background.`,
       });
     } catch (error: any) {
       toast({
@@ -2505,25 +2512,40 @@ export default function AdminPage() {
               <div>
                 <div className="font-display text-xl font-bold">Product Identity Brain</div>
                 <div className="mt-1 text-sm text-muted-foreground">
-                  Groups equivalent retailer listings into product families while preserving exact size, hand, drop, certification, and condition variants. Proposed links remain review-only and do not change shopper results.
+                  Groups equivalent listings into product families while preserving exact size, hand, loft, flex, set makeup, and condition variants. Proposed links remain review-only and do not change shopper results.
                 </div>
               </div>
             </div>
 
             <div className="mt-5 space-y-4">
+              <div className="flex flex-wrap gap-2" aria-label="Product identity sport focus">
+                {(["all", "baseball", "golf"] as const).map((focus) => (
+                  <Button
+                    key={focus}
+                    size="sm"
+                    variant={productIdentityFocus === focus ? "default" : "outline"}
+                    onClick={() => {
+                      setProductIdentityFocus(focus);
+                      setSafeIdentityBatch(null);
+                    }}
+                  >
+                    {focus === "all" ? "All sports" : focus[0].toUpperCase() + focus.slice(1)}
+                  </Button>
+                ))}
+              </div>
               <div className="flex flex-wrap items-center gap-2">
                 <Button
                   variant="outline"
                   disabled={!!productIdentityRunQuery.data?.running}
                   onClick={() => runProductIdentity("preview")}
                 >
-                  Preview safe matches
+                  Preview {productIdentityFocus === "all" ? "all" : productIdentityFocus} matches
                 </Button>
                 <Button
                   disabled={!!productIdentityRunQuery.data?.running}
                   onClick={() => runProductIdentity("apply")}
                 >
-                  Store safe proposals
+                  Store {productIdentityFocus === "all" ? "all" : productIdentityFocus} proposals
                 </Button>
                 {productIdentityRunQuery.data?.running && (
                   <span className="text-sm text-muted-foreground">

@@ -2577,6 +2577,7 @@ export async function registerRoutes(
       const { db } = await import("./db");
       const { sql } = await import("drizzle-orm");
       const limit = Math.max(1, Math.min(200, Number(req.query.limit) || 50));
+      const focus = req.query.focus === "golf" ? "golf" : req.query.focus === "baseball" ? "baseball" : "all";
       const result = await db.execute(sql.raw(`
         SELECT dpi.deal_id, dpi.confidence, dpi.status, dpi.evidence, dpi.assigned_at,
                d.title, d.source_id, d.image_url, d.price_cents,
@@ -2587,6 +2588,7 @@ export async function registerRoutes(
           JOIN product_identities pi ON pi.id=dpi.product_identity_id
           JOIN deals d ON d.id=dpi.deal_id
          WHERE dpi.status='proposed'
+           AND ('${focus}' = 'all' OR pi.sport_id = '${focus}')
          ORDER BY CASE dpi.confidence WHEN 'high' THEN 0 ELSE 1 END,
                   dpi.assigned_at DESC
          LIMIT ${limit}
@@ -2603,6 +2605,7 @@ export async function registerRoutes(
       const { sql } = await import("drizzle-orm");
       const { safeIdentityApprovalBatch } = await import("./product-identity-review");
       const limit = Math.max(1, Math.min(25, Number(req.query.limit) || 10));
+      const focus = req.query.focus === "golf" ? "golf" : req.query.focus === "baseball" ? "baseball" : "all";
       const result = await db.execute(sql.raw(`
         SELECT dpi.deal_id, dpi.confidence, dpi.evidence, d.title,
                d.sport_id AS deal_sport_id, d.equipment_type_id AS deal_equipment_type_id,
@@ -2615,6 +2618,7 @@ export async function registerRoutes(
          WHERE dpi.status='proposed'
            AND dpi.confidence='high'
            AND pi.confidence='high'
+           AND ('${focus}' = 'all' OR pi.sport_id = '${focus}')
          ORDER BY dpi.assigned_at DESC
          LIMIT 1000
       `));
@@ -2679,8 +2683,9 @@ export async function registerRoutes(
 
   app.post("/api/admin/product-identities/run", isAdmin, async (req: any, res) => {
     const mode = req.body?.mode === "apply" ? "apply" : "preview";
+    const focus = req.body?.focus === "golf" ? "golf" : req.body?.focus === "baseball" ? "baseball" : "all";
     const { startProductIdentityRun } = await import("./product-identity-runner");
-    const result = startProductIdentityRun(mode);
+    const result = startProductIdentityRun(mode, focus);
     res.status(result.started ? 202 : 409).json(result);
   });
 
