@@ -55,10 +55,7 @@ import {
   parseRecentShopperSearches,
 } from "@shared/shopper-search-ux";
 import { dealsQueryFromSearch, searchWithDealsQuery } from "@/lib/deals-url-state";
-import {
-  chooseCategoryVisuals,
-  chooseStarterVisuals,
-} from "@/lib/homepage-affiliate-visuals";
+import { chooseStarterVisuals } from "@/lib/homepage-affiliate-visuals";
 import {
   DEALS_PAGE_SIZE,
   DEALS_PAGE_SIZE_OPTIONS,
@@ -471,19 +468,15 @@ export default function DealsPage({ storefront }: { storefront?: StorefrontConfi
       && deals.findIndex((candidate) => candidate?.id === deal?.id) === index
     );
 
-    const categoryVisuals = chooseCategoryVisuals(visualDeals);
     const starterVisuals = chooseStarterVisuals(
       visualDeals,
       SHOPPER_STARTER_SEARCHES.map((starter) => starter.query),
-    );
-    const categoryImages = Object.fromEntries(
-      Object.entries(categoryVisuals).map(([id, visual]) => [id, visual.imageUrl]),
     );
     const starterImages = Object.fromEntries(
       Object.entries(starterVisuals).map(([query, visual]) => [query, visual.imageUrl]),
     );
 
-    return { categoryImages, starterImages };
+    return { starterImages };
   }, [defaultFeed.data, homepageVisualDeals.data, twinSeamQuery.data]);
 
   const restDeals = useMemo(() => {
@@ -692,7 +685,6 @@ export default function DealsPage({ storefront }: { storefront?: StorefrontConfi
           minPercentOff: 0,
         })}
         starterImages={homepageVisuals.starterImages}
-        categoryImages={homepageVisuals.categoryImages}
         sports={shopperSports}
       />}
 
