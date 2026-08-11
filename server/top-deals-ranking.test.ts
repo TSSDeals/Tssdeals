@@ -435,6 +435,68 @@ test("golf family pages reclassify stale rows at read time", () => {
   assert.equal(matchesTopDealCategoryBoundary(driver, driverContext), true);
 });
 
+test("trusted hot golf demand can surface a current full-price model without inventing a discount", () => {
+  const context = {
+    now,
+    category: { slug: "golf-clubs", name: "Top Golf Club Deals", searchQuery: "club driver iron wedge putter", sportId: "golf" },
+    demandSignals: new Map([
+      ["hot-driver", { score: 88, confidence: "high" as const, marketStatus: "hot" as const, totalSold: 42, windowDays: 30 }],
+    ]),
+  };
+  const hotDriver = deal({
+    id: "hot-driver",
+    title: "TaylorMade Qi35 Golf Driver 10.5 Stiff",
+    equipmentTypeId: "golf-drivers",
+    sportId: "golf",
+    msrpCents: 59999,
+    manufacturerMsrpCents: 59999,
+    priceCents: 59999,
+    percentOff: null,
+    hasPriceDrop: false,
+    priceDropPercent: null,
+    isLow30d: false,
+    isLow60d: false,
+    isLow90d: false,
+    isLow180d: false,
+    isLow365d: false,
+  });
+
+  const ranked = rankTopDeals([hotDriver], context);
+  assert.equal(ranked[0]?.id, "hot-driver");
+  assert.equal(ranked[0]?.topDealDemandScore, 88);
+  assert.equal(ranked[0]?.topDealMarketStatus, "hot");
+  assert.equal(ranked[0]?.topDealSavingsTrusted, false);
+  assert.ok(ranked[0]?.topDealReasons.some((reason) => reason.code === "hot-demand"));
+});
+
+test("low-confidence demand cannot promote a full-price golf product", () => {
+  const fullPrice = deal({
+    id: "thin-sample",
+    title: "Callaway Elyte Golf Driver 10.5 Regular",
+    equipmentTypeId: "golf-drivers",
+    sportId: "golf",
+    msrpCents: 59999,
+    manufacturerMsrpCents: 59999,
+    priceCents: 59999,
+    percentOff: null,
+    hasPriceDrop: false,
+    priceDropPercent: null,
+    isLow30d: false,
+    isLow60d: false,
+    isLow90d: false,
+    isLow180d: false,
+    isLow365d: false,
+  });
+  const ranked = rankTopDeals([fullPrice], {
+    now,
+    category: { slug: "golf-clubs", name: "Top Golf Club Deals", searchQuery: "club driver", sportId: "golf" },
+    demandSignals: new Map([
+      ["thin-sample", { score: 91, confidence: "low", marketStatus: "hot" }],
+    ]),
+  });
+  assert.deepEqual(ranked, []);
+});
+
 test("shipping distortion cannot turn a low sticker price into a top deal", () => {
   const distorted = deal({
     id: "shipping",

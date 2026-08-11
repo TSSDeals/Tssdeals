@@ -102,6 +102,8 @@ import {
   type PopularProduct,
   type InsertPopularProduct,
   dealClicks,
+  dealProductIdentities,
+  productResearchObservations,
   sidelineswapSyncs,
   type SidelineswapSync,
   type InsertSidelineswapSync,
@@ -111,6 +113,7 @@ import { assertTaxonomyApproval, type TaxonomyApprovalContext } from "./taxonomy
 import { rankTopDeals } from "./top-deals-ranking";
 import { attachBaselineCouponRecommendations } from "@shared/retailer-programs";
 import { stripEmailSignature } from "./email-deal-inbox";
+import { calculateDemandIntelligence } from "./demand-brain";
 
 const defaultSeedDatabase = db;
 
@@ -2672,6 +2675,7 @@ export class DatabaseStorage implements IStorage {
         : Math.max(200, effectiveLimit * 20));
 
     const clickCounts = new Map<string, number>();
+    const demandSignals = new Map<string, import("./top-deals-ranking").TopDealDemandSignal>();
     if (pool.length > 0) {
       const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
       const rows = await db
@@ -2680,11 +2684,61 @@ export class DatabaseStorage implements IStorage {
         .where(and(inArray(dealClicks.dealId, pool.map((deal) => deal.id)), gte(dealClicks.clickedAt, since)))
         .groupBy(dealClicks.dealId);
       for (const row of rows) clickCounts.set(row.dealId, Number(row.count));
+
+      const demandRows = await db
+        .select({
+          dealId: dealProductIdentities.dealId,
+          windowDays: productResearchObservations.windowDays,
+          periodEnd: productResearchObservations.periodEnd,
+          averageSoldPriceCents: productResearchObservations.averageSoldPriceCents,
+          minimumSoldPriceCents: productResearchObservations.minimumSoldPriceCents,
+          maximumSoldPriceCents: productResearchObservations.maximumSoldPriceCents,
+          averageShippingCents: productResearchObservations.averageShippingCents,
+          sellThroughPercent: productResearchObservations.sellThroughPercent,
+          totalSold: productResearchObservations.totalSold,
+          totalSellers: productResearchObservations.totalSellers,
+        })
+        .from(dealProductIdentities)
+        .innerJoin(
+          productResearchObservations,
+          eq(productResearchObservations.productIdentityId, dealProductIdentities.productIdentityId),
+        )
+        .where(and(
+          inArray(dealProductIdentities.dealId, pool.map((deal) => deal.id)),
+          eq(dealProductIdentities.status, "approved"),
+          eq(productResearchObservations.observationType, "completed_sales"),
+        ))
+        .orderBy(desc(productResearchObservations.periodEnd), asc(productResearchObservations.windowDays));
+
+      // Rows arrive newest first. Keep the freshest observation for each deal;
+      // prefer its shorter window when multiple windows end on the same day.
+      for (const row of demandRows) {
+        if (demandSignals.has(row.dealId)) continue;
+        const intelligence = calculateDemandIntelligence({
+          windowDays: row.windowDays,
+          averageSoldPriceCents: row.averageSoldPriceCents,
+          minimumSoldPriceCents: row.minimumSoldPriceCents,
+          maximumSoldPriceCents: row.maximumSoldPriceCents,
+          averageShippingCents: row.averageShippingCents,
+          sellThroughPercent: row.sellThroughPercent,
+          totalSold: row.totalSold,
+          totalSellers: row.totalSellers,
+        });
+        if (intelligence.score == null) continue;
+        demandSignals.set(row.dealId, {
+          score: intelligence.score,
+          confidence: intelligence.confidence,
+          marketStatus: intelligence.marketStatus,
+          totalSold: row.totalSold,
+          windowDays: row.windowDays,
+        });
+      }
     }
 
     return rankTopDeals(pool, {
       category,
       clickCounts,
+      demandSignals,
       limit: effectiveLimit,
     });
   }
