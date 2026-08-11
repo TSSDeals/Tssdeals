@@ -49,6 +49,7 @@ import {
   golfLoftPattern,
   gloveSizeTitlePattern,
   hasStrongBaseballGloveSearchIntent,
+  matchesDealClassificationFilters,
   normalizeDealSearch,
   normalizeGloveSize,
   orderDealsBySearchSpecificity,
@@ -394,6 +395,10 @@ export class DatabaseStorage implements IStorage {
     const requestedEquipmentIds = expandEquipmentTypeIds(params.sportId, requestedShopperEquipmentIds);
     const baseballGloveGroupRequest =
       params.sportId === "baseball" && requestedEquipmentIds.some(isBaseballGloveGroupId);
+    const requestedGolfClubId = params.sportId === "golf" && requestedEquipmentIds.length === 1
+      && ["golf-drivers", "golf-irons", "golf-iron-sets", "golf-wedges", "golf-putters", "golf-other"].includes(requestedEquipmentIds[0])
+      ? requestedEquipmentIds[0]
+      : null;
 
     // Memorabilia is a shopper-only projection over existing rows. Strip known
     // product-line branding before testing title/brand evidence so
@@ -631,6 +636,24 @@ export class DatabaseStorage implements IStorage {
       ? and(eq(deals.sourceId, params.source), isNull(deals.equipmentTypeId))
       : null;
 
+    const golfTitle = dsql`(COALESCE(${deals.title}, '') || ' ' || COALESCE(${deals.brand}, ''))`;
+    const golfFamilyPatterns: Record<string, string> = {
+      "golf-drivers": String.raw`\b(?:golf\s+)?drivers?\b|\b(?:qi35|qi10|stealth\s*2|paradym|elyte|rogue\s*st|g440|g430|tsr[1234]?|gt[1234])\b.{0,45}\b(?:7(?:\.5)?|8(?:\.5)?|9|10(?:\.5)?|11|12|13(?:\.5)?)\s*(?:°|º|degree|deg)?\b`,
+      "golf-irons": String.raw`\b(?:fairway\s+(?:woods?|clubs?)|[3-9]\s*woods?|[3-9][wh]|hybrids?|rescue\s+clubs?|driving\s+irons?|utility\s+irons?|[2-9]\s*[- ]?irons?)\b`,
+      "golf-iron-sets": String.raw`\b(?:iron\s+sets?|complete\s+(?:golf\s+)?(?:club\s+)?sets?|sets?\s+of\s+\d+\s+irons?)\b|\b[3-9]\s*[-–]\s*(?:pw|sw|aw|gw)\b`,
+      "golf-wedges": String.raw`\b(?:(?:pitching|sand|gap|lob|approach|utility)\s+wedges?|golf\s+wedges?|wedges?)\b`,
+      "golf-putters": String.raw`\b(?:golf\s+)?putters?\b|\b(?:spider(?:\s+tour)?|ai-one|scotty\s+cameron\s+(?:phantom|newport))\b`,
+      "golf-other": String.raw`\bgolf\s+clubs?\b`,
+    };
+    const golfNegativePattern = String.raw`\b(?:head[ -]?covers?|club[ -]?covers?|iron\s+cover\s+sets?|shafts?\s+(?:only|adapter|sleeve|pull|uncut)|(?:driver|fairway|wood|hybrid|iron|wedge|putter)\s+(?:shafts?|heads?|covers?)|club\s+heads?|rangefinders?|golf\s+(?:balls?|bags?|gloves?|shoes?)|shirts?|polos?|pants?|shorts?|jackets?|alignment\s+sticks?|swing\s+trainers?|groove\s+(?:cleaners?|sharpeners?))\b`;
+    const golfClubRecovery = requestedGolfClubId
+      ? and(
+          dsql`${golfTitle} ~* ${golfFamilyPatterns[requestedGolfClubId]}`,
+          dsql`${golfTitle} !~* ${golfNegativePattern}`,
+          dsql`${golfTitle} !~* ${String.raw`\b(?:disc|miniature|mini)\s+golf\b`}`,
+        )
+      : null;
+
     if (isShopperMemorabiliaSportId(params.sportId)) {
       whereParts.push(shopperMemorabilia);
       if (memorabiliaEquipmentCondition) whereParts.push(memorabiliaEquipmentCondition);
@@ -649,6 +672,7 @@ export class DatabaseStorage implements IStorage {
       if (selectedSrcNoEquip) conditions.push(selectedSrcNoEquip);
       if (baseballBatEvidence) conditions.push(baseballBatEvidence);
       if (baseballGloveEvidence) conditions.push(baseballGloveEvidence);
+      if (golfClubRecovery) conditions.push(golfClubRecovery);
       whereParts.push(or(...conditions));
     }
 
@@ -980,9 +1004,17 @@ export class DatabaseStorage implements IStorage {
       .limit(limit)
       .offset(offset);
 
-    const orderedResults = normalizedSearch && params.q
-      ? orderDealsBySearchSpecificity(params.q, results)
+    const classificationSafeResults = params.sportId === "golf"
+      ? results.filter((deal) => matchesDealClassificationFilters(deal, {
+          q: params.q,
+          sportId: params.sportId,
+          equipmentTypeId: params.equipmentTypeId,
+          equipmentTypeIds: params.equipmentTypeIds,
+        }))
       : results;
+    const orderedResults = normalizedSearch && params.q
+      ? orderDealsBySearchSpecificity(params.q, classificationSafeResults)
+      : classificationSafeResults;
     return attachBaselineCouponRecommendations(orderedResults);
   }
 

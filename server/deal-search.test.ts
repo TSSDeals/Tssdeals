@@ -42,6 +42,35 @@ test("golf LH shorthand does not become baseball glove throw intent", () => {
   assert.equal(search.concepts.some((concept) => concept.kind === "glove-hand"), false);
 });
 
+test("golf filters recover real clubs from stale stored families", () => {
+  const stalePutter = {
+    title: "Odyssey Ai-One Seven Putter 34 inch",
+    brand: "Odyssey",
+    sportId: "golf",
+    equipmentTypeId: "golf-drivers",
+  };
+  assert.equal(matchesDealClassificationFilters(stalePutter, {
+    sportId: "golf",
+    equipmentTypeId: "golf-putters",
+  }), true);
+  assert.equal(matchesDealClassificationFilters(stalePutter, {
+    sportId: "golf",
+    equipmentTypeId: "golf-drivers",
+  }), false, "the identified family takes precedence over a stale stored family");
+});
+
+test("golf filters reject accessories even when stored as clubs", () => {
+  const headcover = {
+    title: "TaylorMade Qi10 Driver Headcover",
+    sportId: "golf",
+    equipmentTypeId: "golf-drivers",
+  };
+  assert.equal(matchesDealClassificationFilters(headcover, {
+    sportId: "golf",
+    equipmentTypeId: "golf-drivers",
+  }), false);
+});
+
 test("non-golf glove shorthand retains baseball behavior", () => {
   const search = normalizeDealSearch("LHT Wilson A1000");
   assert.equal(search.concepts.some((concept) => concept.kind === "glove-hand" && concept.hand === "left"), true);
