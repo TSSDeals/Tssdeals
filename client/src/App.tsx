@@ -25,6 +25,7 @@ import AdminInvoices from "@/pages/AdminInvoices";
 import AdminTaxonomyReview from "@/pages/AdminTaxonomyReview";
 import AdminOperations from "@/pages/AdminOperations";
 import DealBlastPage from "@/pages/DealBlastPage";
+import SourceStorefront from "@/pages/SourceStorefront";
 import { useAuth } from "@/hooks/use-auth";
 
 // The deployment serves two custom domains:
@@ -91,6 +92,10 @@ function Router() {
 
       {/* Private team stats (password-gated, hidden from nav) */}
       <Route path="/team/:slug" component={TeamPage} />
+
+      {/* Shareable source storefronts (intentionally omitted from navigation) */}
+      <Route path="/ebay/:seller" component={SourceStorefront} />
+      <Route path="/:sourceSlug" component={SourceStorefront} />
 
       {/* Fallback to 404 */}
       <Route component={NotFound} />
