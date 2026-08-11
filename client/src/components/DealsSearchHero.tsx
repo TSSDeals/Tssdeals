@@ -19,19 +19,6 @@ const GOLF_QUICK_CATEGORIES = curateShopperEquipmentTypes<
   { id: string; name: string; sportId: string }
 >([], "golf");
 
-const BASEBALL_CATEGORY_IMAGE_FALLBACKS: Record<string, string> = {
-  "bb-bats": "/images/products/bbcor-bat-composite.png",
-  "bb-gloves": "/images/products/wilson-a2000-glove.png",
-  "bb-cleats": "/images/products/baseball-cleats.png",
-  "bb-training": "/images/products/pitching-machine.png",
-};
-
-const GOLF_CATEGORY_IMAGE_FALLBACKS: Record<string, string> = {
-  "golf-drivers": "/images/products/golf-driver.png",
-  "golf-iron-sets": "/images/products/golf-iron-set.png",
-  "golf-wedges": "/images/products/golf-wedge.png",
-};
-
 export function DealsSearchHero({
   query,
   recentSearches,
@@ -44,7 +31,6 @@ export function DealsSearchHero({
   onClearPhoto,
   onCategory,
   starterImages = {},
-  categoryImages = {},
   sports = [],
 }: {
   query: string;
@@ -58,7 +44,6 @@ export function DealsSearchHero({
   onClearPhoto: () => void;
   onCategory: (sportId: string, equipmentTypeId: string) => void;
   starterImages?: Record<string, string>;
-  categoryImages?: Record<string, string>;
   sports?: Array<{ id: string; name: string }>;
 }) {
   const submit = (event: FormEvent) => {
@@ -216,10 +201,6 @@ export function DealsSearchHero({
         </div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
           {BASEBALL_QUICK_CATEGORIES.map((category) => (
-            (() => {
-              const categoryImage = categoryImages[category.id]
-                ?? BASEBALL_CATEGORY_IMAGE_FALLBACKS[category.id];
-              return (
             <button
               key={category.id}
               type="button"
@@ -227,22 +208,8 @@ export function DealsSearchHero({
               className="category-tile ring-focus group"
               data-testid={`quick-category-${category.id}`}
             >
-              <span className={cn("category-tile-label", categoryImage && "category-tile-label-with-image")}>
-                {category.name}
-              </span>
-              {categoryImage && (
-                <span className="category-tile-image-frame" aria-hidden="true">
-                  <img
-                    src={categoryImage}
-                    alt=""
-                    loading="lazy"
-                    className="category-tile-image"
-                  />
-                </span>
-              )}
+              <span className="category-tile-label">{category.name}</span>
             </button>
-              );
-            })()
           ))}
           <button
             type="button"
@@ -282,10 +249,7 @@ export function DealsSearchHero({
           </div>
         </div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-7">
-          {GOLF_QUICK_CATEGORIES.map((category) => {
-            const categoryImage = categoryImages[category.id]
-              ?? GOLF_CATEGORY_IMAGE_FALLBACKS[category.id];
-            return (
+          {GOLF_QUICK_CATEGORIES.map((category) => (
               <button
                 key={category.id}
                 type="button"
@@ -293,22 +257,9 @@ export function DealsSearchHero({
                 className="category-tile ring-focus group"
                 data-testid={`quick-category-${category.id}`}
               >
-                <span className={cn("category-tile-label", categoryImage && "category-tile-label-with-image")}>
-                  {category.name}
-                </span>
-                {categoryImage && (
-                  <span className="category-tile-image-frame" aria-hidden="true">
-                    <img
-                      src={categoryImage}
-                      alt=""
-                      loading="lazy"
-                      className="category-tile-image"
-                    />
-                  </span>
-                )}
+                <span className="category-tile-label">{category.name}</span>
               </button>
-            );
-          })}
+          ))}
         </div>
       </section>
     </>
