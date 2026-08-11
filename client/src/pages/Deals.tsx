@@ -22,7 +22,7 @@ import { useEquipmentTypes, useSubFilters, useEbaySellers, useSources, useSports
 import { useToast } from "@/hooks/use-toast";
 import { cn, outboundRetailerUrl } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowUpDown, Camera, CheckCircle2, ChevronDown, ChevronRight, ChevronUp, ExternalLink, Flame, Gift, RefreshCcw, Search, ShoppingBag, Sparkles, SlidersHorizontal, Store, Tag, TicketX, TrendingDown, X, XCircle } from "lucide-react";
+import { ArrowUpDown, Camera, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ExternalLink, Flame, Gift, RefreshCcw, Search, ShoppingBag, Sparkles, SlidersHorizontal, Store, Tag, TicketX, TrendingDown, X, XCircle } from "lucide-react";
 import { Link } from "wouter";
 import { DealCarousel } from "@/components/DealCarousel";
 import { DealsSearchHero } from "@/components/DealsSearchHero";
@@ -59,6 +59,13 @@ import {
   chooseCategoryVisuals,
   chooseStarterVisuals,
 } from "@/lib/homepage-affiliate-visuals";
+import {
+  DEALS_PAGE_SIZE,
+  DEALS_PAGE_SIZE_OPTIONS,
+  dealsPageNumber,
+  mayHaveNextDealsPage,
+  nextDealsOffset,
+} from "@/lib/deals-pagination";
 
 type SortOption = "newest" | "oldest" | "price-low" | "price-high" | "discount-high" | "a-z" | "z-a";
 
@@ -90,7 +97,7 @@ const DEFAULT_FILTERS: FilterState = {
   source: "all",
   brand: "all",
   priceDropOnly: false,
-  limitValue: "60",
+  limitValue: String(DEALS_PAGE_SIZE),
   sortBy: "newest",
 };
 
@@ -149,10 +156,11 @@ export default function DealsPage({ storefront }: { storefront?: StorefrontConfi
     source: storefront.sourceId,
     ebaySeller: storefront.ebaySeller ?? "all",
     minPercentOff: 0,
-    limitValue: "100",
+    limitValue: String(DEALS_PAGE_SIZE),
   } : null, [storefront?.sourceId, storefront?.ebaySeller]);
   const [pending, setPending] = useState<FilterState>(() => storefrontFilters ?? initialFiltersFromUrl());
   const [applied, setApplied] = useState<FilterState>(() => storefrontFilters ?? initialFiltersFromUrl());
+  const [pageOffset, setPageOffset] = useState(0);
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
   const [recentSearches, setRecentSearches] = useState<string[]>(() =>
     parseRecentShopperSearches(safeLocalGet(RECENT_SEARCHES_KEY)),
@@ -175,6 +183,7 @@ export default function DealsPage({ storefront }: { storefront?: StorefrontConfi
       const next = q ? { ...DEFAULT_FILTERS, q, minPercentOff: 0 } : DEFAULT_FILTERS;
       setPending(next);
       setApplied(next);
+      setPageOffset(0);
     };
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
@@ -293,6 +302,7 @@ export default function DealsPage({ storefront }: { storefront?: StorefrontConfi
   const runSearch = (next: FilterState = pending) => {
     setPending(next);
     setApplied(next);
+    setPageOffset(0);
     syncQueryUrl(next.q);
     setAdvancedFiltersOpen(false);
     if (next.q.trim()) {
@@ -393,9 +403,10 @@ export default function DealsPage({ storefront }: { storefront?: StorefrontConfi
       priceDropOnly: applied.priceDropOnly || undefined,
       featured: undefined,
       limit: applied.limitValue === "all" ? "all" as const : Number(applied.limitValue),
+      offset: applied.limitValue === "all" ? undefined : pageOffset,
       sortBy: applied.sortBy,
     }),
-    [applied, selectedEqTypeIds],
+    [applied, pageOffset, selectedEqTypeIds],
   );
 
   // Normalize to canonical order so equivalent selections share one query-cache entry.
@@ -485,12 +496,33 @@ export default function DealsPage({ storefront }: { storefront?: StorefrontConfi
     );
   }, [deals.data, featured, ourStoreId, isDefaultView]);
 
+  const pageSize = applied.limitValue === "all" ? null : Number(applied.limitValue);
+  const pageNumber = pageSize ? dealsPageNumber(pageOffset, pageSize) : 1;
+  const hasPreviousPage = pageOffset > 0;
+  const hasNextPage = Boolean(pageSize && mayHaveNextDealsPage(restDeals.length, pageSize));
+
+  const movePage = (direction: "previous" | "next") => {
+    if (!pageSize) return;
+    setPageOffset((current) => nextDealsOffset(current, pageSize, direction));
+    window.requestAnimationFrame(() => {
+      resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
+
+  const setResultLimit = (limitValue: string) => {
+    const next = { ...pending, limitValue };
+    setPending(next);
+    setApplied(next);
+    setPageOffset(0);
+  };
+
   const zeroResultRecovery = useMemo(
     () => buildZeroResultRecovery(applied),
     [applied],
   );
 
   const applyZeroResultRecovery = (action: SearchRecoveryAction) => {
+    setPageOffset(0);
     if (action.kind === "query") {
       setPending((current) => ({ ...current, q: action.query, minPercentOff: 0 }));
       setApplied((current) => ({ ...current, q: action.query, minPercentOff: 0 }));
@@ -549,7 +581,7 @@ export default function DealsPage({ storefront }: { storefront?: StorefrontConfi
       if (!res.ok) throw new Error("Failed to fetch AI suggestions");
       return res.json();
     },
-    enabled: !deals.isLoading && !!deals.data && restDeals.length === 0 && !isDefaultView && !!aiSuggestionParams,
+    enabled: pageOffset === 0 && !deals.isLoading && !!deals.data && restDeals.length === 0 && !isDefaultView && !!aiSuggestionParams,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -771,6 +803,7 @@ export default function DealsPage({ storefront }: { storefront?: StorefrontConfi
                     const reset = storefrontFilters ?? DEFAULT_FILTERS;
                     setPending(reset);
                     setApplied(reset);
+                    setPageOffset(0);
                   }}
                   className="flex items-center gap-1 rounded-full border border-red-300 bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-600 hover:bg-red-100 transition-colors dark:border-red-800 dark:bg-red-950/40 dark:text-red-400 dark:hover:bg-red-950/60"
                   data-testid="clear-all-filters"
@@ -1186,12 +1219,12 @@ export default function DealsPage({ storefront }: { storefront?: StorefrontConfi
                   <SelectValue placeholder="60" />
                 </SelectTrigger>
                 <SelectContent>
-                  {[30, 60, 90, 120, 200].map((n) => (
+                  {DEALS_PAGE_SIZE_OPTIONS.map((n) => (
                     <SelectItem key={n} value={String(n)}>
                       {n}
                     </SelectItem>
                   ))}
-                  <SelectItem value="all">All</SelectItem>
+                  {storefront && <SelectItem value="all">Show all</SelectItem>}
                 </SelectContent>
               </Select>
             </div>
@@ -1216,7 +1249,7 @@ export default function DealsPage({ storefront }: { storefront?: StorefrontConfi
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setPending(DEFAULT_FILTERS)}
+              onClick={() => setPending(storefrontFilters ?? DEFAULT_FILTERS)}
               className="ring-focus rounded-xl text-muted-foreground"
               data-testid="reset-pending"
             >
@@ -1480,7 +1513,9 @@ export default function DealsPage({ storefront }: { storefront?: StorefrontConfi
           <div>
             <div className="font-display text-xl font-bold">All Other Deals</div>
             <div className="text-xs text-muted-foreground">
-              Showing {restDeals.length} results
+              {applied.limitValue === "all"
+                ? `Showing all ${restDeals.length} results`
+                : `Page ${pageNumber} · Showing ${restDeals.length} results`}
               {applied.sortBy !== "newest" && ` · Sorted by ${
                 applied.sortBy === "oldest" ? "oldest first" :
                 applied.sortBy === "price-low" ? "price (low to high)" :
@@ -1492,6 +1527,34 @@ export default function DealsPage({ storefront }: { storefront?: StorefrontConfi
           </div>
           {collapsedSections["all-other"] ? <ChevronDown className="h-5 w-5 text-muted-foreground" /> : <ChevronUp className="h-5 w-5 text-muted-foreground" />}
         </button>
+
+        {!collapsedSections["all-other"] && storefront && (
+          <div className="mb-4 flex flex-wrap items-center justify-end gap-2" data-testid="storefront-result-controls">
+            {applied.limitValue === "all" ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setResultLimit(String(DEALS_PAGE_SIZE))}
+                className="ring-focus rounded-xl"
+                data-testid="use-pages"
+              >
+                Use pages
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setResultLimit("all")}
+                className="ring-focus rounded-xl"
+                data-testid="show-all-storefront"
+              >
+                Show all
+              </Button>
+            )}
+          </div>
+        )}
 
         {collapsedSections["all-other"] ? null : deals.isError ? (
           <EmptyState
@@ -1510,9 +1573,22 @@ export default function DealsPage({ storefront }: { storefront?: StorefrontConfi
               <TicketX className="mx-auto mb-3 h-8 w-8 text-muted-foreground/50" />
               <div className="font-semibold text-base mb-1">No exact matches for these filters</div>
               <div className="text-sm text-muted-foreground mb-4">
-                Try a normalized search or remove one constraint. These options rerun the search and never invent inventory.
+                {pageOffset > 0
+                  ? "You’ve reached the end of these results. Return to the previous page to keep browsing."
+                  : "Try a normalized search or remove one constraint. These options rerun the search and never invent inventory."}
               </div>
-              {zeroResultRecovery.length > 0 && (
+              {pageOffset > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => movePage("previous")}
+                  className="ring-focus mb-4 rounded-xl gap-1"
+                  data-testid="empty-previous-page"
+                >
+                  <ChevronLeft className="h-4 w-4" /> Previous page
+                </Button>
+              )}
+              {pageOffset === 0 && zeroResultRecovery.length > 0 && (
                 <div className="mb-4 flex flex-wrap justify-center gap-2" data-testid="zero-result-recovery">
                   {zeroResultRecovery.map((action) => (
                     <Button
@@ -1530,14 +1606,19 @@ export default function DealsPage({ storefront }: { storefront?: StorefrontConfi
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => { setPending(DEFAULT_FILTERS); setApplied(DEFAULT_FILTERS); }}
+                onClick={() => {
+                  const reset = storefrontFilters ?? DEFAULT_FILTERS;
+                  setPending(reset);
+                  setApplied(reset);
+                  setPageOffset(0);
+                }}
                 className="ring-focus rounded-xl"
                 data-testid="reset"
               >
                 Reset filters
               </Button>
             </div>
-            {aiSuggestionsQuery.isLoading ? (
+            {pageOffset === 0 && aiSuggestionsQuery.isLoading ? (
               <div className="rounded-2xl border bg-card p-5">
                 <div className="flex items-center gap-2 mb-4">
                   <Sparkles className="h-4 w-4 text-primary animate-pulse" />
@@ -1549,7 +1630,7 @@ export default function DealsPage({ storefront }: { storefront?: StorefrontConfi
                   ))}
                 </div>
               </div>
-            ) : aiSuggestionsQuery.data?.suggestions?.length ? (
+            ) : pageOffset === 0 && aiSuggestionsQuery.data?.suggestions?.length ? (
               <div className="rounded-2xl border bg-card p-5">
                 <div className="flex items-center gap-2 mb-1">
                   <Sparkles className="h-4 w-4 text-primary" />
@@ -1607,6 +1688,37 @@ export default function DealsPage({ storefront }: { storefront?: StorefrontConfi
                 </div>
               </div>
             ))}
+            {pageSize && (hasPreviousPage || hasNextPage) && (
+              <nav
+                className="flex flex-wrap items-center justify-center gap-3 border-t border-border pt-5"
+                aria-label="Deal result pages"
+                data-testid="deals-pagination"
+              >
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => movePage("previous")}
+                  disabled={!hasPreviousPage || deals.isFetching}
+                  className="ring-focus rounded-xl gap-1"
+                  data-testid="previous-page"
+                >
+                  <ChevronLeft className="h-4 w-4" /> Previous
+                </Button>
+                <span className="min-w-20 text-center text-sm font-semibold text-muted-foreground">
+                  Page {pageNumber}
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => movePage("next")}
+                  disabled={!hasNextPage || deals.isFetching}
+                  className="ring-focus rounded-xl gap-1"
+                  data-testid="next-page"
+                >
+                  Next <ChevronRight className="h-4 w-4" />
+                </Button>
+              </nav>
+            )}
           </div>
         )}
       </section>

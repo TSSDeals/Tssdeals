@@ -825,6 +825,7 @@ export class DatabaseStorage implements IStorage {
 
     const isAll = params.limit === "all";
     const limit = isAll ? 10000 : Math.max(1, Math.min(200, (typeof params.limit === "number" ? params.limit : 50)));
+    const offset = isAll ? 0 : Math.max(0, Math.min(10000, params.offset ?? 0));
 
     let orderClause: any[];
     if (params.q) {
@@ -955,7 +956,8 @@ export class DatabaseStorage implements IStorage {
       .from(deals)
       .where(where)
       .orderBy(...orderClause)
-      .limit(limit);
+      .limit(limit)
+      .offset(offset);
 
     const orderedResults = normalizedSearch && params.q
       ? orderDealsBySearchSpecificity(params.q, results)

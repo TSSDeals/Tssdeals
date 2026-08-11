@@ -29,6 +29,7 @@ function toQueryString(input?: DealsListInput | null) {
   if (typeof input.priceDropOnly === "boolean") params.set("priceDropOnly", input.priceDropOnly ? "true" : "false");
   if (input.limit === "all") params.set("limit", "all");
   else if (typeof input.limit === "number") params.set("limit", String(input.limit));
+  if (typeof input.offset === "number" && input.offset > 0) params.set("offset", String(input.offset));
   if (input.maxPrice) params.set("maxPrice", String(input.maxPrice));
   if (input.sortBy) params.set("sortBy", input.sortBy);
 

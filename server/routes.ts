@@ -1074,6 +1074,7 @@ export async function registerRoutes(
       featured: input.featured,
       priceDropOnly: input.priceDropOnly,
       limit: input.limit,
+      offset: input.offset,
       // TSSDeals currently serves US shoppers by default. Keep an explicit
       // override available for future international/Japanese-market views.
       currency: input.currency ?? "USD",

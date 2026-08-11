@@ -911,6 +911,7 @@ export interface DealsQueryParams {
   featured?: boolean;
   priceDropOnly?: boolean;
   limit?: number | "all";
+  offset?: number;
   currency?: string;
   sortBy?: "newest" | "oldest" | "price-low" | "price-high" | "discount-high" | "a-z" | "z-a";
   userId?: string;
