@@ -57,20 +57,34 @@ export type TopDealReasonCode =
   | "verified-savings"
   | "strong-market-value"
   | "popular-with-shoppers"
+  | "hot-demand"
+  | "reliable-demand"
   | "fresh-listing"
   | "owner-curated";
 
 export type RankedTopDeal = Deal & {
   topDealScore: number;
+  topDealValueScore: number;
+  topDealDemandScore: number | null;
+  topDealMarketStatus: "hot" | "reliable" | "slow" | "uncertain" | null;
   topDealConfidence: "high" | "medium" | "limited";
   topDealReasons: Array<{ code: TopDealReasonCode; label: string }>;
   topDealSavingsTrusted: boolean;
   topDealClickCount: number;
 };
 
+export type TopDealDemandSignal = {
+  score: number;
+  confidence: "high" | "medium" | "low" | "insufficient";
+  marketStatus: "hot" | "reliable" | "slow" | "uncertain";
+  totalSold?: number | null;
+  windowDays?: number | null;
+};
+
 export interface TopDealsContext {
   category?: Partial<Pick<DealCategory, "name" | "slug" | "sportId" | "equipmentTypeId" | "searchQuery">>;
   clickCounts?: ReadonlyMap<string, number>;
+  demandSignals?: ReadonlyMap<string, TopDealDemandSignal>;
   limit?: number;
   now?: Date;
 }
@@ -438,11 +452,20 @@ function scoreDeal(deal: Deal, context: TopDealsContext, now: Date): RankedTopDe
   const clickCount = context.clickCounts?.get(deal.id) ?? 0;
   const ageDays = Math.max(0, (now.getTime() - (lastCurrentAt(deal)?.getTime() ?? 0)) / DAY_MS);
   const claimedDiscount = Number(deal.percentOff ?? 0);
+  const demand = context.demandSignals?.get(deal.id);
+  const trustedDemand = demand && ["high", "medium"].includes(demand.confidence)
+    ? demand
+    : undefined;
 
   let value = 0;
   if (isOwnerCurated(deal)) {
     value += 22;
     reasons.push({ code: "owner-curated", label: "Twin Seam pick" });
+  }
+  if (trustedDemand?.marketStatus === "hot") {
+    reasons.push({ code: "hot-demand", label: "Hot right now" });
+  } else if (trustedDemand?.marketStatus === "reliable") {
+    reasons.push({ code: "reliable-demand", label: "Strong demand" });
   }
   if (deal.hasPriceDrop && Number(deal.priceDropPercent ?? 0) >= 5) {
     value += Math.min(18, 8 + Number(deal.priceDropPercent) / 3);
@@ -481,11 +504,19 @@ function scoreDeal(deal: Deal, context: TopDealsContext, now: Date): RankedTopDe
     ? 12
     : 0;
 
+  // Demand and value remain separate signals. A current-model golf club can
+  // be worth surfacing at full price when trustworthy sold-market evidence
+  // says it is hot; a large discount never masquerades as demand.
+  const demandContribution = trustedDemand
+    ? Math.min(32, Math.max(0, trustedDemand.score) * 0.32)
+    : 0;
+  const valueScore = Math.max(0, Math.min(100, value + relevance + quality + freshness + engagement + elitePreference));
+
   if (!reasons.some((reason) => reason.code !== "fresh-listing") && value >= 8) {
     reasons.unshift({ code: "strong-market-value", label: "Strong market value" });
   }
 
-  const score = Math.max(0, Math.min(100, value + relevance + quality + freshness + engagement + elitePreference));
+  const score = Math.max(0, Math.min(100, valueScore + demandContribution));
   const confidence = savings.trusted || lowDays >= 90 || (deal.hasPriceDrop && deal.lastPriceConfirmedAt)
     ? "high"
     : deal.lastPriceConfirmedAt && deal.imageUrl
@@ -495,6 +526,9 @@ function scoreDeal(deal: Deal, context: TopDealsContext, now: Date): RankedTopDe
   return {
     ...deal,
     topDealScore: Math.round(score * 10) / 10,
+    topDealValueScore: Math.round(valueScore * 10) / 10,
+    topDealDemandScore: trustedDemand ? Math.round(trustedDemand.score) : null,
+    topDealMarketStatus: trustedDemand?.marketStatus ?? null,
     topDealConfidence: confidence,
     topDealReasons: reasons.slice(0, 3),
     topDealSavingsTrusted: savings.trusted,
@@ -534,7 +568,7 @@ export function rankTopDeals(pool: Deal[], context: TopDealsContext = {}): Ranke
         ||
         isEliteGloveCategory(context)
         || deal.topDealReasons.some((reason) =>
-          ["verified-price-drop", "historical-low", "verified-savings", "strong-market-value"].includes(reason.code),
+          ["verified-price-drop", "historical-low", "verified-savings", "strong-market-value", "hot-demand", "reliable-demand"].includes(reason.code),
         )
       ),
     )

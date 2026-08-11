@@ -322,6 +322,16 @@ export function DealCard({
                       </Badge>
                     ))
                   : null}
+                {Number.isFinite(deal?.topDealDemandScore) ? (
+                  <Badge className="border-violet-500/25 bg-violet-500/10 text-violet-700 dark:text-violet-300" data-testid="top-deal-demand-score">
+                    Demand {Math.round(deal.topDealDemandScore)}
+                  </Badge>
+                ) : null}
+                {Number.isFinite(deal?.topDealValueScore) ? (
+                  <Badge className="border-sky-500/25 bg-sky-500/10 text-sky-700 dark:text-sky-300" data-testid="top-deal-value-score">
+                    Value {Math.round(deal.topDealValueScore)}
+                  </Badge>
+                ) : null}
               </div>
 
               {(deal?.promoCode || deal?.promoDescription) && (
