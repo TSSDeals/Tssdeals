@@ -21,6 +21,33 @@ import {
 } from "../shared/equipment-groups";
 import { extractBatSizeIntent } from "../shared/search-language";
 
+test("golf shorthand becomes structured hand, loft, and flex intent", () => {
+  const search = normalizeDealSearch("TaylorMade Qi10 driver RH 10.5 degree stiff");
+  assert.deepEqual(search.concepts.filter((concept) => concept.kind.startsWith("golf-")), [
+    { kind: "golf-hand", hand: "right" },
+    { kind: "golf-flex", flex: "stiff" },
+    { kind: "golf-loft", loft: "10.5" },
+  ]);
+  assert.equal(matchesNormalizedDealSearch(search, {
+    title: "TaylorMade Qi10 Driver 10.5° Right Hand Stiff Flex",
+  }), true);
+  assert.equal(matchesNormalizedDealSearch(search, {
+    title: "TaylorMade Qi10 Driver 10.5° Left Hand Regular Flex",
+  }), false);
+});
+
+test("golf LH shorthand does not become baseball glove throw intent", () => {
+  const search = normalizeDealSearch("PING G430 hybrid LH regular");
+  assert.equal(search.concepts.some((concept) => concept.kind === "golf-hand" && concept.hand === "left"), true);
+  assert.equal(search.concepts.some((concept) => concept.kind === "glove-hand"), false);
+});
+
+test("non-golf glove shorthand retains baseball behavior", () => {
+  const search = normalizeDealSearch("LHT Wilson A1000");
+  assert.equal(search.concepts.some((concept) => concept.kind === "glove-hand" && concept.hand === "left"), true);
+  assert.equal(search.concepts.some((concept) => concept.kind === "golf-hand"), false);
+});
+
 for (const equipmentTypeId of ["baseball-bat", "bat", "bb-bats"]) {
   test(`canonical Baseball Bats filter includes ${equipmentTypeId}`, () => {
     assert.equal(matchesDealClassificationFilters(

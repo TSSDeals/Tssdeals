@@ -44,6 +44,9 @@ import {
   BASEBALL_GLOVE_NEGATIVE_EVIDENCE_PATTERN,
   BASEBALL_GLOVE_STRUCTURED_CONTEXT_PATTERN,
   BASEBALL_GLOVE_THROW_HAND_PATTERNS,
+  GOLF_FLEX_PATTERNS,
+  GOLF_HAND_PATTERNS,
+  golfLoftPattern,
   gloveSizeTitlePattern,
   hasStrongBaseballGloveSearchIntent,
   normalizeDealSearch,
@@ -519,6 +522,15 @@ export class DatabaseStorage implements IStorage {
             dsql`COALESCE(${deals.title}, '') !~* ${BASEBALL_GLOVE_NEGATIVE_EVIDENCE_PATTERN}`,
           )!;
         }
+        if (concept.kind === "golf-hand") {
+          return dsql`${deals.title} ~* ${GOLF_HAND_PATTERNS[concept.hand]}`;
+        }
+        if (concept.kind === "golf-flex") {
+          return dsql`${deals.title} ~* ${GOLF_FLEX_PATTERNS[concept.flex]}`;
+        }
+        if (concept.kind === "golf-loft") {
+          return dsql`${deals.title} ~* ${golfLoftPattern(concept.loft)}`;
+        }
         const dropPattern = `(^|[^a-z0-9])(drop\\s*-?\\s*|-)${concept.drop}([^a-z0-9]|$)`;
         const dropCondition = or(
           eq(deals.dropWeight, concept.drop),
@@ -851,6 +863,15 @@ export class DatabaseStorage implements IStorage {
         }
         if (concept.kind === "glove-hand") {
           return dsql`CASE WHEN ${deals.title} ~* ${BASEBALL_GLOVE_THROW_HAND_PATTERNS[concept.hand]} THEN 24 ELSE 0 END`;
+        }
+        if (concept.kind === "golf-hand") {
+          return dsql`CASE WHEN ${deals.title} ~* ${GOLF_HAND_PATTERNS[concept.hand]} THEN 24 ELSE 0 END`;
+        }
+        if (concept.kind === "golf-flex") {
+          return dsql`CASE WHEN ${deals.title} ~* ${GOLF_FLEX_PATTERNS[concept.flex]} THEN 20 ELSE 0 END`;
+        }
+        if (concept.kind === "golf-loft") {
+          return dsql`CASE WHEN ${deals.title} ~* ${golfLoftPattern(concept.loft)} THEN 20 ELSE 0 END`;
         }
         const dropPattern = `(^|[^a-z0-9])(drop\\s*-?\\s*|-)${concept.drop}([^a-z0-9]|$)`;
         if (concept.kind === "drop") {

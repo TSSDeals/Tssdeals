@@ -18,9 +18,14 @@ export type DealSearchConcept =
   | { kind: "bat-size"; length: number; weight: number; drop: number }
   | { kind: "glove-size"; size: string }
   | { kind: "glove-hand"; hand: GloveThrowHand }
+  | { kind: "golf-hand"; hand: GolfHand }
+  | { kind: "golf-flex"; flex: GolfFlex }
+  | { kind: "golf-loft"; loft: string }
   | { kind: "drop"; drop: number };
 
 export type GloveThrowHand = "left" | "right";
+export type GolfHand = "left" | "right";
+export type GolfFlex = "ladies" | "senior" | "regular" | "stiff" | "x-stiff";
 
 export interface NormalizedDealSearch {
   concepts: DealSearchConcept[];
@@ -65,6 +70,36 @@ const GLOVE_HAND_QUERY_RES: Array<{ hand: GloveThrowHand; pattern: RegExp }> = [
     pattern: /(?:^|[^a-z0-9])(?:rht|rh[\s-]*throw(?:er|ing)?|right[\s-]*hand(?:ed)?[\s-]*throw(?:er|ing)?)(?=[^a-z0-9]|$)/i,
   },
 ];
+
+const GOLF_INTENT_RE = /\b(?:golf|driver|fairway|wood|hybrid|rescue|iron(?:s|\s+set)?|wedge|putter|qi10|stealth|paradym|elyte|ai\s+smoke|g430|g440|p7(?:70|90)|apex|t(?:100|150|200|350)|jpx\s*92[35]|zx[457]|vokey|sm\d{1,2}|white\s+hot|pld)\b/i;
+const GOLF_HAND_QUERY_RES: Array<{ hand: GolfHand; pattern: RegExp }> = [
+  { hand: "left", pattern: /(?:^|[^a-z0-9])(?:lh|left[\s-]*hand(?:ed)?)(?=[^a-z0-9]|$)/i },
+  { hand: "right", pattern: /(?:^|[^a-z0-9])(?:rh|right[\s-]*hand(?:ed)?)(?=[^a-z0-9]|$)/i },
+];
+const GOLF_FLEX_QUERY_RES: Array<{ flex: GolfFlex; pattern: RegExp }> = [
+  { flex: "x-stiff", pattern: /(?:^|[^a-z0-9])(?:x[\s-]*stiff|extra[\s-]*stiff|xs)(?=[^a-z0-9]|$)/i },
+  { flex: "stiff", pattern: /(?:^|[^a-z0-9])(?:stiff|s[\s-]*flex)(?=[^a-z0-9]|$)/i },
+  { flex: "regular", pattern: /(?:^|[^a-z0-9])(?:regular|reg|r[\s-]*flex)(?=[^a-z0-9]|$)/i },
+  { flex: "senior", pattern: /(?:^|[^a-z0-9])(?:senior|a[\s-]*flex|lite)(?=[^a-z0-9]|$)/i },
+  { flex: "ladies", pattern: /(?:^|[^a-z0-9])(?:ladies|women(?:'s)?|womens|l[\s-]*flex)(?=[^a-z0-9]|$)/i },
+];
+const GOLF_LOFT_QUERY_RE = /(?:^|\s)(\d{1,2}(?:\.\d)?)\s*(?:°|deg(?:ree)?s?|loft)(?=\s|$)/i;
+
+export const GOLF_HAND_PATTERNS: Record<GolfHand, string> = {
+  left: "(^|[^a-z0-9])(lh|left[\\s-]*hand(?:ed)?)([^a-z0-9]|$)",
+  right: "(^|[^a-z0-9])(rh|right[\\s-]*hand(?:ed)?)([^a-z0-9]|$)",
+};
+export const GOLF_FLEX_PATTERNS: Record<GolfFlex, string> = {
+  "x-stiff": "(^|[^a-z0-9])(x[\\s-]*stiff|extra[\\s-]*stiff|xs)([^a-z0-9]|$)",
+  stiff: "(^|[^a-z0-9])(stiff|s[\\s-]*flex)([^a-z0-9]|$)",
+  regular: "(^|[^a-z0-9])(regular|reg|r[\\s-]*flex)([^a-z0-9]|$)",
+  senior: "(^|[^a-z0-9])(senior|a[\\s-]*flex|lite)([^a-z0-9]|$)",
+  ladies: "(^|[^a-z0-9])(ladies|women(?:'s)?|womens|l[\\s-]*flex)([^a-z0-9]|$)",
+};
+
+export function golfLoftPattern(loft: string): string {
+  return `(^|[^0-9.])${loft.replace(".", "\\.")}\\s*(?:°|deg(?:ree)?s?|loft)([^0-9.]|$)`;
+}
 
 export const BASEBALL_GLOVE_THROW_HAND_PATTERNS: Record<GloveThrowHand, string> = {
   left: "(^|[^a-z0-9])(lht|lh[\\s-]*throw(?:er|ing)?|lefty|left[\\s-]*hand(?:ed)?[\\s-]*throw(?:er|ing)?)([^a-z0-9]|$)",
@@ -111,8 +146,31 @@ export function searchAliasPattern(values: string[]): string {
 export function normalizeDealSearch(query: string): NormalizedDealSearch {
   let remaining = query.toLowerCase();
   const concepts: DealSearchConcept[] = [];
+  const hasGolfIntent = GOLF_INTENT_RE.test(remaining);
 
-  for (const { hand, pattern } of GLOVE_HAND_QUERY_RES) {
+  if (hasGolfIntent) {
+    for (const { hand, pattern } of GOLF_HAND_QUERY_RES) {
+      const match = remaining.match(pattern);
+      if (!match) continue;
+      concepts.push({ kind: "golf-hand", hand });
+      remaining = remaining.replace(match[0], " ");
+      break;
+    }
+    for (const { flex, pattern } of GOLF_FLEX_QUERY_RES) {
+      const match = remaining.match(pattern);
+      if (!match) continue;
+      concepts.push({ kind: "golf-flex", flex });
+      remaining = remaining.replace(match[0], " ");
+      break;
+    }
+    const loft = remaining.match(GOLF_LOFT_QUERY_RE);
+    if (loft) {
+      concepts.push({ kind: "golf-loft", loft: loft[1] });
+      remaining = remaining.replace(loft[0], " ");
+    }
+  }
+
+  for (const { hand, pattern } of hasGolfIntent ? [] : GLOVE_HAND_QUERY_RES) {
     const match = remaining.match(pattern);
     if (!match) continue;
     concepts.push({ kind: "glove-hand", hand });
@@ -160,6 +218,9 @@ export function normalizeDealSearch(query: string): NormalizedDealSearch {
       if (concept.kind === "bat-size") return [`${concept.length}`, `${concept.weight}`];
       if (concept.kind === "glove-size") return [concept.size];
       if (concept.kind === "glove-hand") return [];
+      if (concept.kind === "golf-hand") return [concept.hand === "left" ? "lh" : "rh"];
+      if (concept.kind === "golf-flex") return [concept.flex];
+      if (concept.kind === "golf-loft") return [`${concept.loft} loft`];
       return [`drop ${concept.drop}`];
     })
     .join(" ");
@@ -174,6 +235,9 @@ export function matchesNormalizedDealSearch(search: NormalizedDealSearch, deal: 
     if (concept.kind === "alias") return new RegExp(searchAliasPattern(concept.values), "i").test(haystack);
     if (concept.kind === "glove-size") return matchesGloveSize(deal, concept.size);
     if (concept.kind === "glove-hand") return matchesBaseballGloveThrowHand(deal, concept.hand);
+    if (concept.kind === "golf-hand") return new RegExp(GOLF_HAND_PATTERNS[concept.hand], "i").test(haystack);
+    if (concept.kind === "golf-flex") return new RegExp(GOLF_FLEX_PATTERNS[concept.flex], "i").test(haystack);
+    if (concept.kind === "golf-loft") return new RegExp(golfLoftPattern(concept.loft), "i").test(haystack);
     const dropMatch = deal.dropWeight === concept.drop || new RegExp(`(^|[^a-z0-9])(?:drop\\s*-?\\s*|-)${concept.drop}([^a-z0-9]|$)`, "i").test(haystack);
     if (concept.kind === "drop") return dropMatch;
     const sizeMatch = new RegExp(batSizeTitlePattern(concept.length, concept.weight), "i").test(haystack);
