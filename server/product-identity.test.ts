@@ -127,6 +127,32 @@ test("golf identities preserve iron set makeup and reject club accessories", () 
   }), null);
 });
 
+test("golf identity recognizes major current club families across sellers", () => {
+  const cases = [
+    ["TaylorMade P790 Iron Set 4-PW RH Stiff", "TaylorMade", "golf-iron-sets", "P790"],
+    ["Callaway Apex Pro Iron Set 5-PW", "Callaway", "golf-iron-sets", "Apex"],
+    ["Titleist T150 Iron Set 4-PW", "Titleist", "golf-iron-sets", "Titleist T-Series"],
+    ["Mizuno JPX 925 Hot Metal Iron Set 5-GW", "Mizuno", "golf-iron-sets", "JPX 925/923"],
+    ["Cleveland RTX 6 ZipCore 56 Degree Wedge", "Cleveland", "golf-wedges", "RTX"],
+    ["Callaway Jaws Raw 52 Degree Wedge", "Callaway", "golf-wedges", "Jaws"],
+    ["Odyssey White Hot OG #7 Putter", "Odyssey", "golf-putters", "White Hot"],
+    ["PING PLD Milled Anser Putter", "PING", "golf-putters", "PING PLD"],
+  ] as const;
+
+  for (const [title, brand, equipmentTypeId, family] of cases) {
+    const proposal = proposeProductIdentity({
+      id: title,
+      title,
+      brand,
+      sportId: "golf",
+      equipmentTypeId,
+      condition: "new",
+    });
+    assert.ok(proposal, title);
+    assert.equal(proposal.productFamily, family, title);
+  }
+});
+
 test("refuses generic, Other, and brandless products instead of guessing", () => {
   assert.equal(proposeProductIdentity({
     id: "generic", title: "Premium Baseball Glove", brand: "Wilson",

@@ -19,6 +19,9 @@ const ACCESSORY_ONLY =
 const SHAFT_ONLY =
   /\b(?:replacement|aftermarket)\s+shafts?\b|\b(?:driver|fairway|wood|hybrid|iron|wedge|putter)\s+shafts?\b|\bshafts?\s+(?:only|adapter|sleeve|pull|uncut)\b/i;
 
+const COMPONENT_ONLY =
+  /\b(?:head|heads|headset)\s+only\b|\b(?:driver|fairway|wood|hybrid|iron|wedge|putter)\s+heads?\b|\bclub\s+heads?\b|\bheads?\s+(?:only|replacement)\b/i;
+
 const NON_CLUB_GOLF_PRODUCT =
   /\b(?:golf\s+balls?|golf\s+bags?|cart\s+bags?|stand\s+bags?|carry\s+bags?|golf\s+gloves?|golf\s+shoes?|golf\s+shirts?|golf\s+polos?|golf\s+pants?|golf\s+shorts?|polo\s+shirts?|shirts?|jackets?|hoodies?|pants?|shorts?|apparel|rangefinders?|launch\s+monitors?|putting\s+mats?|training\s+aids?)\b/i;
 
@@ -27,6 +30,7 @@ export function isGolfClubAccessoryOnly(text: string): boolean {
   if (!value) return false;
   return ACCESSORY_ONLY.test(value)
     || SHAFT_ONLY.test(value)
+    || COMPONENT_ONLY.test(value)
     || NON_CLUB_GOLF_PRODUCT.test(value)
     || /\bdisc\s+golf\b|\bminiature\s+golf\b|\bmini\s+golf\b/i.test(value);
 }
