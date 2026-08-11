@@ -404,6 +404,9 @@ test("golf clubs require actual club form and cap non-USD results", () => {
   const leaks = [
     deal({ id: "golf-shirt", title: "Titleist Golf Polo Shirt", equipmentTypeId: "golf-clubs", sportId: "golf" }),
     deal({ id: "headcover", title: "Driver Headcover Accessory", equipmentTypeId: "golf-clubs", sportId: "golf" }),
+    deal({ id: "shaft", title: "Ventus Blue Driver Shaft Stiff", equipmentTypeId: "golf-clubs", sportId: "golf" }),
+    deal({ id: "head", title: "Callaway Paradym Driver Head Only", equipmentTypeId: "golf-clubs", sportId: "golf" }),
+    deal({ id: "trainer", title: "Golf Swing Trainer Alignment Sticks", equipmentTypeId: "golf-clubs", sportId: "golf" }),
   ];
   const foreign = Array.from({ length: 6 }, (_, index) =>
     deal({
@@ -420,6 +423,16 @@ test("golf clubs require actual club form and cap non-USD results", () => {
   assert.equal(ranked[0].id, "usd-driver");
   assert.equal(ranked.some((item) => leaks.some((leak) => leak.id === item.id)), false);
   assert.ok(ranked.filter((item) => item.currency === "EUR").length <= 2);
+});
+
+test("golf family pages reclassify stale rows at read time", () => {
+  const driverContext = { now, category: { name: "Drivers", sportId: "golf", equipmentTypeId: "golf-drivers" } };
+  const putterContext = { now, category: { name: "Putters", sportId: "golf", equipmentTypeId: "golf-putters" } };
+  const stalePutter = deal({ title: "Odyssey Ai-One Seven Putter 34 inch", sportId: "golf", equipmentTypeId: "golf-drivers" });
+  const driver = deal({ title: "TaylorMade Qi35 Driver 10.5 Stiff", sportId: "golf", equipmentTypeId: "golf-other" });
+  assert.equal(matchesTopDealCategoryBoundary(stalePutter, driverContext), false);
+  assert.equal(matchesTopDealCategoryBoundary(stalePutter, putterContext), true);
+  assert.equal(matchesTopDealCategoryBoundary(driver, driverContext), true);
 });
 
 test("shipping distortion cannot turn a low sticker price into a top deal", () => {
