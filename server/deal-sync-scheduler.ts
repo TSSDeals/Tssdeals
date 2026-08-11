@@ -1,7 +1,7 @@
 import cron from "node-cron";
 import { log } from "./index";
 import type { IStorage } from "./storage";
-import { searchEbayProducts, ebayItemToDeal, getEbayCategorySyncs } from "./ebay-api";
+import { searchEbayProducts, ebayItemToDeal, ebayItemToClassifiedDeal, getEbayCategorySyncs } from "./ebay-api";
 import { searchCJProductsPaginated, cjProductToDeal, getSportKeywords, getCJPartners } from "./cj-affiliate";
 import { syncShopifyStore } from "./shopify-sync";
 import { syncSidelineSwap } from "./sidelineswap";
@@ -48,6 +48,12 @@ import {
   withEbayPublicBrowsePriority,
   type EbayBrowseBudget,
 } from "./ebay-browse-client";
+import {
+  EBAY_PUBLIC_MAX_RESULTS_PER_QUERY,
+  EBAY_PUBLIC_RUN_CALL_BUDGET,
+  getQuotaEfficientEbayDiscoveryPlan,
+  selectEbaySellersForRun,
+} from "./ebay-quota-policy";
 
 function emptyEbayCollection(errors = 0): EbayPublicCollection {
   return {
@@ -84,26 +90,10 @@ async function collectEbaySellerDeals(
     return emptyEbayCollection(1);
   }
 
-  const sellers = await storage.listEbaySellers();
+  const sellers = selectEbaySellersForRun(await storage.listEbaySellers());
   if (sellers.length === 0) {
     return emptyEbayCollection();
   }
-
-  const sellerCategories = [
-    { categoryId: "16021", sportId: "baseball", equipmentTypeId: "bb-other", categoryName: "Baseball & Softball" },
-    { categoryId: "1513", sportId: "golf", equipmentTypeId: "golf-other", categoryName: "Golf" },
-    { categoryId: "21194", sportId: "basketball", equipmentTypeId: "bk-other", categoryName: "Basketball" },
-    { categoryId: "261242", sportId: "football", equipmentTypeId: "fb-other", categoryName: "Football" },
-    { categoryId: "20862", sportId: "soccer", equipmentTypeId: "soc-other", categoryName: "Soccer" },
-    { categoryId: "261249", sportId: "lacrosse", equipmentTypeId: "lax-other", categoryName: "Lacrosse" },
-    { categoryId: "261245", sportId: "hockey", equipmentTypeId: "hk-other", categoryName: "Hockey" },
-    { categoryId: "1492", sportId: "fishing", equipmentTypeId: "fish-other", categoryName: "Fishing" },
-    { categoryId: "261246", sportId: "volleyball", equipmentTypeId: "vb-other", categoryName: "Volleyball" },
-    { categoryId: "261247", sportId: "wrestling", equipmentTypeId: "wrest-other", categoryName: "Wrestling" },
-    { categoryId: "7294", sportId: "cycling", equipmentTypeId: "cyc-other", categoryName: "Cycling" },
-    { categoryId: "95672", sportId: "running", equipmentTypeId: "run-shoes", categoryName: "Running" },
-    { categoryId: "159136", sportId: "swimming", equipmentTypeId: "swim-other", categoryName: "Swimming" },
-  ];
 
   const deals: InsertDeal[] = [];
   let totalErrors = 0;
@@ -115,40 +105,30 @@ async function collectEbaySellerDeals(
   for (const seller of sellers) {
     if (stopRequestedSince(stopEpoch)) break;
     let sellerItemCount = 0;
-    for (const cat of sellerCategories) {
-      if (stopRequestedSince(stopEpoch)) break;
-      requestsAttempted++;
-      try {
-        const items = await searchEbayProducts(clientId, clientSecret, {
-          keywords: "",
-          sportId: cat.sportId,
-          equipmentTypeId: cat.equipmentTypeId,
-          condition: "all",
-          maxResults: 200,
-          categoryId: cat.categoryId,
-          sellerUsername: seller.username,
-          browseBudget,
-          browsePurpose: "public_feed",
-          browseMaxRetries: 0,
-        });
-        requestsSucceeded++;
-
-        if (items.length === 0) continue;
-
-        const dealsToInsert = items
-          .map((item) => ebayItemToDeal(item, cat.sportId, cat.equipmentTypeId))
-          .filter((d): d is NonNullable<typeof d> => d !== null);
-
-        deals.push(...dealsToInsert);
-        sellerItemCount += dealsToInsert.length;
-      } catch (err: any) {
-        log(`eBay seller "${seller.username}" error in ${cat.categoryName}: ${err.message}`, "deal-sync");
-        totalErrors++;
-        if (isEbayRateLimitError(err)) {
-          rateLimited = true;
-          break;
-        }
-      }
+    requestsAttempted++;
+    try {
+      const items = await searchEbayProducts(clientId, clientSecret, {
+        keywords: "",
+        sportId: "multi-sport",
+        equipmentTypeId: "unclassified",
+        condition: "all",
+        maxResults: EBAY_PUBLIC_MAX_RESULTS_PER_QUERY,
+        categoryId: "888",
+        sellerUsername: seller.username,
+        browseBudget,
+        browsePurpose: "public_feed",
+        browseMaxRetries: 0,
+      });
+      requestsSucceeded++;
+      const dealsToInsert = items
+        .map(ebayItemToClassifiedDeal)
+        .filter((deal): deal is NonNullable<typeof deal> => deal !== null);
+      deals.push(...dealsToInsert);
+      sellerItemCount += dealsToInsert.length;
+    } catch (err: any) {
+      log(`eBay seller "${seller.username}" broad sporting-goods sync error: ${err.message}`, "deal-sync");
+      totalErrors++;
+      if (isEbayRateLimitError(err)) rateLimited = true;
     }
     if (rateLimited) break;
     if (sellerItemCount > 0) {
@@ -177,7 +157,7 @@ async function collectEbayCategoryDeals(
     return emptyEbayCollection(1);
   }
 
-  const categorySyncs = getEbayCategorySyncs();
+  const categorySyncs = getQuotaEfficientEbayDiscoveryPlan(getEbayCategorySyncs());
   const deals: InsertDeal[] = [];
   let totalErrors = 0;
   let requestsAttempted = 0;
@@ -193,8 +173,9 @@ async function collectEbayCategoryDeals(
         keywords: catSync.keywords || "",
         sportId: catSync.sportId,
         equipmentTypeId: catSync.equipmentTypeId,
-        condition: "all",
-        maxResults: 200,
+        condition: catSync.condition,
+        minPrice: catSync.minPrice,
+        maxResults: EBAY_PUBLIC_MAX_RESULTS_PER_QUERY,
         categoryId: catSync.categoryId,
         browseBudget,
         browsePurpose: "public_feed",
@@ -254,7 +235,7 @@ async function performEbayPublicSync(storage: IStorage): Promise<{ created: numb
     loadStatus: () => getEbayPublicSyncStatus(storage),
     saveStatus: (status) => saveEbayPublicSyncStatus(storage, status),
     collect: () => withEbayPublicBrowsePriority(async () => {
-      const browseBudget = createEbayBrowseBudget("public feed sync", 250);
+      const browseBudget = createEbayBrowseBudget("public feed sync", EBAY_PUBLIC_RUN_CALL_BUDGET);
       const categories = await collectEbayCategoryDeals(browseBudget);
       if (categories.stopped) return categories;
       const sellers = await collectEbaySellerDeals(storage, browseBudget);
@@ -302,7 +283,7 @@ export async function runEbayPublicSync(storage: IStorage): Promise<EbayPublicSy
 
 export async function syncEbaySellerDeals(storage: IStorage): Promise<{ created: number; updated: number; errors: number }> {
   const collection = await withEbayPublicBrowsePriority(() =>
-    collectEbaySellerDeals(storage, createEbayBrowseBudget("seller feed sync", 100))
+    collectEbaySellerDeals(storage, createEbayBrowseBudget("seller feed sync", EBAY_PUBLIC_RUN_CALL_BUDGET))
   );
   if (collection.stopped || collection.errors > 0) {
     return { created: 0, updated: 0, errors: Math.max(1, collection.errors) };

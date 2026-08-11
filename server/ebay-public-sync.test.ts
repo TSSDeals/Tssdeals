@@ -370,9 +370,10 @@ test("customer query and stale cleanup both honor the durable eBay snapshot guar
   assert.match(storageSource, /eq\(deals\.sourceId,\s*"ebay"\),\s*preserveLastKnownGoodEbaySnapshot/);
   assert.match(schedulerSource, /source_id <> 'ebay'[\s\S]{0,500}ebay_public_sync_status[\s\S]{0,300}preserveLastKnownGood/);
   assert.doesNotMatch(schedulerSource, /collectEbayDeals/);
-  assert.match(schedulerSource, /createEbayBrowseBudget\("public feed sync", 250\)/);
-  assert.match(schedulerSource, /maxResults:\s*200/);
+  assert.match(schedulerSource, /createEbayBrowseBudget\("public feed sync", EBAY_PUBLIC_RUN_CALL_BUDGET\)/);
+  assert.match(schedulerSource, /maxResults:\s*EBAY_PUBLIC_MAX_RESULTS_PER_QUERY/);
   assert.doesNotMatch(schedulerSource, /maxResults:\s*(?:2000|5000|10000)/);
+  assert.doesNotMatch(schedulerSource, /sellerCategories/);
 });
 
 test("admin public sync is queued in the background and the UI polls persisted status", () => {
