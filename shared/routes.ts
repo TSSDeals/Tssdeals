@@ -174,6 +174,7 @@ export const api = {
             .transform((v) => v === true || v === "true")
             .optional(),
           limit: z.union([z.literal("all"), z.coerce.number().min(1).max(200)]).optional(),
+          offset: z.coerce.number().int().min(0).max(10000).optional(),
           sortBy: z.enum(["newest", "oldest", "price-low", "price-high", "discount-high", "a-z", "z-a"]).optional(),
         })
         .optional(),
