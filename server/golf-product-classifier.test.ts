@@ -34,6 +34,11 @@ test("rejects golf accessories, replacement shafts, and tool drivers", () => {
     "Callaway Paradym Triple Diamond Driver Head",
     "20V Cordless Impact Driver Tool Set",
     "Golf Rangefinder with Slope",
+    "Set of 10 Neoprene Golf Iron Covers",
+    "Golf Club Groove Sharpener Cleaning Tool",
+    "Golf Swing Trainer Alignment Sticks",
+    "Golf Club Extension Kit and Regripping Station",
+    "Golf Club Loft and Lie Machine",
   ];
   for (const title of rejected) {
     assert.equal(classifyGolfClubProduct(title), null, title);

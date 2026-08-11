@@ -14,13 +14,13 @@ const NON_GOLF_DRIVER =
   /\b(?:impact|drill|screw|torque|ratchet|socket|device|software|printer|audio|motor)\s+drivers?\b|\bdrivers?\s+(?:tool|bit|set|kit)\b/i;
 
 const ACCESSORY_ONLY =
-  /\b(?:head[\s-]?covers?|club[\s-]?covers?|(?:driver|fairway|wood|hybrid|iron|wedge|putter)\s+covers?|rain[\s-]?covers?|travel[\s-]?covers?|brush(?:es)?|clean(?:er|ing)\s+(?:kit|tool)|towels?|ball\s+markers?|divot\s+tools?|tees?|grip\s+(?:kit|tape|solvent|trainer)|replacement\s+grips?|shaft\s+adapters?|adapter\s+sleeves?|ferrules?|weight\s+(?:kit|screw)|torque\s+wrenches?|club\s+racks?|display\s+stands?)\b/i;
+  /\b(?:head[\s-]?covers?|club[\s-]?covers?|iron\s+cover\s+sets?|(?:driver|fairway|wood|hybrid|iron|wedge|putter)\s+covers?|rain[\s-]?covers?|travel[\s-]?covers?|brush(?:es)?|groove\s+(?:cleaners?|sharpeners?)|clean(?:er|ing)\s+(?:kit|tool)|towels?|ball\s+markers?|divot\s+tools?|tees?|grip\s+(?:kit|tape|solvent|trainer)|replacement\s+grips?|regrip(?:ping)?\s+(?:kit|station|tool)|shaft\s+adapters?|adapter\s+sleeves?|ferrules?|weight\s+(?:kit|screw)|torque\s+wrenches?|club\s+(?:racks?|stands?|holders?|organizers?|extenders?)|display\s+stands?|alignment\s+sticks?|swing\s+trainers?|impact\s+bags?|lead\s+tape|club\s+repair\s+(?:kit|tool)|loft\s+and\s+lie\s+(?:machine|tool))\b/i;
 
 const SHAFT_ONLY =
   /\b(?:replacement|aftermarket)\s+shafts?\b|\b(?:driver|fairway|wood|hybrid|iron|wedge|putter)\s+shafts?\b|\bshafts?\s+(?:only|adapter|sleeve|pull|uncut)\b/i;
 
 const COMPONENT_ONLY =
-  /\b(?:head|heads|headset)\s+only\b|\b(?:driver|fairway|wood|hybrid|iron|wedge|putter)\s+heads?\b|\bclub\s+heads?\b|\bheads?\s+(?:only|replacement)\b/i;
+  /\b(?:head|heads|headset)\s+only\b|\b(?:driver|fairway|wood|hybrid|iron|wedge|putter)\s+heads?\b|\bclub\s+heads?\b|\bheads?\s+(?:only|replacement)\b|\b(?:replacement|aftermarket)\s+(?:driver|fairway|wood|hybrid|iron|wedge|putter)\s+heads?\b/i;
 
 const NON_CLUB_GOLF_PRODUCT =
   /\b(?:golf\s+balls?|golf\s+bags?|cart\s+bags?|stand\s+bags?|carry\s+bags?|golf\s+gloves?|golf\s+shoes?|golf\s+shirts?|golf\s+polos?|golf\s+pants?|golf\s+shorts?|polo\s+shirts?|shirts?|jackets?|hoodies?|pants?|shorts?|apparel|rangefinders?|launch\s+monitors?|putting\s+mats?|training\s+aids?)\b/i;

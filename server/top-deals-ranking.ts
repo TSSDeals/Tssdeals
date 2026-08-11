@@ -1,5 +1,6 @@
 import type { Deal, DealCategory } from "@shared/schema";
 import { preferredRetailerRank } from "@shared/retailer-programs";
+import { classifyGolfClubProduct } from "./golf-product-classifier";
 
 const DAY_MS = 86_400_000;
 const NOISE_PATTERN =
@@ -262,7 +263,23 @@ function isCleatCategory(context: TopDealsContext): boolean {
 }
 
 function isGolfClubCategory(context: TopDealsContext): boolean {
-  return GOLF_CLUB_CATEGORY_PATTERN.test(categoryEvidence(context));
+  const evidence = categoryEvidence(context);
+  return GOLF_CLUB_CATEGORY_PATTERN.test(evidence)
+    || /\bgolf-(?:drivers|irons|iron-sets|wedges|putters|other)\b/i.test(evidence);
+}
+
+function golfClubEvidence(deal: Deal): string {
+  return `${deal.title ?? ""} ${structuredProductEvidence(deal)}`.trim();
+}
+
+function matchesRequestedGolfFamily(
+  equipmentTypeId: string,
+  context: TopDealsContext,
+): boolean {
+  const requested = context.category?.equipmentTypeId;
+  if (!requested || requested === "golf-other") return true;
+  if (requested === "golf-irons") return equipmentTypeId === "golf-irons";
+  return requested === equipmentTypeId;
 }
 
 function productEvidence(deal: Deal): string {
@@ -299,7 +316,9 @@ export function matchesTopDealCategoryBoundary(deal: Deal, context: TopDealsCont
   }
   if (isGolfClubCategory(context)) {
     if (APPAREL_PATTERN.test(title) || GOLF_CLUB_EXCLUSION_PATTERN.test(title)) return false;
-    return GOLF_CLUB_FORM_PATTERN.test(productEvidence(deal));
+    const classification = classifyGolfClubProduct(golfClubEvidence(deal));
+    return Boolean(classification)
+      && matchesRequestedGolfFamily(classification!.equipmentTypeId, context);
   }
   return true;
 }
