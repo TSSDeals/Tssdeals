@@ -113,6 +113,13 @@ function initialFiltersFromUrl(): FilterState {
   return q ? { ...DEFAULT_FILTERS, q, minPercentOff: 0 } : DEFAULT_FILTERS;
 }
 
+type StorefrontConfig = {
+  sourceId: string;
+  ebaySeller?: string;
+  title: string;
+  description: string;
+};
+
 function safeLocalGet(key: string): string | null {
   try {
     return localStorage.getItem(key);
@@ -126,7 +133,7 @@ function safeLocalSet(key: string, value: string): void {
   } catch {}
 }
 
-export default function DealsPage() {
+export default function DealsPage({ storefront }: { storefront?: StorefrontConfig } = {}) {
   const { toast } = useToast();
   const meta = useMetaConfig();
   const sports = useSports();
@@ -137,8 +144,15 @@ export default function DealsPage() {
     [sports.data],
   );
 
-  const [pending, setPending] = useState<FilterState>(initialFiltersFromUrl);
-  const [applied, setApplied] = useState<FilterState>(initialFiltersFromUrl);
+  const storefrontFilters = useMemo<FilterState | null>(() => storefront ? {
+    ...initialFiltersFromUrl(),
+    source: storefront.sourceId,
+    ebaySeller: storefront.ebaySeller ?? "all",
+    minPercentOff: 0,
+    limitValue: "100",
+  } : null, [storefront?.sourceId, storefront?.ebaySeller]);
+  const [pending, setPending] = useState<FilterState>(() => storefrontFilters ?? initialFiltersFromUrl());
+  const [applied, setApplied] = useState<FilterState>(() => storefrontFilters ?? initialFiltersFromUrl());
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
   const [recentSearches, setRecentSearches] = useState<string[]>(() =>
     parseRecentShopperSearches(safeLocalGet(RECENT_SEARCHES_KEY)),
@@ -165,6 +179,12 @@ export default function DealsPage() {
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
+
+  useEffect(() => {
+    if (!storefrontFilters) return;
+    setPending((current) => ({ ...current, source: storefrontFilters.source, ebaySeller: storefrontFilters.ebaySeller, minPercentOff: current.minPercentOff }));
+    setApplied((current) => ({ ...current, source: storefrontFilters.source, ebaySeller: storefrontFilters.ebaySeller, minPercentOff: current.minPercentOff }));
+  }, [storefrontFilters]);
 
   async function handlePhotoSearch(file: File) {
     setPhotoSearching(true);
@@ -310,14 +330,14 @@ export default function DealsPage() {
     const p = prefs.data as any;
     const updates: Partial<FilterState> = {};
     if (p.condition && p.condition !== "all") updates.condition = p.condition;
-    if (p.minPercentOff != null) updates.minPercentOff = Number(p.minPercentOff);
+    if (p.minPercentOff != null && !storefront) updates.minPercentOff = Number(p.minPercentOff);
     if (p.sportId) updates.sportId = normalizeShopperSportId(p.sportId);
     if (Object.keys(updates).length > 0) {
       setPending((prev) => ({ ...prev, ...updates }));
       setApplied((prev) => ({ ...prev, ...updates }));
     }
     if (p.hiddenSections?.length) setHiddenSections(p.hiddenSections);
-  }, [prefs.data]);
+  }, [prefs.data, storefront?.sourceId]);
 
   const groupedEqTypes = useMemo(() => {
     const fetched = (eqTypes.data ?? []) as any[];
@@ -585,9 +605,25 @@ export default function DealsPage() {
       subtitle={subtitle}
       hidePageHeader
     >
-      <Seo title="Deals — TwinSeam Deals" description="Browse sporting goods deals and filter by sport, equipment type, condition, and percent off." />
+      <Seo
+        title={storefront ? `${storefront.title} Deals — TwinSeam Deals` : "Deals — TwinSeam Deals"}
+        description={storefront?.description ?? "Browse sporting goods deals and filter by sport, equipment type, condition, and percent off."}
+      />
 
-      <DealsSearchHero
+      {storefront ? (
+        <section className="card-elevated animate-float-in p-6 md:p-8" data-testid="source-storefront-header">
+          <div className="flex items-center gap-3">
+            <div className="grid h-12 w-12 place-items-center rounded-2xl border border-border bg-background/70 shadow-sm">
+              <Store className="h-6 w-6 text-primary" />
+            </div>
+            <div>
+              <div className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Source storefront</div>
+              <h1 className="font-display text-2xl font-bold md:text-3xl">{storefront.title}</h1>
+            </div>
+          </div>
+          <p className="mt-3 max-w-3xl text-sm text-muted-foreground md:text-base">{storefront.description}</p>
+        </section>
+      ) : <DealsSearchHero
         query={pending.q}
         recentSearches={recentSearches}
         photoSearching={photoSearching}
@@ -626,9 +662,9 @@ export default function DealsPage() {
         starterImages={homepageVisuals.starterImages}
         categoryImages={homepageVisuals.categoryImages}
         sports={shopperSports}
-      />
+      />}
 
-      <EliteGloveCorner />
+      {!storefront && <EliteGloveCorner />}
 
       <div className="hidden justify-end lg:flex" data-testid="deal-utilities">
         {dealUtilities}
@@ -731,7 +767,11 @@ export default function DealsPage() {
               {!isDefaultView && (
                 <button
                   type="button"
-                  onClick={() => { setPending(DEFAULT_FILTERS); setApplied(DEFAULT_FILTERS); }}
+                  onClick={() => {
+                    const reset = storefrontFilters ?? DEFAULT_FILTERS;
+                    setPending(reset);
+                    setApplied(reset);
+                  }}
                   className="flex items-center gap-1 rounded-full border border-red-300 bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-600 hover:bg-red-100 transition-colors dark:border-red-800 dark:bg-red-950/40 dark:text-red-400 dark:hover:bg-red-950/60"
                   data-testid="clear-all-filters"
                 >
@@ -1032,7 +1072,7 @@ export default function DealsPage() {
               </Select>
             </div>
 
-            <div className="grid gap-2">
+            {!storefront && <div className="grid gap-2">
               <Label>Source</Label>
               <Select value={pending.source} onValueChange={(v) => { setPending((p) => ({ ...p, source: v })); }}>
                 <SelectTrigger className="ring-focus rounded-xl" data-testid="source">
@@ -1062,7 +1102,7 @@ export default function DealsPage() {
                   })()}
                 </SelectContent>
               </Select>
-            </div>
+            </div>}
 
             <div className="hidden" aria-hidden="true">
               <Label>Brand</Label>
@@ -1082,7 +1122,7 @@ export default function DealsPage() {
               </Select>
             </div>
 
-            {(ebaySellersList.data ?? []).length > 0 && (
+            {!storefront?.ebaySeller && (ebaySellersList.data ?? []).length > 0 && (
               <div className="grid gap-2">
                 <Label>eBay Seller</Label>
                 <Select value={pending.ebaySeller} onValueChange={(v) => { setPending((p) => ({ ...p, ebaySeller: v })); }}>
