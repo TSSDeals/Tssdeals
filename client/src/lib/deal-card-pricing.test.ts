@@ -33,6 +33,24 @@ test("manual normal selling price is formatted independently from MSRP", () => {
   assert.equal(pricing.percent, "20%");
 });
 
+test("individual golf iron cards hide a complete-set MSRP comparison", () => {
+  const pricing = deriveDealCardPricing({
+    title: "Titleist T250 Black Vapor Irons - GW - Left Hand",
+    sportId: "golf",
+    equipmentTypeId: "golf-irons",
+    priceCents: 28_500,
+    msrpCents: 130_000,
+    manufacturerMsrpCents: 130_000,
+    msrpVerified: true,
+    percentOff: "78.08",
+    currency: "USD",
+  });
+
+  assert.equal(pricing.hasMfrMsrp, false);
+  assert.equal(pricing.hasMsrp, false);
+  assert.equal(pricing.percent, "\u2014");
+});
+
 test("ordinary cards preserve trusted savings display", () => {
   const pricing = deriveDealCardPricing({
     priceCents: 19999,

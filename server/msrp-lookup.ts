@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import { db } from "./db";
 import { deals, msrpLookups } from "@shared/schema";
 import { eq, and, isNull, gt, isNotNull, sql, ilike, desc } from "drizzle-orm";
+import { isPlausibleGolfPriceReference } from "@shared/golf-price-reference";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -159,6 +160,20 @@ export async function verifyMsrpForDeal(dealId: number): Promise<{
   await saveLookup(result, deal.sportId);
 
   if (result.manufacturerMsrpCents && result.confidence !== "not_found") {
+    if (!isPlausibleGolfPriceReference({
+      title: deal.title,
+      priceCents: deal.priceCents,
+      referenceCents: result.manufacturerMsrpCents,
+      sportId: deal.sportId,
+      equipmentTypeId: deal.equipmentTypeId,
+    })) {
+      return {
+        success: false,
+        msrpCents: null,
+        confidence: "not_found",
+        message: "Rejected MSRP because it appears to describe a complete iron set rather than this individual club.",
+      };
+    }
     const isVerified = result.confidence === "high";
     await applyMsrpToDeal(dealId, result.manufacturerMsrpCents, isVerified);
 
