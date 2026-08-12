@@ -169,6 +169,7 @@ export const PRODUCT_RESEARCH_CATEGORIES: Record<ProductResearchFocus, ReadonlyA
 export function buildProductResearchUrl(input: {
   queryText: string;
   categoryId?: string | null;
+  minimumPrice?: number | null;
   windowDays: ProductResearchWindow;
   endDate?: Date;
 }) {
@@ -187,6 +188,9 @@ export function buildProductResearchUrl(input: {
     tabName: "SOLD",
   });
   if (input.categoryId) params.set("categoryId", input.categoryId);
+  if (input.minimumPrice != null && input.minimumPrice > 0) {
+    params.set("minPrice", String(Math.round(input.minimumPrice)));
+  }
   return `https://www.ebay.com/sh/research?${params.toString()}`;
 }
 
@@ -200,14 +204,29 @@ export function buildProductIdentityResearchTarget(identity: {
   const label = `${identity.canonical_brand} ${identity.product_family}${identity.model_code ? ` ${identity.model_code}` : ""}`
     .replace(/\s+/g, " ")
     .trim();
-  if (identity.sport_id !== "golf") return { label, queryText: label, categoryId: undefined };
+  if (identity.sport_id !== "golf") {
+    return { label, queryText: label, categoryId: undefined, minimumPrice: undefined };
+  }
 
   const type = identity.equipment_type_id;
+  const typeLabel = type === "golf-drivers"
+    ? "Driver"
+    : type === "golf-iron-sets"
+      ? "Iron Set"
+      : type === "golf-wedges"
+        ? "Wedge"
+        : type === "golf-putters"
+          ? "Putter"
+          : type === "golf-balls"
+            ? "Golf Balls"
+            : "Golf Club";
+  const displayLabel = `${label} · ${typeLabel}`;
   if (type === "golf-balls") {
     return {
-      label,
+      label: displayLabel,
       queryText: `${label} golf balls dozen -used -recycled -refinished`,
       categoryId: "18924",
+      minimumPrice: 10,
     };
   }
 
@@ -222,7 +241,19 @@ export function buildProductIdentityResearchTarget(identity: {
           : type === "golf-irons"
             ? "golf club -headcover -head -shaft"
             : "golf club -headcover -head -shaft";
-  return { label, queryText: `${label} ${suffix}`, categoryId: "115280" };
+  const minimumPrice = type === "golf-drivers"
+    ? 75
+    : type === "golf-iron-sets"
+      ? 100
+      : type === "golf-irons"
+        ? 50
+        : 30;
+  return {
+    label: displayLabel,
+    queryText: `${label} ${suffix}`,
+    categoryId: "115280",
+    minimumPrice,
+  };
 }
 
 export function buildLedgerResearchKey(brand: unknown, model: unknown) {
@@ -437,6 +468,7 @@ export async function getProductResearchWorkspace(
           researchUrl: buildProductResearchUrl({
             queryText: target.queryText,
             categoryId: target.categoryId,
+            minimumPrice: target.minimumPrice,
             windowDays,
           }),
         };
