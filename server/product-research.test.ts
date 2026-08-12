@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildProductResearchUrl,
+  buildProductIdentityResearchTarget,
   buildLedgerResearchKey,
   productResearchObservationInput,
   productResearchFocus,
@@ -81,6 +82,35 @@ test("Product Research URLs are prefilled without scraping private result rows",
   assert.equal(url.searchParams.get("categoryId"), "16030");
   assert.equal(url.searchParams.get("dayRange"), "30");
   assert.equal(url.searchParams.get("tabName"), "SOLD");
+});
+
+test("golf identity research targets exclude components and stay in the correct eBay category", () => {
+  assert.deepEqual(buildProductIdentityResearchTarget({
+    canonical_brand: "TaylorMade",
+    product_family: "Qi10",
+    sport_id: "golf",
+    equipment_type_id: "golf-drivers",
+  }), {
+    label: "TaylorMade Qi10",
+    queryText: "TaylorMade Qi10 driver -head -headcover -shaft -adapter",
+    categoryId: "115280",
+  });
+  assert.deepEqual(buildProductIdentityResearchTarget({
+    canonical_brand: "TaylorMade",
+    product_family: "P790",
+    sport_id: "golf",
+    equipment_type_id: "golf-iron-sets",
+  }).queryText, "TaylorMade P790 iron set -single -individual -head -shaft");
+  assert.deepEqual(buildProductIdentityResearchTarget({
+    canonical_brand: "Titleist",
+    product_family: "Pro V1",
+    sport_id: "golf",
+    equipment_type_id: "golf-balls",
+  }), {
+    label: "Titleist Pro V1",
+    queryText: "Titleist Pro V1 golf balls dozen -used -recycled -refinished",
+    categoryId: "18924",
+  });
 });
 
 test("aggregate observations reject non-eBay sources and impossible price ranges", () => {

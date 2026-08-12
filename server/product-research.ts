@@ -190,6 +190,41 @@ export function buildProductResearchUrl(input: {
   return `https://www.ebay.com/sh/research?${params.toString()}`;
 }
 
+export function buildProductIdentityResearchTarget(identity: {
+  canonical_brand: string;
+  product_family: string;
+  model_code?: string | null;
+  sport_id?: string | null;
+  equipment_type_id?: string | null;
+}) {
+  const label = `${identity.canonical_brand} ${identity.product_family}${identity.model_code ? ` ${identity.model_code}` : ""}`
+    .replace(/\s+/g, " ")
+    .trim();
+  if (identity.sport_id !== "golf") return { label, queryText: label, categoryId: undefined };
+
+  const type = identity.equipment_type_id;
+  if (type === "golf-balls") {
+    return {
+      label,
+      queryText: `${label} golf balls dozen -used -recycled -refinished`,
+      categoryId: "18924",
+    };
+  }
+
+  const suffix = type === "golf-drivers"
+    ? "driver -head -headcover -shaft -adapter"
+    : type === "golf-iron-sets"
+      ? "iron set -single -individual -head -shaft"
+      : type === "golf-wedges"
+        ? "wedge -head -shaft"
+        : type === "golf-putters"
+          ? "putter -headcover -cover -head"
+          : type === "golf-irons"
+            ? "golf club -headcover -head -shaft"
+            : "golf club -headcover -head -shaft";
+  return { label, queryText: `${label} ${suffix}`, categoryId: "115280" };
+}
+
 export function buildLedgerResearchKey(brand: unknown, model: unknown) {
   return `ledger-model:${String(brand ?? "").trim()}:${String(model ?? "").trim()}`
     .toLowerCase()
@@ -393,16 +428,19 @@ export async function getProductResearchWorkspace(
           windowDays,
         }),
       })),
-      identities: identities.rows.map((identity) => ({
-        ...identity,
-        researchKey: `identity:${identity.id}`,
-        label: `${identity.canonical_brand} ${identity.product_family}${identity.model_code ? ` ${identity.model_code}` : ""}`,
-        queryText: `${identity.canonical_brand} ${identity.product_family}${identity.model_code ? ` ${identity.model_code}` : ""}`,
-        researchUrl: buildProductResearchUrl({
-          queryText: `${identity.canonical_brand} ${identity.product_family}${identity.model_code ? ` ${identity.model_code}` : ""}`,
-          windowDays,
-        }),
-      })),
+      identities: identities.rows.map((identity) => {
+        const target = buildProductIdentityResearchTarget(identity);
+        return {
+          ...identity,
+          researchKey: `identity:${identity.id}`,
+          ...target,
+          researchUrl: buildProductResearchUrl({
+            queryText: target.queryText,
+            categoryId: target.categoryId,
+            windowDays,
+          }),
+        };
+      }),
       ledgerModels: recentLedgerModels,
       ledgerProgress: {
         total: recentLedgerModels.length,
