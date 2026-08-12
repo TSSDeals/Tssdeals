@@ -91,9 +91,10 @@ test("golf identity research targets exclude components and stay in the correct 
     sport_id: "golf",
     equipment_type_id: "golf-drivers",
   }), {
-    label: "TaylorMade Qi10",
+    label: "TaylorMade Qi10 · Driver",
     queryText: "TaylorMade Qi10 driver -head -headcover -shaft -adapter",
     categoryId: "115280",
+    minimumPrice: 75,
   });
   assert.deepEqual(buildProductIdentityResearchTarget({
     canonical_brand: "TaylorMade",
@@ -107,10 +108,29 @@ test("golf identity research targets exclude components and stay in the correct 
     sport_id: "golf",
     equipment_type_id: "golf-balls",
   }), {
-    label: "Titleist Pro V1",
+    label: "Titleist Pro V1 · Golf Balls",
     queryText: "Titleist Pro V1 golf balls dozen -used -recycled -refinished",
     categoryId: "18924",
+    minimumPrice: 10,
   });
+});
+
+test("golf identity URLs use equipment-specific price floors", () => {
+  const driver = buildProductIdentityResearchTarget({
+    canonical_brand: "TaylorMade",
+    product_family: "Qi10",
+    sport_id: "golf",
+    equipment_type_id: "golf-drivers",
+  });
+  const url = new URL(buildProductResearchUrl({
+    queryText: driver.queryText,
+    categoryId: driver.categoryId,
+    minimumPrice: driver.minimumPrice,
+    windowDays: 30,
+    endDate: new Date("2026-08-11T12:00:00Z"),
+  }));
+  assert.equal(url.searchParams.get("minPrice"), "75");
+  assert.equal(url.searchParams.get("categoryId"), "115280");
 });
 
 test("aggregate observations reject non-eBay sources and impossible price ranges", () => {
