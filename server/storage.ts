@@ -104,6 +104,7 @@ import {
   dealClicks,
   dealProductIdentities,
   productResearchObservations,
+  productIdentities,
   sidelineswapSyncs,
   type SidelineswapSync,
   type InsertSidelineswapSync,
@@ -2697,18 +2698,32 @@ export class DatabaseStorage implements IStorage {
           sellThroughPercent: productResearchObservations.sellThroughPercent,
           totalSold: productResearchObservations.totalSold,
           totalSellers: productResearchObservations.totalSellers,
+          observedAt: productResearchObservations.observedAt,
         })
         .from(dealProductIdentities)
         .innerJoin(
+          productIdentities,
+          eq(productIdentities.id, dealProductIdentities.productIdentityId),
+        )
+        .innerJoin(
           productResearchObservations,
-          eq(productResearchObservations.productIdentityId, dealProductIdentities.productIdentityId),
+          dsql`EXISTS (
+            SELECT 1
+              FROM product_identities observed_identity
+             WHERE observed_identity.id=${productResearchObservations.productIdentityId}
+               AND observed_identity.family_fingerprint=${productIdentities.familyFingerprint}
+          )`,
         )
         .where(and(
           inArray(dealProductIdentities.dealId, pool.map((deal) => deal.id)),
           eq(dealProductIdentities.status, "approved"),
-          eq(productResearchObservations.observationType, "completed_sales"),
+          eq(productResearchObservations.observationType, "product_identity"),
         ))
-        .orderBy(desc(productResearchObservations.periodEnd), asc(productResearchObservations.windowDays));
+        .orderBy(
+          desc(productResearchObservations.periodEnd),
+          desc(productResearchObservations.observedAt),
+          asc(productResearchObservations.windowDays),
+        );
 
       // Rows arrive newest first. Keep the freshest observation for each deal;
       // prefer its shorter window when multiple windows end on the same day.

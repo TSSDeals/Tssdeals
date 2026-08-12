@@ -249,15 +249,17 @@ export async function getDemandBrainSummary(windowDays: 5 | 10 | 30 | 90 = 30) {
          LIMIT 25
       `, [windowDays]),
       client.query(`
-        SELECT DISTINCT ON (research_key)
-               research_key, label, observation_type, product_identity_id,
+        SELECT DISTINCT ON (coalesce(pi.family_fingerprint, o.research_key))
+               o.research_key, o.label, o.observation_type, o.product_identity_id,
                average_sold_price_cents, minimum_sold_price_cents,
                maximum_sold_price_cents, average_shipping_cents,
                free_shipping_percent, sell_through_percent, total_sold,
                total_sellers, period_start, period_end, source_url
-          FROM product_research_observations
-         WHERE window_days=$1
-         ORDER BY research_key, period_end DESC, observed_at DESC
+          FROM product_research_observations o
+          LEFT JOIN product_identities pi ON pi.id=o.product_identity_id
+         WHERE o.window_days=$1
+         ORDER BY coalesce(pi.family_fingerprint, o.research_key),
+                  o.period_end DESC, o.observed_at DESC
       `, [windowDays]),
     ]);
     const completedSalesWithScores = completedSales.rows.map((observation) => ({

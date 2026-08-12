@@ -148,7 +148,9 @@ export default function ProductResearchPanel() {
       ]);
       toast({
         title: "Product Research observation saved",
-        description: "The aggregate result is now available to the Demand Brain.",
+        description: form.totalSold
+          ? "The aggregate result is now available to the Demand Brain."
+          : "Pricing evidence saved. A demand score will wait for trustworthy items-sold volume.",
       });
     } catch (error: any) {
       toast({
@@ -408,7 +410,9 @@ export default function ProductResearchPanel() {
                   <td className="p-2 font-medium">{item.label}</td>
                   <td className="p-2">{String(item.period_end).slice(0, 10)}</td>
                   <td className="p-2 text-right">{item.average_sold_price_cents == null ? "—" : `$${(Number(item.average_sold_price_cents) / 100).toFixed(2)}`}</td>
-                  <td className="p-2 text-right">{item.total_sold == null ? "—" : Number(item.total_sold).toLocaleString()}</td>
+                  <td className="p-2 text-right">{item.total_sold == null
+                    ? item.average_sold_price_cents == null ? "—" : "Pricing only"
+                    : Number(item.total_sold).toLocaleString()}</td>
                 </tr>
               ))}
             </tbody>
