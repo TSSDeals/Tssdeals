@@ -4,6 +4,7 @@ import {
   buildProductResearchUrl,
   buildProductIdentityResearchTarget,
   buildLedgerResearchKey,
+  groupProductResearchIdentityRows,
   productResearchObservationInput,
   productResearchFocus,
   PRODUCT_RESEARCH_CATEGORIES,
@@ -131,6 +132,36 @@ test("golf identity URLs use equipment-specific price floors", () => {
   }));
   assert.equal(url.searchParams.get("minPrice"), "75");
   assert.equal(url.searchParams.get("categoryId"), "115280");
+});
+
+test("Product Research groups golf variants into one model-family cohort", () => {
+  const cohorts = groupProductResearchIdentityRows([
+    {
+      id: "qi10-rh-stiff",
+      family_fingerprint: "qi10-driver-family",
+      canonical_brand: "TaylorMade",
+      product_family: "Qi10",
+      sport_id: "golf",
+      equipment_type_id: "golf-drivers",
+      approved_listings: 3,
+      last_observed: null,
+    },
+    {
+      id: "qi10-lh-regular",
+      family_fingerprint: "qi10-driver-family",
+      canonical_brand: "TaylorMade",
+      product_family: "Qi10",
+      sport_id: "golf",
+      equipment_type_id: "golf-drivers",
+      approved_listings: 5,
+      last_observed: "2026-08-11",
+    },
+  ]);
+  assert.equal(cohorts.length, 1);
+  assert.equal(cohorts[0].id, "qi10-lh-regular");
+  assert.equal(cohorts[0].approved_listings, 8);
+  assert.equal(cohorts[0].variant_count, 2);
+  assert.deepEqual(cohorts[0].identity_ids, ["qi10-rh-stiff", "qi10-lh-regular"]);
 });
 
 test("aggregate observations reject non-eBay sources and impossible price ranges", () => {

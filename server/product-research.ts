@@ -265,6 +265,63 @@ export function buildLedgerResearchKey(brand: unknown, model: unknown) {
     .slice(0, 160);
 }
 
+type ProductResearchIdentityRow = {
+  id: string;
+  family_fingerprint: string;
+  canonical_brand: string;
+  product_family: string;
+  model_code?: string | null;
+  sport_id?: string | null;
+  equipment_type_id?: string | null;
+  approved_listings: number;
+  last_observed?: string | Date | null;
+};
+
+// Variant identities preserve details such as hand, loft, flex, and condition.
+// Product Research should operate at the model-family level so one trustworthy
+// market observation can inform every approved equivalent listing.
+export function groupProductResearchIdentityRows(rows: ProductResearchIdentityRow[]) {
+  const cohorts = new Map<string, ProductResearchIdentityRow & {
+    identity_ids: string[];
+    variant_count: number;
+    representative_listings: number;
+  }>();
+  for (const row of rows) {
+    const approvedListings = Number(row.approved_listings ?? 0);
+    const existing = cohorts.get(row.family_fingerprint);
+    if (!existing) {
+      cohorts.set(row.family_fingerprint, {
+        ...row,
+        approved_listings: approvedListings,
+        identity_ids: [row.id],
+        variant_count: 1,
+        representative_listings: approvedListings,
+      });
+      continue;
+    }
+    existing.approved_listings += approvedListings;
+    existing.identity_ids.push(row.id);
+    existing.variant_count += 1;
+    if (row.last_observed && (!existing.last_observed
+      || new Date(row.last_observed).getTime() > new Date(existing.last_observed).getTime())) {
+      existing.last_observed = row.last_observed;
+    }
+    if (approvedListings > existing.representative_listings) {
+      existing.id = row.id;
+      existing.representative_listings = approvedListings;
+    }
+  }
+  return [...cohorts.values()]
+    .sort((left, right) => {
+      const leftObserved = left.last_observed ? new Date(left.last_observed).getTime() : 0;
+      const rightObserved = right.last_observed ? new Date(right.last_observed).getTime() : 0;
+      if (leftObserved !== rightObserved) return leftObserved - rightObserved;
+      return right.approved_listings - left.approved_listings
+        || left.canonical_brand.localeCompare(right.canonical_brand)
+        || left.product_family.localeCompare(right.product_family);
+    });
+}
+
 export async function saveProductResearchObservation(
   rawInput: unknown,
   recordedBy?: string,
@@ -366,7 +423,7 @@ export async function getProductResearchWorkspace(
   try {
     const [observations, reviews, identities, ledgerModels] = await Promise.all([
       client.query(`
-        SELECT o.*, pi.canonical_brand, pi.product_family, pi.model_code
+        SELECT o.*, pi.family_fingerprint, pi.canonical_brand, pi.product_family, pi.model_code
           FROM product_research_observations o
           LEFT JOIN product_identities pi ON pi.id=o.product_identity_id
          WHERE o.window_days=$1
@@ -393,7 +450,7 @@ export async function getProductResearchWorkspace(
          GROUP BY pi.id
          ORDER BY (max(o.period_end) FILTER (WHERE o.window_days=$1)) ASC NULLS FIRST,
                   count(dpi.deal_id) DESC, pi.canonical_brand, pi.product_family
-         LIMIT 40
+         LIMIT 200
       `, [windowDays, focus === "golf" ? "golf" : "baseball"]),
       client.query(`
         SELECT brand, model, count(*)::int AS sold_count, max(sale_date) AS last_sold
@@ -448,6 +505,15 @@ export async function getProductResearchWorkspace(
         }),
       };
     });
+    const identityCohorts = groupProductResearchIdentityRows(identities.rows).slice(0, 40);
+    const recentObservations = observations.rows.filter((observation, index, rows) => {
+      const cohortKey = observation.family_fingerprint
+        ? `family:${observation.family_fingerprint}`
+        : observation.research_key;
+      return rows.findIndex((candidate) => (candidate.family_fingerprint
+        ? `family:${candidate.family_fingerprint}`
+        : candidate.research_key) === cohortKey) === index;
+    });
     return {
       windowDays,
       focus,
@@ -459,11 +525,11 @@ export async function getProductResearchWorkspace(
           windowDays,
         }),
       })),
-      identities: identities.rows.map((identity) => {
+      identities: identityCohorts.map((identity) => {
         const target = buildProductIdentityResearchTarget(identity);
         return {
           ...identity,
-          researchKey: `identity:${identity.id}`,
+          researchKey: `family:${identity.family_fingerprint}`,
           ...target,
           researchUrl: buildProductResearchUrl({
             queryText: target.queryText,
@@ -484,7 +550,7 @@ export async function getProductResearchWorkspace(
           (model) => model.lastObserved == null && model.reviewOutcome !== "insufficient_data",
         ).length,
       },
-      observations: observations.rows,
+      observations: recentObservations,
       reviews: reviews.rows,
     };
   } finally {
