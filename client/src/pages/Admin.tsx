@@ -308,6 +308,7 @@ export default function AdminPage() {
   });
   const [promotionSyncing, setPromotionSyncing] = useState(false);
   const [promotionReviewingId, setPromotionReviewingId] = useState<string | null>(null);
+  const [promotionSenderReviewingId, setPromotionSenderReviewingId] = useState<string | null>(null);
 
   const syncPromotionInbox = async () => {
     setPromotionSyncing(true);
@@ -343,13 +344,31 @@ export default function AdminPage() {
       await promotionCandidatesQuery.refetch();
       queryClient.invalidateQueries({ queryKey: ["/api/admin/promo-codes"] });
       toast({
-        title: status === "approved" ? "Promotion approved" : status === "rejected" ? "Promotion rejected" : "Promotion returned to pending",
+        title: status === "approved" ? "Promotion approved" : status === "rejected" ? "Marked as not a promotion" : "Promotion returned to pending",
         description: status === "approved" ? "Any detected coupon code is now active in Promo Codes & Coupons." : undefined,
       });
     } catch (error: any) {
       toast({ title: "Review failed", description: error?.message ?? "Unable to update this candidate.", variant: "destructive" });
     } finally {
       setPromotionReviewingId(null);
+    }
+  };
+
+  const reviewPromotionSender = async (id: string, status: "pending" | "trusted" | "blocked") => {
+    setPromotionSenderReviewingId(id);
+    try {
+      await apiRequest("PATCH", `/api/admin/promotions/email-candidates/${id}/sender`, { status });
+      await promotionCandidatesQuery.refetch();
+      toast({
+        title: status === "trusted" ? "Sender trusted" : status === "blocked" ? "Sender blocked" : "Sender policy cleared",
+        description: status === "trusted"
+          ? "Future emails from this supplier will be evaluated, but each promotion still requires approval."
+          : status === "blocked" ? "Future messages from this sender will be ignored." : undefined,
+      });
+    } catch (error: any) {
+      toast({ title: "Sender update failed", description: error?.message ?? "Unable to update this sender.", variant: "destructive" });
+    } finally {
+      setPromotionSenderReviewingId(null);
     }
   };
 
@@ -2308,7 +2327,7 @@ export default function AdminPage() {
                     return (
                       <div key={status} className="rounded-xl border border-border bg-background p-3">
                         <div className="text-2xl font-bold" data-testid={`promotion-count-${status}`}>{count}</div>
-                        <div className="text-xs capitalize text-muted-foreground">{status} candidates</div>
+                        <div className="text-xs capitalize text-muted-foreground">{status === "rejected" ? "not promotions" : `${status} candidates`}</div>
                       </div>
                     );
                   })}
@@ -2333,21 +2352,39 @@ export default function AdminPage() {
                             <div className="truncate font-medium">{candidate.subject}</div>
                             <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-muted-foreground">
                               <span>{candidate.sender_name || candidate.sender_email || candidate.sender_domain || "Unknown sender"}</span>
+                              <span className={cn("font-semibold", candidate.sender_policy_status === "trusted" ? "text-emerald-600" : candidate.sender_policy_status === "blocked" ? "text-destructive" : "text-muted-foreground")}>
+                                Sender: {candidate.sender_policy_status || "unreviewed"}
+                              </span>
                               {candidate.code && <span className="font-semibold text-foreground">Code: {candidate.code}</span>}
                               {candidate.discount_value && <span>{candidate.discount_value}{candidate.discount_type === "percent" ? "% off" : ""}</span>}
                               {candidate.received_at && <span>{new Date(candidate.received_at).toLocaleDateString()}</span>}
                             </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium capitalize">{candidate.status}</span>
+                          <div className="flex flex-wrap items-center justify-end gap-2">
+                            <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium capitalize">{candidate.status === "rejected" ? "not a promotion" : candidate.status}</span>
+                            {candidate.sender_policy_status !== "trusted" && (
+                              <Button size="sm" variant="outline" className="rounded-lg" disabled={promotionSenderReviewingId === candidate.id} onClick={() => reviewPromotionSender(candidate.id, "trusted")} data-testid={`promotion-trust-sender-${candidate.id}`}>
+                                <Check className="mr-1 h-3.5 w-3.5" />Trust Sender
+                              </Button>
+                            )}
+                            {candidate.sender_policy_status !== "blocked" && (
+                              <Button size="sm" variant="outline" className="rounded-lg text-destructive" disabled={promotionSenderReviewingId === candidate.id} onClick={() => reviewPromotionSender(candidate.id, "blocked")} data-testid={`promotion-block-sender-${candidate.id}`}>
+                                <X className="mr-1 h-3.5 w-3.5" />Block Sender
+                              </Button>
+                            )}
+                            {candidate.sender_policy_status && (
+                              <Button size="sm" variant="ghost" className="rounded-lg" disabled={promotionSenderReviewingId === candidate.id} onClick={() => reviewPromotionSender(candidate.id, "pending")} data-testid={`promotion-clear-sender-${candidate.id}`}>
+                                Clear Sender
+                              </Button>
+                            )}
                             {candidate.status !== "approved" && (
                               <Button size="sm" className="rounded-lg bg-emerald-600 text-white hover:bg-emerald-700" disabled={promotionReviewingId === candidate.id} onClick={() => reviewPromotionCandidate(candidate.id, "approved")} data-testid={`promotion-approve-${candidate.id}`}>
-                                <Check className="mr-1 h-3.5 w-3.5" />Approve
+                                <Check className="mr-1 h-3.5 w-3.5" />Approve Promotion
                               </Button>
                             )}
                             {candidate.status !== "rejected" && (
                               <Button size="sm" variant="destructive" className="rounded-lg" disabled={promotionReviewingId === candidate.id} onClick={() => reviewPromotionCandidate(candidate.id, "rejected")} data-testid={`promotion-reject-${candidate.id}`}>
-                                <X className="mr-1 h-3.5 w-3.5" />Reject
+                                <X className="mr-1 h-3.5 w-3.5" />Not a Promotion
                               </Button>
                             )}
                             {candidate.status !== "pending" && (

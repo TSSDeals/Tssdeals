@@ -10,11 +10,22 @@ const GMAIL_API = "https://gmail.googleapis.com/gmail/v1";
 const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 const REQUIRED_EMAIL = "admin@tssdeals.com";
 const REVIEW_STATUSES = new Set(["pending", "approved", "rejected"]);
+const SENDER_STATUSES = new Set(["pending", "trusted", "blocked"]);
 
 export function normalizePromotionReviewStatus(value: unknown) {
   const status = String(value ?? "").trim().toLowerCase();
   if (!REVIEW_STATUSES.has(status)) throw new Error("Status must be pending, approved, or rejected");
   return status as "pending" | "approved" | "rejected";
+}
+
+export function normalizePromotionSenderStatus(value: unknown) {
+  const status = String(value ?? "").trim().toLowerCase();
+  if (!SENDER_STATUSES.has(status)) throw new Error("Sender status must be pending, trusted, or blocked");
+  return status as "pending" | "trusted" | "blocked";
+}
+
+export function promotionSenderKey(input: { senderDomain?: unknown; senderEmail?: unknown }) {
+  return String(input.senderDomain || input.senderEmail || "").trim().toLowerCase();
 }
 
 function required(name: string) {
@@ -139,11 +150,14 @@ export async function syncGmailPromotions(userId: string) {
     ? Math.max(0, Math.floor(new Date(row.last_success_at).getTime() / 1000) - 300)
     : Math.floor(Date.now() / 1000) - 30 * 86400;
   const listing = await gmailJson(`${GMAIL_API}/users/me/messages?maxResults=100&q=${encodeURIComponent(`after:${after}`)}`, token);
+  const senderPoliciesResult = await db.execute(sql`SELECT sender_key, status FROM promotion_sender_policies`);
+  const senderPolicies = new Map(((senderPoliciesResult as any).rows ?? []).map((policy: any) => [String(policy.sender_key), String(policy.status)]));
   let count = 0;
   for (const item of listing.messages || []) {
     const message = await gmailJson(`${GMAIL_API}/users/me/messages/${encodeURIComponent(item.id)}?format=full`, token);
     const candidate = parseGmailPromotion(message);
     if (!candidate.code && !candidate.discountType && !candidate.landingUrl) continue;
+    if (senderPolicies.get(promotionSenderKey(candidate)) === "blocked") continue;
     const source = candidate.senderDomain ? await db.execute(sql`
       SELECT id FROM sources WHERE lower(base_url) LIKE ${`%${candidate.senderDomain}%`} LIMIT 1
     `) : null;
@@ -208,7 +222,11 @@ export function registerGmailPromotionRoutes(app: Express, isAdmin: RequestHandl
     await db.execute(sql`DELETE FROM gmail_promotion_connections WHERE user_id=${userId(req)}`); res.json({ ok: true });
   });
   app.get("/api/admin/promotions/email-candidates", isAdmin, async (_req, res) => {
-    const result = await db.execute(sql`SELECT * FROM promotion_inbox_candidates ORDER BY received_at DESC NULLS LAST LIMIT 500`);
+    const result = await db.execute(sql`SELECT candidate.*, policy.status AS sender_policy_status
+      FROM promotion_inbox_candidates candidate
+      LEFT JOIN promotion_sender_policies policy
+        ON policy.sender_key=lower(COALESCE(candidate.sender_domain, candidate.sender_email))
+      ORDER BY candidate.received_at DESC NULLS LAST LIMIT 500`);
     res.json((result as any).rows ?? []);
   });
   app.patch("/api/admin/promotions/email-candidates/:id", isAdmin, async (req: any, res) => {
@@ -235,6 +253,32 @@ export function registerGmailPromotionRoutes(app: Express, isAdmin: RequestHandl
       res.json(candidate);
     } catch (error: any) {
       res.status(400).json({ message: error?.message || "Unable to review promotion candidate" });
+    }
+  });
+  app.patch("/api/admin/promotions/email-candidates/:id/sender", isAdmin, async (req: any, res) => {
+    try {
+      const status = normalizePromotionSenderStatus(req.body?.status);
+      const candidateResult = await db.execute(sql`SELECT * FROM promotion_inbox_candidates WHERE id=${String(req.params.id)} LIMIT 1`);
+      const candidate = ((candidateResult as any).rows ?? [])[0];
+      if (!candidate) return res.status(404).json({ message: "Promotion candidate not found" });
+      const senderKey = promotionSenderKey({ senderDomain: candidate.sender_domain, senderEmail: candidate.sender_email });
+      if (!senderKey) return res.status(400).json({ message: "This email has no verifiable sender address" });
+
+      if (status === "pending") {
+        await db.execute(sql`DELETE FROM promotion_sender_policies WHERE sender_key=${senderKey}`);
+      } else {
+        await db.execute(sql`INSERT INTO promotion_sender_policies (sender_key, sender_domain, sender_email, sender_name, status)
+          VALUES (${senderKey}, ${candidate.sender_domain}, ${candidate.sender_email}, ${candidate.sender_name}, ${status})
+          ON CONFLICT(sender_key) DO UPDATE SET sender_domain=EXCLUDED.sender_domain, sender_email=EXCLUDED.sender_email,
+            sender_name=EXCLUDED.sender_name, status=EXCLUDED.status, updated_at=NOW()`);
+      }
+      if (status === "blocked") {
+        await db.execute(sql`UPDATE promotion_inbox_candidates SET status='rejected', updated_at=NOW()
+          WHERE lower(COALESCE(sender_domain, sender_email))=${senderKey} AND status='pending'`);
+      }
+      res.json({ senderKey, status });
+    } catch (error: any) {
+      res.status(400).json({ message: error?.message || "Unable to update sender trust" });
     }
   });
 }

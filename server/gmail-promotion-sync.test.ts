@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildGmailAuthorizeUrl, normalizePromotionReviewStatus, parseGmailPromotion } from "./gmail-promotion-sync";
+import { buildGmailAuthorizeUrl, normalizePromotionReviewStatus, normalizePromotionSenderStatus, parseGmailPromotion, promotionSenderKey } from "./gmail-promotion-sync";
 
 test("Google authorization is read-only and locked to the promotion inbox", () => {
   const url = new URL(buildGmailAuthorizeUrl({ clientId: "client", redirectUri: "https://www.tssdeals.com/callback", state: "signed" }));
@@ -14,6 +14,15 @@ test("promotion review accepts only the three explicit workflow states", () => {
   assert.equal(normalizePromotionReviewStatus("rejected"), "rejected");
   assert.equal(normalizePromotionReviewStatus("pending"), "pending");
   assert.throws(() => normalizePromotionReviewStatus("active"), /pending, approved, or rejected/);
+});
+
+test("sender trust is independent from promotion approval", () => {
+  assert.equal(normalizePromotionSenderStatus(" TRUSTED "), "trusted");
+  assert.equal(normalizePromotionSenderStatus("blocked"), "blocked");
+  assert.equal(normalizePromotionSenderStatus("pending"), "pending");
+  assert.throws(() => normalizePromotionSenderStatus("approved"), /pending, trusted, or blocked/);
+  assert.equal(promotionSenderKey({ senderDomain: " BaselineSports.US ", senderEmail: "deals@example.com" }), "baselinesports.us");
+  assert.equal(promotionSenderKey({ senderEmail: " Deals@Example.com " }), "deals@example.com");
 });
 
 test("promotion email parsing captures sender, coupon, discount, and landing page", () => {
