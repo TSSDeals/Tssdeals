@@ -309,6 +309,9 @@ export default function AdminPage() {
   const [promotionSyncing, setPromotionSyncing] = useState(false);
   const [promotionReviewingId, setPromotionReviewingId] = useState<string | null>(null);
   const [promotionSenderReviewingId, setPromotionSenderReviewingId] = useState<string | null>(null);
+  const [promotionHistoryOpen, setPromotionHistoryOpen] = useState(false);
+  const pendingPromotionCandidates = (promotionCandidatesQuery.data ?? []).filter(candidate => candidate.status === "pending");
+  const reviewedPromotionCandidates = (promotionCandidatesQuery.data ?? []).filter(candidate => candidate.status !== "pending");
 
   const syncPromotionInbox = async () => {
     setPromotionSyncing(true);
@@ -2335,18 +2338,21 @@ export default function AdminPage() {
 
                 <div className="overflow-hidden rounded-2xl border border-border">
                   <div className="flex items-center justify-between border-b border-border bg-muted/30 px-4 py-3">
-                    <div className="font-semibold">Recent promotion candidates</div>
+                    <div>
+                      <div className="font-semibold">Pending promotion review</div>
+                      <div className="text-xs text-muted-foreground">Processed emails automatically move to History.</div>
+                    </div>
                     <Button variant="ghost" size="sm" onClick={() => promotionCandidatesQuery.refetch()} disabled={promotionCandidatesQuery.isFetching} data-testid="promotion-candidates-refresh">
                       <RefreshCw className={cn("mr-1.5 h-3.5 w-3.5", promotionCandidatesQuery.isFetching && "animate-spin")} /> Refresh
                     </Button>
                   </div>
-                  {(promotionCandidatesQuery.data ?? []).length === 0 ? (
+                  {pendingPromotionCandidates.length === 0 ? (
                     <div className="p-6 text-center text-sm text-muted-foreground">
-                      No candidates yet. Use Scan Inbox to check recent retailer and affiliate emails.
+                      No promotions are waiting for review. Use Scan Inbox to check recent retailer and affiliate emails.
                     </div>
                   ) : (
                     <div className="max-h-96 divide-y divide-border overflow-y-auto">
-                      {(promotionCandidatesQuery.data ?? []).slice(0, 25).map(candidate => (
+                      {pendingPromotionCandidates.slice(0, 25).map(candidate => (
                         <div key={candidate.id} className="grid gap-2 px-4 py-3 md:grid-cols-[1fr_auto] md:items-center" data-testid={`promotion-candidate-${candidate.id}`}>
                           <div className="min-w-0">
                             <div className="truncate font-medium">{candidate.subject}</div>
@@ -2401,6 +2407,46 @@ export default function AdminPage() {
                         </div>
                       ))}
                     </div>
+                  )}
+                </div>
+
+                <div className="overflow-hidden rounded-2xl border border-border">
+                  <button type="button" className="flex w-full items-center justify-between bg-muted/30 px-4 py-3 text-left" onClick={() => setPromotionHistoryOpen(open => !open)} data-testid="promotion-history-toggle">
+                    <div>
+                      <div className="font-semibold">History</div>
+                      <div className="text-xs text-muted-foreground">{reviewedPromotionCandidates.length} approved or dismissed emails</div>
+                    </div>
+                    <ChevronDown className={cn("h-4 w-4 transition-transform", promotionHistoryOpen && "rotate-180")} />
+                  </button>
+                  {promotionHistoryOpen && (
+                    reviewedPromotionCandidates.length === 0 ? (
+                      <div className="p-5 text-center text-sm text-muted-foreground">No reviewed promotions yet.</div>
+                    ) : (
+                      <div className="max-h-80 divide-y divide-border overflow-y-auto">
+                        {reviewedPromotionCandidates.slice(0, 100).map(candidate => (
+                          <div key={candidate.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between" data-testid={`promotion-history-${candidate.id}`}>
+                            <div className="min-w-0">
+                              <div className="truncate text-sm font-medium">{candidate.subject}</div>
+                              <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                                <span>{candidate.sender_name || candidate.sender_email || candidate.sender_domain || "Unknown sender"}</span>
+                                {candidate.received_at && <span>{new Date(candidate.received_at).toLocaleDateString()}</span>}
+                                <span className="font-semibold capitalize text-foreground">{candidate.status === "rejected" ? "Not a promotion" : candidate.status}</span>
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Button size="sm" variant="ghost" className="rounded-lg" disabled={promotionReviewingId === candidate.id} onClick={() => reviewPromotionCandidate(candidate.id, "pending")} data-testid={`promotion-history-undo-${candidate.id}`}>
+                                Undo
+                              </Button>
+                              {candidate.landing_url && (
+                                <Button asChild variant="outline" size="sm" className="rounded-lg">
+                                  <a href={candidate.landing_url} target="_blank" rel="noreferrer"><ExternalLink className="mr-1.5 h-3.5 w-3.5" />Open</a>
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )
                   )}
                 </div>
               </div>
