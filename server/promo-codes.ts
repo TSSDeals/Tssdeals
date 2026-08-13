@@ -9,6 +9,7 @@ import {
   parseCJLinkSearchXml,
   parseCJPromotionDate,
 } from "./cj-promotions";
+import { observeAffiliateAdvertiser } from "./promotion-intelligence";
 
 async function upsertPromo(values: {
   source: string; advertiserId: string | null; advertiserName: string;
@@ -16,6 +17,12 @@ async function upsertPromo(values: {
   endDate: Date | null; discountType: string | null; discountValue: string | null;
   trackingUrl: string | null; raw: any;
 }) {
+  await observeAffiliateAdvertiser({
+    network: values.source,
+    advertiserId: values.advertiserId,
+    advertiserName: values.advertiserName,
+    evidence: { promotion: values.description, trackingUrl: values.trackingUrl },
+  });
   const identityCondition = values.code
     ? eq(promoCodes.code, values.code)
     : eq(promoCodes.trackingUrl, values.trackingUrl ?? "");

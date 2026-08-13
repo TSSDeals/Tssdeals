@@ -35,6 +35,12 @@ export type ProductIdentityProposal = {
     shaftFlex: "L" | "A" | "R" | "S" | "X" | null;
     setComposition: string | null;
     clubComponent: "complete" | "head_only" | null;
+    editionType: "stock" | "seasonal" | "gotm" | "exclusive";
+    releaseSeason: "spring" | "summer" | "fall" | "winter" | null;
+    releaseMonth: string | null;
+    releaseYear: number | null;
+    colorway: string | null;
+    exclusiveTo: string | null;
     condition: string | null;
   };
   confidence: "high" | "medium";
@@ -192,6 +198,62 @@ function certification(text: string, raw: Record<string, unknown>): string | nul
   return candidate ? candidate.toUpperCase() : null;
 }
 
+const MONTHS: Record<string, string> = {
+  jan: "January", january: "January", feb: "February", february: "February",
+  mar: "March", march: "March", apr: "April", april: "April", may: "May",
+  jun: "June", june: "June", jul: "July", july: "July", aug: "August", august: "August",
+  sep: "September", sept: "September", september: "September", oct: "October", october: "October",
+  nov: "November", november: "November", dec: "December", december: "December",
+};
+
+function normalizedYear(value: string): number | null {
+  const number = Number(value.replace(/^['’]/, ""));
+  if (!Number.isInteger(number)) return null;
+  if (number >= 20 && number <= 99) return 2000 + number;
+  return number >= 2000 && number <= 2099 ? number : null;
+}
+
+function releaseMetadata(text: string, raw: Record<string, unknown>): {
+  editionType: "stock" | "seasonal" | "gotm" | "exclusive";
+  releaseSeason: "spring" | "summer" | "fall" | "winter" | null;
+  releaseMonth: string | null;
+  releaseYear: number | null;
+  colorway: string | null;
+  exclusiveTo: string | null;
+} {
+  const structuredEdition = firstRaw(raw, ["editionType", "edition", "collection", "releaseName"]);
+  const structuredSeason = firstRaw(raw, ["releaseSeason", "season"]);
+  const structuredYear = firstRaw(raw, ["releaseYear", "modelYear", "year"]);
+  const structuredColorway = firstRaw(raw, ["colorway", "colorName", "colourName", "color"]);
+  const structuredExclusive = firstRaw(raw, ["exclusiveTo", "retailerExclusive", "exclusiveRetailer"]);
+  const value = `${text} ${structuredEdition} ${structuredSeason}`;
+
+  const gotm = value.match(/\b(?:gotm|glove\s+of\s+the\s+month)\b(?:\s*[-:–—]?\s*)?(?:(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?))?(?:\s*[,/'’-]*\s*)((?:20)?\d{2})?/i);
+  const season = value.match(/\b(spring|summer|fall|autumn|winter)\s*[-/'’ ]?\s*((?:20)?\d{2})\b/i);
+  const exclusive = structuredExclusive || value.match(/\b(?:exclusive(?:ly)?\s+(?:for|to|at)|(?:store|retailer|dealer)\s+exclusive)\s+([A-Za-z0-9][A-Za-z0-9 &'’.-]{1,60})/i)?.[1]?.trim() || "";
+  const releaseSeason = season
+    ? (season[1].toLowerCase() === "autumn" ? "fall" : season[1].toLowerCase()) as "spring" | "summer" | "fall" | "winter"
+    : null;
+  const releaseMonth = gotm?.[1] ? MONTHS[gotm[1].toLowerCase()] ?? null : null;
+  const releaseYear = normalizedYear(gotm?.[2] || season?.[2] || structuredYear);
+  const editionType = gotm
+    ? "gotm"
+    : exclusive
+      ? "exclusive"
+      : releaseSeason
+        ? "seasonal"
+        : "stock";
+
+  return {
+    editionType,
+    releaseSeason,
+    releaseMonth,
+    releaseYear,
+    colorway: structuredColorway || null,
+    exclusiveTo: exclusive || null,
+  };
+}
+
 const GOLF_ACCESSORY =
   /\b(?:headcovers?|club covers?|grip kits?|adapters?|sleeves?|ferrules?|wrenches?|brushes?|towels?|cleaners?)\b|\b(?:grip|weight)\s+only\b/i;
 
@@ -265,6 +327,7 @@ export function proposeProductIdentity(input: ProductIdentityInput): ProductIden
   const dimensions = batDimensions(combined);
   const drop = input.dropWeight
     ?? (dimensions.length && dimensions.weight ? dimensions.length - dimensions.weight : null);
+  const release = releaseMetadata(combined, raw);
   const variant = {
     size: gloveSize || normalizedText(input.sizeNumber) || null,
     throwHand: equipmentTypeId.includes("glove") ? throwHand(combined) : null,
@@ -282,6 +345,7 @@ export function proposeProductIdentity(input: ProductIdentityInput): ProductIden
         ? "head_only"
         : "complete"
       : null,
+    ...release,
     condition: normalizedText(input.condition).toLowerCase() || null,
   };
   if (sportId === "golf" && GOLF_ACCESSORY.test(combined)) return null;
@@ -301,6 +365,10 @@ export function proposeProductIdentity(input: ProductIdentityInput): ProductIden
   if (variant.shaftFlex) evidence.push("shaft flex");
   if (variant.setComposition) evidence.push("iron set composition");
   if (variant.clubComponent === "head_only") evidence.push("head-only club component");
+  if (variant.editionType !== "stock") evidence.push(`${variant.editionType} edition`);
+  if (variant.releaseSeason || variant.releaseMonth || variant.releaseYear) evidence.push("release period");
+  if (variant.colorway) evidence.push("named colorway");
+  if (variant.exclusiveTo) evidence.push("exclusive retailer or collection");
 
   const familyKey = [
     canonicalToken(canonicalBrand), sportId, equipmentTypeId,
@@ -310,6 +378,8 @@ export function proposeProductIdentity(input: ProductIdentityInput): ProductIden
     ...familyKey, variant.size, variant.throwHand, variant.length, variant.weight,
     variant.drop, variant.certification, variant.golfHand, variant.loft,
     variant.shaftFlex, variant.setComposition, variant.clubComponent, variant.condition,
+    variant.editionType, variant.releaseSeason, variant.releaseMonth, variant.releaseYear,
+    canonicalToken(variant.colorway || ""), canonicalToken(variant.exclusiveTo || ""),
   ];
   return {
     dealId: input.id,

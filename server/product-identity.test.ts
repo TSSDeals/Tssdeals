@@ -48,8 +48,42 @@ test("normalizes equivalent Supra bat dimensions without collapsing condition", 
   assert.deepEqual(first.variant, {
     size: null, throwHand: null, length: 27, weight: 17, drop: 10,
     certification: "USSSA", golfHand: null, loft: null, shaftFlex: null,
-    setComposition: null, clubComponent: null, condition: "new",
+    setComposition: null, clubComponent: null, editionType: "stock",
+    releaseSeason: null, releaseMonth: null, releaseYear: null, colorway: null,
+    exclusiveTo: null, condition: "new",
   });
+});
+
+test("keeps model family stable while separating seasonal, GOTM, and exclusive glove variants", () => {
+  const common = {
+    brand: "Wilson", sportId: "baseball", equipmentTypeId: "bb-gloves", condition: "new",
+  };
+  const stock = proposeProductIdentity({
+    ...common, id: "stock", title: "Wilson A2000 1786 11.5 RHT Baseball Glove",
+  });
+  const spring = proposeProductIdentity({
+    ...common, id: "spring", title: "Wilson A2000 1786 Spring '26 11.5 RHT Baseball Glove",
+    raw: { colorway: "Blonde / Saddle Tan" },
+  });
+  const gotm = proposeProductIdentity({
+    ...common, id: "gotm", title: "Wilson A2000 1786 GOTM March 2026 11.5 RHT",
+  });
+  const exclusive = proposeProductIdentity({
+    ...common, id: "exclusive", title: "Wilson A2000 1786 11.5 RHT Store Exclusive",
+    raw: { exclusiveRetailer: "Ball Glove Blueprint", colorName: "Carolina Blue / Pink" },
+  });
+  assert.ok(stock && spring && gotm && exclusive);
+  assert.equal(new Set([stock, spring, gotm, exclusive].map((item) => item.familyFingerprint)).size, 1);
+  assert.equal(new Set([stock, spring, gotm, exclusive].map((item) => item.variantFingerprint)).size, 4);
+  assert.deepEqual({
+    type: spring.variant.editionType, season: spring.variant.releaseSeason,
+    year: spring.variant.releaseYear, colorway: spring.variant.colorway,
+  }, { type: "seasonal", season: "spring", year: 2026, colorway: "Blonde / Saddle Tan" });
+  assert.deepEqual({
+    type: gotm.variant.editionType, month: gotm.variant.releaseMonth, year: gotm.variant.releaseYear,
+  }, { type: "gotm", month: "March", year: 2026 });
+  assert.equal(exclusive.variant.editionType, "exclusive");
+  assert.equal(exclusive.variant.exclusiveTo, "Ball Glove Blueprint");
 });
 
 test("golf identities preserve loft, handedness, flex, and component differences", () => {
