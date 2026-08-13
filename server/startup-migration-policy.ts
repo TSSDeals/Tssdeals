@@ -107,6 +107,12 @@ export const STARTUP_MIGRATION_MANIFEST = [
     kind: "structural",
     description: "Encrypted read-only Gmail connection and review-first promotion and affiliate candidates",
   },
+  {
+    id: "20260813_017_promotion_sender_policies",
+    checksum: "76424a357eb8ef93957d93225f83292659f80dde388d95e14fa232509f460133",
+    kind: "structural",
+    description: "Independent trusted and blocked sender policies for promotion inbox review",
+  },
 ] as const;
 
 export type ApprovedSeedState = "empty" | "satisfied" | "partial";
