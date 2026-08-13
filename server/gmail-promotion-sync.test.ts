@@ -1,12 +1,19 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildGmailAuthorizeUrl, parseGmailPromotion } from "./gmail-promotion-sync";
+import { buildGmailAuthorizeUrl, normalizePromotionReviewStatus, parseGmailPromotion } from "./gmail-promotion-sync";
 
 test("Google authorization is read-only and locked to the promotion inbox", () => {
   const url = new URL(buildGmailAuthorizeUrl({ clientId: "client", redirectUri: "https://www.tssdeals.com/callback", state: "signed" }));
   assert.equal(url.searchParams.get("scope"), "https://www.googleapis.com/auth/gmail.readonly");
   assert.equal(url.searchParams.get("login_hint"), "admin@tssdeals.com");
   assert.equal(url.searchParams.get("access_type"), "offline");
+});
+
+test("promotion review accepts only the three explicit workflow states", () => {
+  assert.equal(normalizePromotionReviewStatus(" APPROVED "), "approved");
+  assert.equal(normalizePromotionReviewStatus("rejected"), "rejected");
+  assert.equal(normalizePromotionReviewStatus("pending"), "pending");
+  assert.throws(() => normalizePromotionReviewStatus("active"), /pending, approved, or rejected/);
 });
 
 test("promotion email parsing captures sender, coupon, discount, and landing page", () => {

@@ -9,6 +9,13 @@ const GOOGLE_TOKEN = "https://oauth2.googleapis.com/token";
 const GMAIL_API = "https://gmail.googleapis.com/gmail/v1";
 const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 const REQUIRED_EMAIL = "admin@tssdeals.com";
+const REVIEW_STATUSES = new Set(["pending", "approved", "rejected"]);
+
+export function normalizePromotionReviewStatus(value: unknown) {
+  const status = String(value ?? "").trim().toLowerCase();
+  if (!REVIEW_STATUSES.has(status)) throw new Error("Status must be pending, approved, or rejected");
+  return status as "pending" | "approved" | "rejected";
+}
 
 function required(name: string) {
   const value = String(process.env[name] ?? "").trim();
@@ -203,5 +210,31 @@ export function registerGmailPromotionRoutes(app: Express, isAdmin: RequestHandl
   app.get("/api/admin/promotions/email-candidates", isAdmin, async (_req, res) => {
     const result = await db.execute(sql`SELECT * FROM promotion_inbox_candidates ORDER BY received_at DESC NULLS LAST LIMIT 500`);
     res.json((result as any).rows ?? []);
+  });
+  app.patch("/api/admin/promotions/email-candidates/:id", isAdmin, async (req: any, res) => {
+    try {
+      const status = normalizePromotionReviewStatus(req.body?.status);
+      const result = await db.execute(sql`UPDATE promotion_inbox_candidates
+        SET status=${status}, updated_at=NOW() WHERE id=${String(req.params.id)} RETURNING *`);
+      const candidate = ((result as any).rows ?? [])[0];
+      if (!candidate) return res.status(404).json({ message: "Promotion candidate not found" });
+
+      if (status === "approved" && candidate.code) {
+        await db.execute(sql`INSERT INTO promo_codes (
+          source, advertiser_name, code, description, start_date, end_date, status,
+          discount_type, discount_value, tracking_url, raw, updated_at
+        ) SELECT 'gmail', ${candidate.sender_name || candidate.sender_domain || candidate.sender_email || "Email promotion"},
+          ${candidate.code}, ${candidate.description || candidate.subject}, ${candidate.starts_at}, ${candidate.ends_at},
+          'active', ${candidate.discount_type}, ${candidate.discount_value}, ${candidate.landing_url},
+          ${JSON.stringify({ promotionInboxCandidateId: candidate.id, gmailMessageId: candidate.gmail_message_id })}::jsonb, NOW()
+        WHERE NOT EXISTS (
+          SELECT 1 FROM promo_codes WHERE source='gmail' AND code=${candidate.code}
+            AND advertiser_name=${candidate.sender_name || candidate.sender_domain || candidate.sender_email || "Email promotion"}
+        )`);
+      }
+      res.json(candidate);
+    } catch (error: any) {
+      res.status(400).json({ message: error?.message || "Unable to review promotion candidate" });
+    }
   });
 }

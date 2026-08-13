@@ -307,6 +307,7 @@ export default function AdminPage() {
     enabled: isAuthenticated && isAdmin,
   });
   const [promotionSyncing, setPromotionSyncing] = useState(false);
+  const [promotionReviewingId, setPromotionReviewingId] = useState<string | null>(null);
 
   const syncPromotionInbox = async () => {
     setPromotionSyncing(true);
@@ -332,6 +333,23 @@ export default function AdminPage() {
       toast({ title: "Promotion inbox disconnected" });
     } catch (error: any) {
       toast({ title: "Disconnect failed", description: error?.message ?? "Unable to disconnect Gmail.", variant: "destructive" });
+    }
+  };
+
+  const reviewPromotionCandidate = async (id: string, status: "pending" | "approved" | "rejected") => {
+    setPromotionReviewingId(id);
+    try {
+      await apiRequest("PATCH", `/api/admin/promotions/email-candidates/${id}`, { status });
+      await promotionCandidatesQuery.refetch();
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/promo-codes"] });
+      toast({
+        title: status === "approved" ? "Promotion approved" : status === "rejected" ? "Promotion rejected" : "Promotion returned to pending",
+        description: status === "approved" ? "Any detected coupon code is now active in Promo Codes & Coupons." : undefined,
+      });
+    } catch (error: any) {
+      toast({ title: "Review failed", description: error?.message ?? "Unable to update this candidate.", variant: "destructive" });
+    } finally {
+      setPromotionReviewingId(null);
     }
   };
 
@@ -2322,6 +2340,21 @@ export default function AdminPage() {
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium capitalize">{candidate.status}</span>
+                            {candidate.status !== "approved" && (
+                              <Button size="sm" className="rounded-lg bg-emerald-600 text-white hover:bg-emerald-700" disabled={promotionReviewingId === candidate.id} onClick={() => reviewPromotionCandidate(candidate.id, "approved")} data-testid={`promotion-approve-${candidate.id}`}>
+                                <Check className="mr-1 h-3.5 w-3.5" />Approve
+                              </Button>
+                            )}
+                            {candidate.status !== "rejected" && (
+                              <Button size="sm" variant="destructive" className="rounded-lg" disabled={promotionReviewingId === candidate.id} onClick={() => reviewPromotionCandidate(candidate.id, "rejected")} data-testid={`promotion-reject-${candidate.id}`}>
+                                <X className="mr-1 h-3.5 w-3.5" />Reject
+                              </Button>
+                            )}
+                            {candidate.status !== "pending" && (
+                              <Button size="sm" variant="ghost" className="rounded-lg" disabled={promotionReviewingId === candidate.id} onClick={() => reviewPromotionCandidate(candidate.id, "pending")} data-testid={`promotion-pending-${candidate.id}`}>
+                                Undo
+                              </Button>
+                            )}
                             {candidate.landing_url && (
                               <Button asChild variant="outline" size="sm" className="rounded-lg">
                                 <a href={candidate.landing_url} target="_blank" rel="noreferrer"><ExternalLink className="mr-1.5 h-3.5 w-3.5" />Open</a>
