@@ -163,6 +163,8 @@ export const deals = pgTable(
     foundAt: timestamp("found_at").notNull().defaultNow(),
     lastSeenAt: timestamp("last_seen_at").notNull().defaultNow(),
     lastPriceConfirmedAt: timestamp("last_price_confirmed_at"),
+    availabilityStatus: varchar("availability_status", { length: 20 }).notNull().default("active"),
+    unavailableAt: timestamp("unavailable_at"),
 
     subFilterId: varchar("sub_filter_id").references(
       () => equipmentSubFilters.id,

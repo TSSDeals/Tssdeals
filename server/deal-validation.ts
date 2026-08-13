@@ -137,9 +137,10 @@ export async function runDealValidation(
     }
 
     if (deadEbayIds.length > 0) {
-      const batchDelete = 500;
-      for (let i = 0; i < deadEbayIds.length; i += batchDelete) {
-        await db.delete(deals).where(inArray(deals.id, deadEbayIds.slice(i, i + batchDelete)));
+      const batchUpdate = 500;
+      for (let i = 0; i < deadEbayIds.length; i += batchUpdate) {
+        await db.update(deals).set({ availabilityStatus: "unavailable", unavailableAt: new Date() })
+          .where(inArray(deals.id, deadEbayIds.slice(i, i + batchUpdate)));
       }
       result.ebayRemoved = deadEbayIds.length;
     }
@@ -175,7 +176,8 @@ export async function runDealValidation(
   }
 
   if (deadSsIds.length > 0) {
-    await db.delete(deals).where(inArray(deals.id, deadSsIds));
+    await db.update(deals).set({ availabilityStatus: "unavailable", unavailableAt: new Date() })
+      .where(inArray(deals.id, deadSsIds));
     result.ssRemoved = deadSsIds.length;
   }
 

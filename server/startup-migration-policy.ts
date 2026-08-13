@@ -95,6 +95,12 @@ export const STARTUP_MIGRATION_MANIFEST = [
     kind: "structural",
     description: "Manual MSRP and normal selling price fields for administrator deal editing",
   },
+  {
+    id: "20260813_015_deal_availability_lifecycle",
+    checksum: "a8f98df16ddc246077f340b9bd68cf8de6abdf9f32d263407a2381caf2c8154b",
+    kind: "structural",
+    description: "Soft availability lifecycle for current, stale, and unavailable deal listings",
+  },
 ] as const;
 
 export type ApprovedSeedState = "empty" | "satisfied" | "partial";
