@@ -35,7 +35,7 @@ import SidelineSwapSync from "@/components/SidelineSwapSync";
 import PromoCodes from "@/components/PromoCodes";
 import { DataReportingPanel } from "@/components/DataReportingPanel";
 import ProductResearchPanel from "@/components/ProductResearchPanel";
-import { Activity, AlertTriangle, ArrowDown, ArrowUp, Ban, BarChart3, Calendar, Check, ChevronDown, ChevronUp, Database, Download, ExternalLink, Eye, EyeOff, FileText, Filter, Gift, Globe, GripVertical, Link2, Link2Off, Loader2, MousePointerClick, Package, Pencil, PlayCircle, Plus, RefreshCw, Search, Shield, ShieldCheck, ShoppingBag, ShoppingCart, Sparkles, Store, Terminal, TicketX, Trash2, TrendingDown, TrendingUp, Users, X, Zap } from "lucide-react";
+import { Activity, AlertTriangle, ArrowDown, ArrowUp, Ban, BarChart3, Calendar, Check, ChevronDown, ChevronUp, Database, Download, ExternalLink, Eye, EyeOff, FileText, Filter, Gift, Globe, GripVertical, Inbox, Link2, Link2Off, Loader2, Mail, MousePointerClick, Package, Pencil, PlayCircle, Plus, RefreshCw, Search, Shield, ShieldCheck, ShoppingBag, ShoppingCart, Sparkles, Store, Terminal, TicketX, Trash2, TrendingDown, TrendingUp, Users, X, Zap } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { ClassificationReviewItem } from "@shared/schema";
@@ -55,6 +55,7 @@ const ADMIN_SECTIONS: { id: string; label: string }[] = [
   { id: "ebay-pricing", label: "eBay Pricing Analysis" },
   { id: "sidelineswap-push", label: "SidelineSwap Push" },
   { id: "promo-codes", label: "Promo Codes & Coupons" },
+  { id: "promotion-inbox", label: "Promotion Inbox" },
   { id: "sms-blast", label: "SMS Deal Blast" },
   { id: "featured-deals", label: "Featured Deals" },
   { id: "product-identity", label: "Product Identity Brain" },
@@ -286,6 +287,53 @@ export default function AdminPage() {
     queryKey: ["/api/admin/popular-products"],
     enabled: isAuthenticated && isAdmin,
   });
+
+  const gmailPromotionStatusQuery = useQuery<{
+    configured: boolean;
+    connected: boolean;
+    emailAddress: string;
+    scope: string | null;
+    lastSyncAt: string | null;
+    lastSuccessAt: string | null;
+    lastError: string | null;
+    lastMessageCount: number;
+  }>({
+    queryKey: ["/api/admin/promotions/gmail/status"],
+    enabled: isAuthenticated && isAdmin,
+  });
+
+  const promotionCandidatesQuery = useQuery<any[]>({
+    queryKey: ["/api/admin/promotions/email-candidates"],
+    enabled: isAuthenticated && isAdmin,
+  });
+  const [promotionSyncing, setPromotionSyncing] = useState(false);
+
+  const syncPromotionInbox = async () => {
+    setPromotionSyncing(true);
+    try {
+      const response = await apiRequest("POST", "/api/admin/promotions/gmail/sync");
+      const result = await response.json() as { messagesExamined?: number; candidates?: number };
+      await Promise.all([gmailPromotionStatusQuery.refetch(), promotionCandidatesQuery.refetch()]);
+      toast({
+        title: "Promotion inbox scanned",
+        description: `${result.messagesExamined ?? 0} emails checked; ${result.candidates ?? 0} promotion candidates processed.`,
+      });
+    } catch (error: any) {
+      toast({ title: "Inbox scan failed", description: error?.message ?? "Unable to scan Gmail.", variant: "destructive" });
+    } finally {
+      setPromotionSyncing(false);
+    }
+  };
+
+  const disconnectPromotionInbox = async () => {
+    try {
+      await apiRequest("POST", "/api/admin/promotions/gmail/disconnect");
+      await Promise.all([gmailPromotionStatusQuery.refetch(), promotionCandidatesQuery.refetch()]);
+      toast({ title: "Promotion inbox disconnected" });
+    } catch (error: any) {
+      toast({ title: "Disconnect failed", description: error?.message ?? "Unable to disconnect Gmail.", variant: "destructive" });
+    }
+  };
 
   const onDetectSource = async (url: string) => {
     setFeatUrl(url);
@@ -2166,6 +2214,127 @@ export default function AdminPage() {
             <div className="mt-5">
               <PromoCodes />
             </div>
+          </section>
+
+          <section id="section-promotion-inbox" style={sectionStyle("promotion-inbox")} className="card-elevated animate-float-in p-5 md:p-6 relative" data-testid="promotion-inbox-panel">
+            <CollapseButton id="promotion-inbox" collapsed={collapsedSections} onToggle={toggleSection} onArrange={() => setArrangeOpen(true)} />
+            <div className="flex items-start gap-3 pr-28">
+              <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-500 shadow-lg shadow-blue-600/20">
+                <Inbox className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold tracking-tight">Promotion Inbox</h2>
+                <p className="mt-0.5 text-sm text-muted-foreground">
+                  Read-only monitoring of deal emails sent to admin@tssdeals.com. Nothing is sent, deleted, or marked read.
+                </p>
+              </div>
+            </div>
+
+            {!collapsedSections.includes("promotion-inbox") && (
+              <div className="mt-5 space-y-4">
+                {gmailPromotionStatusQuery.isLoading ? (
+                  <div className="flex items-center gap-2 rounded-xl border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Checking Gmail connection…
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-3 rounded-2xl border border-border bg-muted/20 p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={cn(
+                          "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold",
+                          gmailPromotionStatusQuery.data?.connected
+                            ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+                            : "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+                        )} data-testid="promotion-inbox-status">
+                          {gmailPromotionStatusQuery.data?.connected ? <Check className="h-3.5 w-3.5" /> : <Link2Off className="h-3.5 w-3.5" />}
+                          {gmailPromotionStatusQuery.data?.connected ? "Gmail connected" : "Gmail not connected"}
+                        </span>
+                        {gmailPromotionStatusQuery.data?.connected && (
+                          <span className="text-xs text-muted-foreground">{gmailPromotionStatusQuery.data.emailAddress}</span>
+                        )}
+                      </div>
+                      <div className="mt-2 text-xs text-muted-foreground">
+                        {gmailPromotionStatusQuery.data?.lastSuccessAt
+                          ? `Last successful scan: ${new Date(gmailPromotionStatusQuery.data.lastSuccessAt).toLocaleString()} · ${gmailPromotionStatusQuery.data.lastMessageCount} candidates processed`
+                          : "No successful inbox scan recorded yet."}
+                      </div>
+                      {gmailPromotionStatusQuery.data?.lastError && (
+                        <div className="mt-2 text-xs text-destructive" data-testid="promotion-inbox-error">
+                          Last error: {gmailPromotionStatusQuery.data.lastError}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 flex-wrap gap-2">
+                      {gmailPromotionStatusQuery.data?.connected ? (
+                        <>
+                          <Button onClick={syncPromotionInbox} disabled={promotionSyncing} className="rounded-xl" data-testid="promotion-inbox-scan">
+                            {promotionSyncing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                            Scan Inbox
+                          </Button>
+                          <Button variant="outline" onClick={disconnectPromotionInbox} className="rounded-xl" data-testid="promotion-inbox-disconnect">
+                            Disconnect
+                          </Button>
+                        </>
+                      ) : (
+                        <Button asChild className="rounded-xl" disabled={!gmailPromotionStatusQuery.data?.configured} data-testid="promotion-inbox-connect">
+                          <a href="/api/admin/promotions/gmail/start"><Mail className="mr-2 h-4 w-4" />Connect Gmail</a>
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid gap-3 sm:grid-cols-3">
+                  {(["pending", "approved", "rejected"] as const).map(status => {
+                    const count = (promotionCandidatesQuery.data ?? []).filter(candidate => candidate.status === status).length;
+                    return (
+                      <div key={status} className="rounded-xl border border-border bg-background p-3">
+                        <div className="text-2xl font-bold" data-testid={`promotion-count-${status}`}>{count}</div>
+                        <div className="text-xs capitalize text-muted-foreground">{status} candidates</div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="overflow-hidden rounded-2xl border border-border">
+                  <div className="flex items-center justify-between border-b border-border bg-muted/30 px-4 py-3">
+                    <div className="font-semibold">Recent promotion candidates</div>
+                    <Button variant="ghost" size="sm" onClick={() => promotionCandidatesQuery.refetch()} disabled={promotionCandidatesQuery.isFetching} data-testid="promotion-candidates-refresh">
+                      <RefreshCw className={cn("mr-1.5 h-3.5 w-3.5", promotionCandidatesQuery.isFetching && "animate-spin")} /> Refresh
+                    </Button>
+                  </div>
+                  {(promotionCandidatesQuery.data ?? []).length === 0 ? (
+                    <div className="p-6 text-center text-sm text-muted-foreground">
+                      No candidates yet. Use Scan Inbox to check recent retailer and affiliate emails.
+                    </div>
+                  ) : (
+                    <div className="max-h-96 divide-y divide-border overflow-y-auto">
+                      {(promotionCandidatesQuery.data ?? []).slice(0, 25).map(candidate => (
+                        <div key={candidate.id} className="grid gap-2 px-4 py-3 md:grid-cols-[1fr_auto] md:items-center" data-testid={`promotion-candidate-${candidate.id}`}>
+                          <div className="min-w-0">
+                            <div className="truncate font-medium">{candidate.subject}</div>
+                            <div className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                              <span>{candidate.sender_name || candidate.sender_email || candidate.sender_domain || "Unknown sender"}</span>
+                              {candidate.code && <span className="font-semibold text-foreground">Code: {candidate.code}</span>}
+                              {candidate.discount_value && <span>{candidate.discount_value}{candidate.discount_type === "percent" ? "% off" : ""}</span>}
+                              {candidate.received_at && <span>{new Date(candidate.received_at).toLocaleDateString()}</span>}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium capitalize">{candidate.status}</span>
+                            {candidate.landing_url && (
+                              <Button asChild variant="outline" size="sm" className="rounded-lg">
+                                <a href={candidate.landing_url} target="_blank" rel="noreferrer"><ExternalLink className="mr-1.5 h-3.5 w-3.5" />Open</a>
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </section>
 
           <section id="section-featured-deals" style={sectionStyle("featured-deals")} className="card-elevated animate-float-in p-5 md:p-6 relative" data-testid="featured-deals-panel">
