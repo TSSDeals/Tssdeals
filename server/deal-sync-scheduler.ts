@@ -1315,6 +1315,16 @@ export function startDealSyncScheduler(storage: IStorage) {
   }
   log("Owner deal digest scheduler started: 10:10am and 2:10pm ET", "deal-sync");
 
+  // Recover digest windows missed while production was deploying or restarting.
+  // sendOwnerDealDigest persists channel state, so this remains duplicate-safe.
+  setTimeout(() => {
+    import("./deal-digest").then(({ catchUpOwnerDealDigests }) =>
+      catchUpOwnerDealDigests(storage).then((results) =>
+        log(`Owner deal digest catch-up checked ${results.length} due window(s)`, "deal-digest")
+      ).catch((err) => log(`Owner deal digest catch-up error: ${err.message}`, "deal-digest"))
+    );
+  }, 30_000);
+
   // 12:15pm ET — after the noon rule-based sync has populated fresh deals, run
   // the single daily AI pass (classification + MSRP). This is the ONLY OpenAI usage.
   cron.schedule(

@@ -20,6 +20,25 @@ function easternDate(now: Date): string {
   }).format(now);
 }
 
+export function dueDigestSlots(now = new Date()): DigestSlot[] {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(now);
+  const hour = Number(parts.find((part) => part.type === "hour")?.value ?? 0);
+  const minute = Number(parts.find((part) => part.type === "minute")?.value ?? 0);
+  const clock = hour * 60 + minute;
+  const due: DigestSlot[] = [];
+  if (clock >= 10 * 60 + 10) due.push("10am");
+  if (clock >= 14 * 60 + 10) due.push("2pm");
+  return due;
+}
+
+export async function catchUpOwnerDealDigests(storage: IStorage, now = new Date()) {
+  const results = [];
+  for (const slot of dueDigestSlots(now)) results.push({ slot, ...(await sendOwnerDealDigest(storage, slot, now)) });
+  return results;
+}
+
 export function selectDigestDeals(pool: Deal[]): DigestCategory[] {
   const current = pool.filter((deal) => deal.priceCents > PRICE_FLOOR_CENTS && deal.availabilityStatus === "active");
   const baseballGloves = current.filter((deal) =>
