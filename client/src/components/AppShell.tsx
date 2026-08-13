@@ -190,8 +190,9 @@ export function AppShell({
               </Link>
               {rightSlot && !hidePageHeader ? <div className="flex shrink-0 items-center gap-1">{rightSlot}</div> : null}
             </div>
-            <nav className="mt-2 flex gap-1 overflow-x-auto pb-1 scrollbar-hide" aria-label="Primary navigation">
-              {nav.map((item) => {
+            <div className="relative -mr-4">
+              <nav className="mt-2 flex snap-x gap-1 overflow-x-auto pb-1 pr-10 scrollbar-hide" aria-label="Primary navigation">
+                {nav.map((item) => {
                 const active = location === item.href || (item.href !== "/app/deals" && location.startsWith(item.href));
                 const Icon = item.icon;
                 return (
@@ -199,7 +200,7 @@ export function AppShell({
                     key={item.href}
                     href={item.href}
                     className={cn(
-                      "ring-focus flex min-h-10 shrink-0 items-center gap-1.5 rounded-xl px-3 text-xs font-bold",
+                      "ring-focus flex min-h-10 shrink-0 snap-start items-center gap-1.5 rounded-xl px-3 text-xs font-bold",
                       active ? "bg-primary text-primary-foreground" : "bg-card text-foreground/75",
                     )}
                   >
@@ -207,8 +208,13 @@ export function AppShell({
                     {item.label}
                   </Link>
                 );
-              })}
-            </nav>
+                })}
+              </nav>
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex w-10 items-center justify-end bg-gradient-to-l from-background via-background/90 to-transparent pr-1" aria-hidden="true">
+                <span className="text-lg font-black text-primary">›</span>
+              </div>
+            </div>
+            <div className="mt-0.5 text-right text-[10px] font-semibold text-muted-foreground" aria-hidden="true">Swipe navigation for more</div>
             {isGuest ? (
               <div
                 className="mt-2 rounded-2xl border border-primary/20 bg-card/95 p-3 shadow-sm"

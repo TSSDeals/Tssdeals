@@ -17,7 +17,17 @@ test("homepage search is the primary accessible shopping action", () => {
   assert.match(heroSource, /data-testid="hero-search-form"/);
   assert.match(heroSource, /Label htmlFor="hero-q" className="sr-only"/);
   assert.match(heroSource, /aria-label="Search by photo"/);
+  assert.match(heroSource, /enterKeyHint="search"/);
+  assert.match(heroSource, /Search by photo/);
+  assert.match(heroSource, /Swipe for more/);
   assert.match(heroSource, /min-h-11/);
+});
+
+test("mobile horizontal discovery surfaces make overflow obvious", () => {
+  assert.match(heroSource, /snap-x snap-mandatory/);
+  assert.match(heroSource, /bg-gradient-to-l from-background\/90/);
+  assert.match(shellSource, /Swipe navigation for more/);
+  assert.match(shellSource, /snap-start/);
 });
 
 test("deal search hydrates and synchronizes direct URL queries", () => {

@@ -115,6 +115,20 @@ export function DealsSearchHero({
               Search gear
             </Button>
           </div>
+          <div className="mt-2 flex items-center justify-between px-1 text-[11px] font-semibold text-muted-foreground sm:hidden">
+            <span>Press Search on your keyboard or tap Search gear</span>
+            <button
+              type="button"
+              disabled={photoSearching}
+              onClick={() => photoInputRef.current?.click()}
+              className="ring-focus inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg px-2 text-primary"
+              aria-label="Search by photo"
+              data-testid="photo-search-hint"
+            >
+              <Camera className="h-3.5 w-3.5" />
+              Search by photo
+            </button>
+          </div>
         </form>
 
         <div className="mx-auto mt-4 flex max-w-4xl flex-wrap items-center justify-center gap-x-5 gap-y-2 text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground sm:text-xs">
@@ -143,14 +157,18 @@ export function DealsSearchHero({
 
         <div className="mx-auto mt-6 grid max-w-5xl gap-4 border-t border-white/10 pt-5 lg:grid-cols-[1fr_auto] lg:items-end">
           <div>
-            <div className="mb-2 text-[11px] font-black uppercase tracking-[0.16em] text-muted-foreground">Popular searches</div>
-            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide" data-testid="starter-searches">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <div className="text-[11px] font-black uppercase tracking-[0.12em] text-muted-foreground sm:tracking-[0.16em]">Popular searches</div>
+              <span className="text-[11px] font-semibold text-primary sm:hidden" aria-hidden="true">Swipe for more →</span>
+            </div>
+            <div className="relative -mr-5 sm:mr-0">
+              <div className="flex snap-x snap-mandatory gap-2 overflow-x-auto pb-2 pr-10 scrollbar-hide sm:pr-0" data-testid="starter-searches">
               {SHOPPER_STARTER_SEARCHES.map((starter) => (
                 <button
                   key={starter.query}
                   type="button"
                   onClick={() => onSearch(starter.query)}
-                  className="ring-focus flex min-h-11 shrink-0 items-center gap-2 rounded-xl border border-white/10 bg-background/70 px-2.5 py-2 text-left transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:bg-background hover:shadow-lg sm:min-h-14"
+                  className="ring-focus flex min-h-11 w-[12.25rem] shrink-0 snap-start items-center gap-2 rounded-xl border border-white/10 bg-background/70 px-2.5 py-2 text-left transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:bg-background hover:shadow-lg sm:min-h-14 sm:w-auto"
                   data-testid={`starter-${starter.query.replace(/\W+/g, "-").toLowerCase()}`}
                 >
                   {starterImages[starter.query] && (
@@ -169,6 +187,8 @@ export function DealsSearchHero({
                   </span>
                 </button>
               ))}
+              </div>
+              <div className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-background/90 to-transparent sm:hidden" aria-hidden="true" />
             </div>
           </div>
           {recentSearches.length > 0 && (
