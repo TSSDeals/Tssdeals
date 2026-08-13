@@ -66,6 +66,7 @@ import { registerAdminOperationsRoutes } from "./admin-operations";
 import { registerAdminFinancialRoutes } from "./admin-financials";
 import { registerOneDriveLedgerRoutes } from "./onedrive-ledger-sync";
 import { registerGmailPromotionRoutes } from "./gmail-promotion-sync";
+import { sendOwnerDealDigest } from "./deal-digest";
 import { projectDealSearchClassification } from "./deal-search";
 import {
   LEGACY_SHOPPER_MEMORABILIA_SPORT_IDS,
@@ -120,6 +121,14 @@ export async function registerRoutes(
   registerOneDriveLedgerRoutes(app, isAdmin);
   registerGmailPromotionRoutes(app, isAdmin);
   registerAdminFinancialRoutes(app, isAdmin);
+  app.post("/api/admin/deal-digest/send", isAdmin, async (req: any, res) => {
+    try {
+      const slot = req.body?.slot === "10am" ? "10am" : "2pm";
+      res.json(await sendOwnerDealDigest(storage, slot));
+    } catch (error: any) {
+      res.status(500).json({ message: error?.message || "Could not send deal digest" });
+    }
+  });
 
   app.get("/92ea36508d8a3f146aa22783a2d57295.html", (_req, res) => {
     res.type("text/html").send("twilio-domain-verification=92ea36508d8a3f146aa22783a2d57295");
