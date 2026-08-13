@@ -387,7 +387,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async listDeals(params: DealsQueryParams): Promise<Deal[]> {
-    const whereParts: any[] = [];
+    const whereParts: any[] = [eq(deals.availabilityStatus, "active")];
     const amzBypass = eq(deals.sourceId, "amazon-manual");
     const normalizedSearch = params.q?.trim() ? normalizeDealSearch(params.q) : null;
     const requestedShopperEquipmentIds = params.equipmentTypeIds?.length
@@ -1088,7 +1088,7 @@ export class DatabaseStorage implements IStorage {
     return await db
       .select()
       .from(deals)
-      .where(eq(deals.isFeatured, true))
+      .where(and(eq(deals.isFeatured, true), eq(deals.availabilityStatus, "active")))
       .orderBy(desc(deals.foundAt))
       .limit(50);
   }
@@ -1241,6 +1241,8 @@ export class DatabaseStorage implements IStorage {
             percentOff: deal.percentOff,
             lastSeenAt: now,
             lastPriceConfirmedAt: now,
+            availabilityStatus: "active",
+            unavailableAt: null,
             imageUrl: deal.imageUrl,
             title: deal.title,
             brand: deal.brand,
@@ -2543,7 +2545,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getCategoryDeals(category: DealCategory, limit = 20): Promise<Deal[]> {
-    const whereParts: any[] = [];
+    const whereParts: any[] = [eq(deals.availabilityStatus, "active")];
     const ownerKnownGlovePick = and(
       eq(deals.isFeatured, true),
       dsql`${deals.raw}->>'submittedVia' IN ('sms-deal-inbox', 'email-deal-inbox')`,
@@ -2764,6 +2766,7 @@ export class DatabaseStorage implements IStorage {
       .from(deals)
       .where(and(
         eq(deals.isFeatured, true),
+        eq(deals.availabilityStatus, "active"),
         dsql`${deals.raw}->>'submittedVia' IN ('sms-deal-inbox', 'email-deal-inbox')`,
         gte(deals.priceCents, 100),
       ))
@@ -2783,6 +2786,7 @@ export class DatabaseStorage implements IStorage {
       .from(deals)
       .where(and(
         eq(deals.isFeatured, true),
+        eq(deals.availabilityStatus, "active"),
         dsql`${deals.raw}->>'submittedVia' IN ('sms-deal-inbox', 'email-deal-inbox')`,
         gte(deals.priceCents, 100),
       ))

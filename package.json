@@ -26,6 +26,7 @@
     "test:startup-safety": "tsx --test server/startup-safety.test.ts",
     "test:sms-deal-inbox": "tsx --test server/sms-deal-inbox.test.ts",
     "test:email-deal-inbox": "tsx --test server/email-deal-inbox.test.ts server/sms-deal-inbox.test.ts",
+    "test:deal-digest": "tsx --test server/deal-digest.test.ts",
     "test:taxonomy-audit": "tsx --test server/taxonomy-audit.test.ts",
     "test:taxonomy-review": "tsx --test server/taxonomy-review.test.ts",
     "maintenance:phase0": "tsx script/phase0-maintenance.ts",

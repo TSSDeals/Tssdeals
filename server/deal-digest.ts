@@ -1,0 +1,120 @@
+import type { Deal } from "@shared/schema";
+import type { IStorage } from "./storage";
+import { rankTopDeals } from "./top-deals-ranking";
+
+const DIGEST_STATE_KEY = "owner_deal_digest_state_v1";
+const PRICE_FLOOR_CENTS = 8_500;
+const CATEGORY_LIMIT = 5;
+const FIELDING_EXCLUSIONS = /\b(?:batting\s+gloves?|sliding\s+mitts?|golf|winter|work|training\s+(?:gloves?|mitts?)|glove\s+(?:care|oil|conditioner|lace|repair)|signed|autograph|memorabilia)\b/i;
+const FIELDING_EVIDENCE = /\b(?:baseball|softball|fastpitch|fielding|infield|outfield|pitcher|catcher|first[ -]?base)\b.*\b(?:gloves?|mitts?)\b|\b(?:a2k|a2000|pro preferred|heart of the hide|marucci cypress)\b/i;
+const BAT_EXCLUSIONS = /\b(?:softball|fastpitch|slowpitch|batting gloves?|helmet|bat (?:bag|rack|grip|tape|weight|cover)|signed|autograph|memorabilia)\b/i;
+const BAT_EVIDENCE = /\b(?:baseball bat|bbcor|usssa|usa baseball|wood bat|maple bat|youth bat)\b/i;
+
+export type DigestSlot = "10am" | "2pm";
+type DigestCategory = { name: string; path: string; deals: Deal[] };
+type DigestState = Record<string, { email?: boolean; sms?: boolean }>;
+
+function easternDate(now: Date): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(now);
+}
+
+export function selectDigestDeals(pool: Deal[]): DigestCategory[] {
+  const current = pool.filter((deal) => deal.priceCents > PRICE_FLOOR_CENTS && deal.availabilityStatus === "active");
+  const baseballGloves = current.filter((deal) =>
+    !FIELDING_EXCLUSIONS.test(deal.title) &&
+    (deal.equipmentTypeId === "bb-gloves" || FIELDING_EVIDENCE.test(deal.title)) &&
+    !/\bfast[ -]?pitch\b/i.test(deal.title));
+  const fastpitchGloves = current.filter((deal) =>
+    !FIELDING_EXCLUSIONS.test(deal.title) &&
+    /\bfast[ -]?pitch|softball\b/i.test(deal.title) &&
+    (/(?:gloves?|mitts?)/i.test(deal.title) || deal.equipmentTypeId === "fp-gloves"));
+  const baseballBats = current.filter((deal) =>
+    !BAT_EXCLUSIONS.test(deal.title) &&
+    (deal.equipmentTypeId === "bb-bats" || BAT_EVIDENCE.test(deal.title)));
+
+  const ranked = (deals: Deal[], category: { name: string; slug: string; sportId: string; equipmentTypeId: string }) => {
+    const top = rankTopDeals(deals, { category, limit: CATEGORY_LIMIT });
+    if (top.length >= CATEGORY_LIMIT || top.length === deals.length) return top;
+    const selected = new Set(top.map((deal) => deal.id));
+    const currentValue = deals
+      .filter((deal) => !selected.has(deal.id))
+      .sort((a, b) => Number(b.percentOff ?? 0) - Number(a.percentOff ?? 0) || b.priceCents - a.priceCents)
+      .slice(0, CATEGORY_LIMIT - top.length);
+    return [...top, ...currentValue];
+  };
+  return [
+    { name: "Baseball gloves", path: "/app/top-deals/baseball-softball-gloves", deals: ranked(baseballGloves, { name: "Baseball fielding gloves", slug: "baseball-softball-gloves", sportId: "baseball", equipmentTypeId: "bb-gloves" }) },
+    { name: "Fastpitch gloves", path: "/app/deals?sport=fastpitch-softball&equipment=fp-gloves", deals: ranked(fastpitchGloves, { name: "Fastpitch fielding gloves", slug: "fastpitch-fielding-gloves", sportId: "fastpitch-softball", equipmentTypeId: "fp-gloves" }) },
+    { name: "Baseball bats", path: "/app/top-deals/baseball-bats", deals: ranked(baseballBats, { name: "Baseball bats", slug: "baseball-bats", sportId: "baseball", equipmentTypeId: "bb-bats" }) },
+  ];
+}
+
+function money(deal: Deal): string {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: deal.currency || "USD", maximumFractionDigits: 2 }).format(deal.priceCents / 100);
+}
+
+function htmlDigest(categories: DigestCategory[], slot: DigestSlot): string {
+  const sections = categories.filter((c) => c.deals.length).map((category) => `
+    <h2 style="color:#172033">${category.name}</h2>
+    ${category.deals.map((deal) => `<p><strong>${deal.title}</strong><br>${money(deal)} · ${deal.sourceId}<br><a href="${deal.url}">View deal</a></p>`).join("")}
+    <p><a href="https://www.tssdeals.com${category.path}">See all ${category.name.toLowerCase()}</a></p>`).join("");
+  return `<div style="font-family:Arial,sans-serif;max-width:640px;margin:auto"><h1>TSSDeals ${slot === "10am" ? "morning" : "afternoon"} picks</h1><p>Current high-value deals over $85, ranked after the latest feed.</p>${sections}</div>`;
+}
+
+function smsDigest(categories: DigestCategory[], slot: DigestSlot): string {
+  const lines = categories.filter((c) => c.deals.length).map((category) => {
+    const best = category.deals[0];
+    return `${category.name}: ${best.title.slice(0, 52)} ${money(best)} ${best.url}`;
+  });
+  return `TSSDeals ${slot === "10am" ? "AM" : "PM"} picks (> $85)\n${lines.join("\n")}\nReply STOP to opt out.`;
+}
+
+function parseState(raw: string | null): DigestState {
+  try { return raw ? JSON.parse(raw) as DigestState : {}; } catch { return {}; }
+}
+
+export async function sendOwnerDealDigest(storage: IStorage, slot: DigestSlot, now = new Date()) {
+  const key = `${easternDate(now)}:${slot}`;
+  const state = parseState(await storage.getAppSetting(DIGEST_STATE_KEY));
+  const previous = state[key] ?? {};
+  const categories = selectDigestDeals(await storage.listDeals({ limit: 2_000 }));
+  if (!categories.some((category) => category.deals.length)) return { skipped: "no-deals", email: false, sms: false };
+
+  let email = previous.email === true;
+  let sms = previous.sms === true;
+  const emailTo = process.env.DEAL_DIGEST_EMAIL_TO || "tssadmin@twinseamsports.com";
+  if (!email && process.env.SENDGRID_API_KEY && emailTo) {
+    try {
+      const { default: sgMail } = await import("@sendgrid/mail");
+      sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+      await sgMail.send({
+        to: emailTo,
+        from: { name: "TSSDeals", email: process.env.EMAIL_FROM || "noreply@tssdeals.com" },
+        subject: `TSSDeals ${slot === "10am" ? "morning" : "afternoon"} high-value picks`,
+        text: smsDigest(categories, slot),
+        html: htmlDigest(categories, slot),
+      });
+      email = true;
+      state[key] = { ...previous, email, sms };
+      await storage.setAppSetting(DIGEST_STATE_KEY, JSON.stringify(state));
+    } catch (error) {
+      console.error("[deal-digest] Email delivery failed; SMS will still be attempted.", error);
+    }
+  }
+
+  const phones = (process.env.DEAL_DIGEST_SMS_TO || "").split(",").map((phone) => phone.trim()).filter(Boolean);
+  const smsNotifications = phones.length ? await import("./sms-notifications") : null;
+  if (!sms && smsNotifications?.isSmsConfigured() && phones.length) {
+    try {
+      const results = await Promise.all(phones.map((to) => smsNotifications.sendSms({ to, body: smsDigest(categories, slot) })));
+      sms = results.every(Boolean);
+      state[key] = { ...previous, email, sms };
+      await storage.setAppSetting(DIGEST_STATE_KEY, JSON.stringify(state));
+    } catch (error) {
+      console.error("[deal-digest] SMS delivery failed; email status was preserved.", error);
+    }
+  }
+  return { email, sms, categories: categories.map((category) => ({ name: category.name, count: category.deals.length })) };
+}

@@ -1304,6 +1304,17 @@ export function startDealSyncScheduler(storage: IStorage) {
 
   log("Deal sync scheduler started: 8am, 12pm, 4pm, 8pm ET", "deal-sync");
 
+  // Owner digest runs independently after the morning and afternoon feed windows.
+  // Each channel is idempotent, so process restarts cannot duplicate a send.
+  for (const [expression, slot] of [["10 10 * * *", "10am"], ["10 14 * * *", "2pm"]] as const) {
+    cron.schedule(expression, () => {
+      import("./deal-digest").then(({ sendOwnerDealDigest }) =>
+        sendOwnerDealDigest(storage, slot).catch((err) => log(`Owner deal digest error: ${err.message}`, "deal-digest"))
+      );
+    }, { timezone: "America/New_York" });
+  }
+  log("Owner deal digest scheduler started: 10:10am and 2:10pm ET", "deal-sync");
+
   // 12:15pm ET — after the noon rule-based sync has populated fresh deals, run
   // the single daily AI pass (classification + MSRP). This is the ONLY OpenAI usage.
   cron.schedule(
@@ -1371,20 +1382,22 @@ async function runStaleDealCleanup() {
   const { db } = await import("./db");
   const { sql } = await import("drizzle-orm");
   const stopEpoch = getStopEpoch();
-  let totalDeleted = 0;
+  let totalHidden = 0;
   const batchSize = 10000;
   const maxBatches = 20;
   let batches = 0;
 
-  // Marketplace deals: 7 days
+  // Marketplace deals: hide after 72 hours without confirmation. During a
+  // protected eBay snapshot failure, retain the last-known-good result set.
   let deleted = 0;
   do {
     if (stopRequestedSince(stopEpoch)) break;
     const result = await db.execute(sql.raw(`
-      DELETE FROM deals WHERE id IN (
+      UPDATE deals SET availability_status = 'stale', unavailable_at = NOW() WHERE id IN (
         SELECT id FROM deals
         WHERE source_id IN ('ebay', 'sidelineswap')
-        AND last_seen_at < NOW() - INTERVAL '7 days'
+        AND availability_status = 'active'
+        AND last_seen_at < NOW() - INTERVAL '72 hours'
         AND (
           source_id <> 'ebay'
           OR NOT EXISTS (
@@ -1398,34 +1411,36 @@ async function runStaleDealCleanup() {
       )
     `));
     deleted = (result as any).rowCount ?? 0;
-    totalDeleted += deleted;
+    totalHidden += deleted;
     batches++;
-    if (deleted > 0) log(`Deleted batch of ${deleted} stale marketplace deals`, "deal-cleanup");
+    if (deleted > 0) log(`Soft-hidden batch of ${deleted} stale marketplace deals`, "deal-cleanup");
   } while (deleted >= batchSize && batches < maxBatches);
 
-  // Retailer deals: 14 days
+  // Retailer feeds are complete snapshots; a full week without being observed
+  // is enough to hide the row while retaining history for reactivation.
   do {
     if (stopRequestedSince(stopEpoch)) break;
     const result = await db.execute(sql.raw(`
-      DELETE FROM deals WHERE id IN (
+      UPDATE deals SET availability_status = 'stale', unavailable_at = NOW() WHERE id IN (
         SELECT id FROM deals
         WHERE source_id NOT IN ('ebay', 'sidelineswap')
-        AND last_seen_at < NOW() - INTERVAL '14 days'
+        AND availability_status = 'active'
+        AND last_seen_at < NOW() - INTERVAL '7 days'
         LIMIT ${batchSize}
       )
     `));
     deleted = (result as any).rowCount ?? 0;
-    totalDeleted += deleted;
+    totalHidden += deleted;
     batches++;
-    if (deleted > 0) log(`Deleted batch of ${deleted} stale retailer deals`, "deal-cleanup");
+    if (deleted > 0) log(`Soft-hidden batch of ${deleted} stale retailer deals`, "deal-cleanup");
   } while (deleted >= batchSize && batches < maxBatches);
 
   if (batches >= maxBatches) {
     log(`Cleanup hit batch cap (${maxBatches}), more stale deals may remain`, "deal-cleanup");
   }
 
-  if (totalDeleted > 0) {
-    log(`Stale deal cleanup complete: ${totalDeleted} total deals removed`, "deal-cleanup");
+  if (totalHidden > 0) {
+    log(`Stale deal cleanup complete: ${totalHidden} deals hidden (history retained)`, "deal-cleanup");
   } else {
     log("No stale deals to clean up", "deal-cleanup");
   }

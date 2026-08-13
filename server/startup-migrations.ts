@@ -598,6 +598,17 @@ export const STARTUP_MIGRATIONS: readonly VersionedMigration<StartupContext>[] =
       ));
     },
   },
+  {
+    ...STARTUP_MIGRATION_MANIFEST[14],
+    async up(context) {
+      const statements = [
+        `ALTER TABLE deals ADD COLUMN IF NOT EXISTS availability_status VARCHAR(20) NOT NULL DEFAULT 'active'`,
+        `ALTER TABLE deals ADD COLUMN IF NOT EXISTS unavailable_at TIMESTAMP`,
+        `CREATE INDEX IF NOT EXISTS deals_availability_status_idx ON deals(availability_status)`,
+      ];
+      for (const statement of statements) await context.execute(sql.raw(statement));
+    },
+  },
 ] as const;
 
 const ledger: MigrationLedger<StartupContext> = {
