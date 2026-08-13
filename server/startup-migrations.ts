@@ -609,6 +609,51 @@ export const STARTUP_MIGRATIONS: readonly VersionedMigration<StartupContext>[] =
       for (const statement of statements) await context.execute(sql.raw(statement));
     },
   },
+  {
+    ...STARTUP_MIGRATION_MANIFEST[15],
+    async up(context) {
+      const statements = [
+        `CREATE TABLE IF NOT EXISTS gmail_promotion_connections (
+          user_id VARCHAR PRIMARY KEY,
+          email_address VARCHAR(320) NOT NULL,
+          access_token_ciphertext TEXT NOT NULL,
+          refresh_token_ciphertext TEXT NOT NULL,
+          token_expires_at TIMESTAMP NOT NULL,
+          scope TEXT,
+          history_id TEXT,
+          last_sync_at TIMESTAMP,
+          last_success_at TIMESTAMP,
+          last_error TEXT,
+          last_message_count INTEGER NOT NULL DEFAULT 0,
+          created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )`,
+        `CREATE TABLE IF NOT EXISTS promotion_inbox_candidates (
+          id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+          gmail_message_id VARCHAR NOT NULL UNIQUE,
+          sender_email VARCHAR(320), sender_domain VARCHAR(255), sender_name TEXT,
+          subject TEXT NOT NULL, received_at TIMESTAMP,
+          code TEXT, description TEXT, discount_type VARCHAR(32), discount_value TEXT,
+          starts_at TIMESTAMP, ends_at TIMESTAMP, landing_url TEXT,
+          monitored_source_id VARCHAR REFERENCES sources(id) ON DELETE SET NULL,
+          status VARCHAR(24) NOT NULL DEFAULT 'pending', confidence VARCHAR(16) NOT NULL DEFAULT 'medium',
+          raw JSONB, created_at TIMESTAMP NOT NULL DEFAULT NOW(), updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )`,
+        `CREATE INDEX IF NOT EXISTS promotion_inbox_candidates_status_idx ON promotion_inbox_candidates(status, received_at DESC)`,
+        `CREATE INDEX IF NOT EXISTS promotion_inbox_candidates_domain_idx ON promotion_inbox_candidates(sender_domain)`,
+        `CREATE TABLE IF NOT EXISTS affiliate_relationship_candidates (
+          id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+          network VARCHAR(32) NOT NULL, advertiser_id TEXT, advertiser_name TEXT NOT NULL,
+          source_id VARCHAR REFERENCES sources(id) ON DELETE SET NULL,
+          status VARCHAR(24) NOT NULL DEFAULT 'pending', sporting_goods_likelihood VARCHAR(16) NOT NULL DEFAULT 'unknown',
+          first_seen_at TIMESTAMP NOT NULL DEFAULT NOW(), last_seen_at TIMESTAMP NOT NULL DEFAULT NOW(),
+          evidence JSONB, UNIQUE(network, advertiser_name)
+        )`,
+        `CREATE INDEX IF NOT EXISTS affiliate_relationship_candidates_status_idx ON affiliate_relationship_candidates(status, last_seen_at DESC)`,
+      ];
+      for (const statement of statements) await context.execute(sql.raw(statement));
+    },
+  },
 ] as const;
 
 const ledger: MigrationLedger<StartupContext> = {

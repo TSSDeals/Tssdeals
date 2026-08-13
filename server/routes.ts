@@ -65,6 +65,7 @@ import { registerInvoiceRoutes } from "./invoices";
 import { registerAdminOperationsRoutes } from "./admin-operations";
 import { registerAdminFinancialRoutes } from "./admin-financials";
 import { registerOneDriveLedgerRoutes } from "./onedrive-ledger-sync";
+import { registerGmailPromotionRoutes } from "./gmail-promotion-sync";
 import { projectDealSearchClassification } from "./deal-search";
 import {
   LEGACY_SHOPPER_MEMORABILIA_SPORT_IDS,
@@ -117,6 +118,7 @@ export async function registerRoutes(
   registerInvoiceRoutes(app);
   registerAdminOperationsRoutes(app, isAdmin);
   registerOneDriveLedgerRoutes(app, isAdmin);
+  registerGmailPromotionRoutes(app, isAdmin);
   registerAdminFinancialRoutes(app, isAdmin);
 
   app.get("/92ea36508d8a3f146aa22783a2d57295.html", (_req, res) => {
@@ -3841,6 +3843,11 @@ export async function registerRoutes(
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
+  });
+
+  app.get("/api/admin/affiliate-relationships", isAdmin, async (_req, res) => {
+    const { listAffiliateCandidates } = await import("./promotion-intelligence");
+    res.json(await listAffiliateCandidates());
   });
 
   app.post("/api/admin/promo-codes/sync", isAdmin, async (_req, res) => {

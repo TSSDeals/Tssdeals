@@ -101,6 +101,12 @@ export const STARTUP_MIGRATION_MANIFEST = [
     kind: "structural",
     description: "Soft availability lifecycle for current, stale, and unavailable deal listings",
   },
+  {
+    id: "20260813_016_promotion_inbox_and_affiliate_monitor",
+    checksum: "4bb67524f31c0d33a67ce6732fd4d1b67d3d6a279cd6b7207265d0cf761ce975",
+    kind: "structural",
+    description: "Encrypted read-only Gmail connection and review-first promotion and affiliate candidates",
+  },
 ] as const;
 
 export type ApprovedSeedState = "empty" | "satisfied" | "partial";
