@@ -11,15 +11,15 @@ export type DeterministicProductCategory = {
 };
 
 const SIGNED_OR_DISPLAY =
-  /\b(?:autograph(?:ed)?|hand[ -]?signed|signed\s+by|memorabilia|collectible|display\s+(?:case|stand|mount)|wall\s+mount(?:ed|ing)?)\b/i;
+  /\b(?:autograph(?:ed)?|hand[ -]?signed|signed\s+by|memorabilia|collectible|display\s+(?:case|stand|rack|shelf|mount)|wall\s+mount(?:ed|ing)?|(?:glove|mitt)\s+(?:stand|rack|shelf))\b/i;
 const NON_FIELDING_GLOVE =
-  /\b(?:batting|golf|boxing|work|winter|rain|football|receiver|goalkeeper)\s+gloves?\b|\bsliding\s+mitt\b|\b(?:glove|mitt)\b.{0,45}\b(?:laces?|lacing|repair|care|condition(?:er|ing)?|break[ -]?in|mallet|wrap|kit|pad|pounding|molding|shaping|accessor(?:y|ies))\b|\b(?:laces?|lacing|repair|care|condition(?:er|ing)?|break[ -]?in|mallet|wrap|kit|pad|pounding|molding|shaping)\b.{0,45}\b(?:glove|mitt)\b/i;
+  /\b(?:batting|golf|boxing|work|winter|rain|football|receiver|goalkeeper|pancake|training|trainer)\s+gloves?\b|\bsliding\s+mitt\b|\b(?:glove|mitt)\b.{0,45}\b(?:laces?|lacing|repair|care|condition(?:er|ing)?|break[ -]?in|mallet|wrap|kit|pad|pounding|molding|shaping|accessor(?:y|ies))\b|\b(?:laces?|lacing|repair|care|condition(?:er|ing)?|break[ -]?in|mallet|wrap|kit|pad|pounding|molding|shaping)\b.{0,45}\b(?:glove|mitt)\b/i;
 const FIELDING_GLOVE =
   /\b(?:baseball|fielding|infield|outfield|pitcher(?:'s)?|catcher(?:'s)?|first[ -]?base)\b.{0,60}\b(?:glove|mitt)s?\b|\b(?:glove|mitt)s?\b.{0,60}\b(?:baseball|fielding|infield|outfield|pitcher(?:'s)?|catcher(?:'s)?|first[ -]?base)\b/i;
 const KNOWN_BASEBALL_GLOVE_MODEL =
   /\b(?:wilson\s+(?:a2000|a2k|staff)|a2000\s+\d{3,4}|marucci\s+cypress|rawlings\s+(?:foundation|pro\s+preferred|heart\s+of\s+the\s+hide|hoh|r9|gg\s+elite))\b/i;
 const BAT_ACCESSORY_ONLY =
-  /\b(?:bat\s+grips?|grip\s+wraps?|handle\s+grips?|replacement\s+grips?|bat\s+racks?|bat\s+holders?|bat\s+storage|bat\s+cases?|bat\s+sleeves?)\b/i;
+  /\b(?:bat\s+grips?|grip\s+wraps?|handle\s+grips?|replacement\s+grips?|bat\s+racks?|bat\s+holders?|bat\s+storage|bat\s+cases?|bat\s+sleeves?|(?:foam|plastic)\s+(?:baseball\s+)?bats?)\b/i;
 
 // Some Rawlings wood-bat lines reuse names that are otherwise strong glove-family
 // evidence (notably "Pro Preferred"). Product-form evidence must win over family
@@ -30,7 +30,7 @@ const EXPLICIT_BASEBALL_BAT =
 export function hasExplicitBaseballBatEvidence(text: string): boolean {
   return EXPLICIT_BASEBALL_BAT.test(text)
     && !BAT_ACCESSORY_ONLY.test(text)
-    && !/\b(?:softball|fast\s*pitch|slow\s*pitch|cricket)\b/i.test(text);
+    && !/\b(?:softball|fast[ -]?pitch|slow\s*pitch|cricket)\b/i.test(text);
 }
 
 export function isKnownBaseballFieldingGloveModel(text: string): boolean {
@@ -40,16 +40,17 @@ export function isKnownBaseballFieldingGloveModel(text: string): boolean {
     && !classifyGolfClubProduct(text);
 }
 const FASTPITCH_BAT =
-  /\bfast\s*pitch\b.{0,60}\bbats?\b|\bbats?\b.{0,60}\bfast\s*pitch\b/i;
+  /\bfast[ -]?pitch\b.{0,60}\bbats?\b|\bbats?\b.{0,60}\bfast[ -]?pitch\b/i;
 const SLOWPITCH_BAT =
   /\bslow\s*pitch\b.{0,60}\bbats?\b|\bbats?\b.{0,60}\bslow\s*pitch\b/i;
 const BASEBALL_BAT =
   /\b(?:baseball|bbcor|usssa|usa\s+baseball|tee[ -]?ball|t[ -]?ball)\b.{0,60}\bbats?\b|\bbats?\b.{0,60}\b(?:baseball|bbcor|usssa|usa\s+baseball)\b/i;
 const BATTING_GLOVE = /\bbatting\s+gloves?\b/i;
-const BATTING_HELMET = /\b(?:baseball|softball|fast\s*pitch|slow\s*pitch)?\s*batting\s+helmets?\b/i;
+const BATTING_HELMET = /\b(?:baseball|softball|fast[ -]?pitch|slow\s*pitch)?\s*batting\s+helmets?\b/i;
 const BASEBALL_BALL = /\bbaseballs\b|\b(?:official|practice|game|training)\s+baseball\b|\bbaseball\s+(?:balls?|dozen|packs?|buckets?)\b/i;
 const SOFTBALL_BALL = /\bsoftballs\b|\b(?:official|practice|game|training)\s+softball\s+(?:balls?|dozen|packs?|buckets?)\b|\bsoftball\s+(?:balls?|dozen|packs?|buckets?)\b/i;
-const BASEBALL_BAG = /\b(?:baseball|softball|fast\s*pitch|slow\s*pitch|bat)\b.{0,35}\b(?:equipment\s+)?bags?\b|\b(?:equipment\s+)?bags?\b.{0,35}\b(?:baseball|softball|fast\s*pitch|slow\s*pitch|bat)\b/i;
+const BASEBALL_BAG = /\b(?:baseball|softball|fast[ -]?pitch|slow\s*pitch|bat)\b.{0,35}\b(?:equipment\s+)?bags?\b|\b(?:equipment\s+)?bags?\b.{0,35}\b(?:baseball|softball|fast[ -]?pitch|slow\s*pitch|bat)\b/i;
+const NON_EQUIPMENT_BAG = /\b(?:crossbody|purse|handbag|tote|lunch\s+bag|wallet)\b/i;
 const RUNNING_SHOE =
   /\b(?:road|trail|cross[ -]?country)?\s*running\s+(?:shoes?|sneakers?)\b|\b(?:shoes?|sneakers?)\b.{0,30}\b(?:road|trail|cross[ -]?country)\s+running\b/i;
 const CASUAL_OR_NON_SPORT_FOOTWEAR =
@@ -57,7 +58,7 @@ const CASUAL_OR_NON_SPORT_FOOTWEAR =
 const BASEBALL_CLEAT =
   /\bbaseball\b.{0,45}\b(?:cleats?|spikes?)\b|\b(?:cleats?|spikes?)\b.{0,45}\bbaseball\b/i;
 const FASTPITCH_CLEAT =
-  /\bfast\s*pitch\b.{0,45}\b(?:cleats?|spikes?)\b|\b(?:cleats?|spikes?)\b.{0,45}\bfast\s*pitch\b/i;
+  /\bfast[ -]?pitch\b.{0,45}\b(?:cleats?|spikes?)\b|\b(?:cleats?|spikes?)\b.{0,45}\bfast[ -]?pitch\b/i;
 const SLOWPITCH_CLEAT =
   /\bslow\s*pitch\b.{0,45}\b(?:cleats?|spikes?)\b|\b(?:cleats?|spikes?)\b.{0,45}\bslow\s*pitch\b/i;
 const TRAINING_PRODUCT =
@@ -67,7 +68,7 @@ const TRAINING_ACCESSORY_ONLY =
 const BASEBALL_TRAINING =
   /\bbaseball\b.{0,70}\b(?:training|practice|batting|pitching|hitting|fielding)\b|\b(?:training|practice|batting|pitching|hitting|fielding)\b.{0,70}\bbaseball\b/i;
 const FASTPITCH_TRAINING =
-  /\bfast\s*pitch\b.{0,70}\b(?:training|practice|batting|pitching|hitting|fielding)\b|\b(?:training|practice|batting|pitching|hitting|fielding)\b.{0,70}\bfast\s*pitch\b/i;
+  /\bfast[ -]?pitch\b.{0,70}\b(?:training|practice|batting|pitching|hitting|fielding)\b|\b(?:training|practice|batting|pitching|hitting|fielding)\b.{0,70}\bfast[ -]?pitch\b/i;
 const SLOWPITCH_TRAINING =
   /\bslow\s*pitch\b.{0,70}\b(?:training|practice|batting|pitching|hitting|fielding)\b|\b(?:training|practice|batting|pitching|hitting|fielding)\b.{0,70}\bslow\s*pitch\b/i;
 
@@ -92,7 +93,8 @@ export function classifyDeterministicProduct(text: string): DeterministicProduct
   // must be resolved before bat/ball rules so "baseball bat equipment bag"
   // is not mistaken for the product it carries.
   if (BASEBALL_BAG.test(value)) {
-    if (/\bfast\s*pitch\b/i.test(value)) return category("fastpitch-softball", "fp-bags", "explicit fastpitch equipment bag");
+    if (NON_EQUIPMENT_BAG.test(value)) return null;
+    if (/\bfast[ -]?pitch\b/i.test(value)) return category("fastpitch-softball", "fp-bags", "explicit fastpitch equipment bag");
     if (/\bslow\s*pitch\b/i.test(value)) return category("slowpitch-softball", "sp-bags", "explicit slowpitch equipment bag");
     if (/\bsoftball\b/i.test(value) && !/\bbaseball\b/i.test(value)) return null;
     return category("baseball", "bb-bags", "explicit baseball equipment bag");
@@ -101,17 +103,17 @@ export function classifyDeterministicProduct(text: string): DeterministicProduct
     return category("baseball", "bb-bats", "explicit baseball bat");
   }
   if (BATTING_GLOVE.test(value)) {
-    if (/\bfast\s*pitch\b/i.test(value)) return category("fastpitch-softball", "fp-batting-gloves", "explicit fastpitch batting glove");
+    if (/\bfast[ -]?pitch\b/i.test(value)) return category("fastpitch-softball", "fp-batting-gloves", "explicit fastpitch batting glove");
     if (/\bslow\s*pitch\b/i.test(value)) return category("slowpitch-softball", "sp-batting-gloves", "explicit slowpitch batting glove");
     return category("baseball", "bb-batting-gloves", "explicit batting glove");
   }
   if (BATTING_HELMET.test(value)) {
-    if (/\bfast\s*pitch\b/i.test(value)) return category("fastpitch-softball", "fp-protective", "explicit fastpitch batting helmet");
+    if (/\bfast[ -]?pitch\b/i.test(value)) return category("fastpitch-softball", "fp-protective", "explicit fastpitch batting helmet");
     if (/\bslow\s*pitch\b/i.test(value)) return category("slowpitch-softball", "sp-protective", "explicit slowpitch batting helmet");
     return category("baseball", "bb-protective", "explicit batting helmet");
   }
   if (!NON_FIELDING_GLOVE.test(value) && (FIELDING_GLOVE.test(value) || isKnownBaseballFieldingGloveModel(value))) {
-    if (/\bfast\s*pitch\b/i.test(value)) {
+    if (/\bfast[ -]?pitch\b/i.test(value)) {
       return category("fastpitch-softball", "fp-gloves", "explicit softball fielding glove");
     }
     if (/\bslow\s*pitch\b/i.test(value)) {
