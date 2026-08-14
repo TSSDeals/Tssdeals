@@ -32,7 +32,7 @@ const EXPLICIT_BASEBALL_BAT =
 export function hasExplicitBaseballBatEvidence(text: string): boolean {
   return EXPLICIT_BASEBALL_BAT.test(text)
     && !BAT_ACCESSORY_ONLY.test(text)
-    && !/\b(?:softball|fast[ -]?pitch|slow\s*pitch|cricket)\b/i.test(text);
+    && !/\b(?:softball|fast[ -]?pitch|slow\s*pitch|cricket|xeno)\b/i.test(text);
 }
 
 export function isKnownBaseballFieldingGloveModel(text: string): boolean {
@@ -43,7 +43,7 @@ export function isKnownBaseballFieldingGloveModel(text: string): boolean {
     && !classifyGolfClubProduct(text);
 }
 const FASTPITCH_BAT =
-  /\bfast[ -]?pitch\b.{0,60}\bbats?\b|\bbats?\b.{0,60}\bfast[ -]?pitch\b/i;
+  /\bfast[ -]?pitch\b.{0,60}\bbats?\b|\bbats?\b.{0,60}\bfast[ -]?pitch\b|\bxeno\b.{0,60}\bbats?\b|\bbats?\b.{0,60}\bxeno\b/i;
 const SLOWPITCH_BAT =
   /\bslow\s*pitch\b.{0,60}\bbats?\b|\bbats?\b.{0,60}\bslow\s*pitch\b/i;
 const BASEBALL_BAT =
