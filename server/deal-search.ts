@@ -8,6 +8,7 @@ import {
   shopperMemorabiliaEquipmentId,
 } from "../shared/equipment-groups";
 import { classifyGolfClubProduct } from "./golf-product-classifier";
+import { hasExplicitBaseballBatEvidence } from "./deterministic-product-classifier";
 import {
   batSizeTitlePattern,
   extractBatSizeIntent,
@@ -307,6 +308,7 @@ function structuredGloveContext(deal: SearchableDeal): string {
 }
 
 export function hasBaseballGloveNegativeEvidence(deal: SearchableDeal): boolean {
+  if (hasExplicitBaseballBatEvidence(deal.title)) return true;
   if (new RegExp(BASEBALL_GLOVE_NEGATIVE_EVIDENCE_PATTERN, "i").test(deal.title)) return true;
   const titleAndBrand = `${deal.title} ${deal.brand ?? ""}`;
   const strongStoredSoftballOverride = new RegExp(BASEBALL_GLOVE_KNOWN_MODEL_PATTERN, "i").test(titleAndBrand)

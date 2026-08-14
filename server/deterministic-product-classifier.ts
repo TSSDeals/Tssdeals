@@ -19,6 +19,16 @@ const FIELDING_GLOVE =
 const KNOWN_BASEBALL_GLOVE_MODEL =
   /\b(?:wilson\s+(?:a2000|a2k|staff)|a2000\s+\d{3,4}|marucci\s+cypress|rawlings\s+(?:foundation|pro\s+preferred|heart\s+of\s+the\s+hide|hoh|r9|gg\s+elite)|mizuno\s+pro)\b/i;
 
+// Some Rawlings wood-bat lines reuse names that are otherwise strong glove-family
+// evidence (notably "Pro Preferred"). Product-form evidence must win over family
+// names or those bats are projected into Baseball Gloves during broad searches.
+const EXPLICIT_BASEBALL_BAT =
+  /\b(?:baseball|bb\/sb|wood(?:en)?|maple|ash|birch)\s+bats?\b|\bbats?\b.{0,60}\b(?:baseball|bb\/sb|wood(?:en)?|maple|ash|birch)\b|\b(?:woody|torpedo)\b.{0,35}\b(?:2[7-9]|3[0-4])\s*(?:["”]|in(?:ch(?:es)?)?\b)/i;
+
+export function hasExplicitBaseballBatEvidence(text: string): boolean {
+  return EXPLICIT_BASEBALL_BAT.test(text) && !/\b(?:softball|fast\s*pitch|slow\s*pitch|cricket)\b/i.test(text);
+}
+
 export function isKnownBaseballFieldingGloveModel(text: string): boolean {
   return KNOWN_BASEBALL_GLOVE_MODEL.test(text)
     && !SIGNED_OR_DISPLAY.test(text)
@@ -68,6 +78,9 @@ export function classifyDeterministicProduct(text: string): DeterministicProduct
   const value = text.replace(/\s+/g, " ").trim();
   if (!value || SIGNED_OR_DISPLAY.test(value)) return null;
 
+  if (hasExplicitBaseballBatEvidence(value)) {
+    return category("baseball", "bb-bats", "explicit baseball bat");
+  }
   if (!NON_FIELDING_GLOVE.test(value) && (FIELDING_GLOVE.test(value) || isKnownBaseballFieldingGloveModel(value))) {
     if (/\bfast\s*pitch\b/i.test(value)) {
       return category("fastpitch-softball", "fp-gloves", "explicit softball fielding glove");

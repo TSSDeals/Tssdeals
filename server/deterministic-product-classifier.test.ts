@@ -12,6 +12,22 @@ test("recognizes trusted baseball glove model names without requiring the word g
   }
 });
 
+for (const title of [
+  'NEW RAWLINGS PRO PREFERRED OA1 WOODY 33" 11835-S000210986',
+  'NEW RAWLINGS PRO PREFERRED FL12 WOODY 32" 11835-S000210987',
+  'NEW RAWLINGS PRO PREFERRED CR29T TORPEDO 33" WOODY 11835-S000210988',
+  'Used Rawlings PRO PREFERRED MM13Y BB/SB Wood Bat 31" 11613-S000186984',
+]) {
+  test(`explicit bat form overrides the Pro Preferred glove-family name: ${title}`, () => {
+    assert.deepEqual(classifyDeterministicProduct(title), {
+      sportId: "baseball",
+      equipmentTypeId: "bb-bats",
+      confidence: "high",
+      reason: "explicit baseball bat",
+    });
+  });
+}
+
 test("fielding gloves are separated from batting, golf, rain, and sliding gloves", () => {
   assert.equal(classifyDeterministicProduct("Wilson Staff Model Golf Glove"), null);
   assert.equal(classifyDeterministicProduct("Wilson Rain Gloves"), null);

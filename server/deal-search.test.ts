@@ -427,6 +427,19 @@ test("search display projects recovered A2000 deals under Baseball Gloves withou
   assert.equal(projectDealSearchClassification(gloveQuery, batting), batting);
 });
 
+test("Pro Preferred wood bats never project into Baseball Gloves", () => {
+  for (const title of [
+    'NEW RAWLINGS PRO PREFERRED OA1 WOODY 33" 11835-S000210986',
+    'NEW RAWLINGS PRO PREFERRED FL12 WOODY 32" 11835-S000210987',
+    'NEW RAWLINGS PRO PREFERRED CR29T TORPEDO 33" WOODY 11835-S000210988',
+    'Used Rawlings PRO PREFERRED MM13Y BB/SB Wood Bat 31" 11613-S000186984',
+  ]) {
+    const deal = { title, sportId: "baseball", equipmentTypeId: "bb-gloves" };
+    assert.equal(hasBaseballGloveEvidence(deal), false, title);
+    assert.equal(projectDealSearchClassification("rawlings pro preferred", deal), deal, title);
+  }
+});
+
 test("end-to-end A2000 filter stack retains equal IDs and counts at every stage", () => {
   const search = normalizeDealSearch(gloveQuery);
   const stages = {
