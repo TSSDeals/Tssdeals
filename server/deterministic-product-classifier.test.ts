@@ -113,6 +113,7 @@ test("live audit contaminants do not become clubs, gloves, bats, or balls", () =
     "Softball Pitcher's Screen 7x7 FT Fast Pitch Net with Carry Bag Portable Practice",
     "Used PRO VELOCITY BAT 32 NO KNOB BB/SB Training Aid 11682-S000136770",
     "Wilson T- Ball Batting Helmet Facemask for A5280 NOCSAE Compliant | A3089",
+    "| CHAOS Backpack Bag Series | Youth Baseball & Fastpitch Softball | Black",
   ];
   for (const title of titles) assert.equal(classifyDeterministicProduct(title), null, title);
   assert.equal(
