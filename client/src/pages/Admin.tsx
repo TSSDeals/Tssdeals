@@ -1014,6 +1014,41 @@ export default function AdminPage() {
 
   const [golfBackfillPreview, setGolfBackfillPreview] = useState<any | null>(null);
   const [golfBackfillRunning, setGolfBackfillRunning] = useState(false);
+  const [crossCategoryPreview, setCrossCategoryPreview] = useState<any | null>(null);
+  const [crossCategoryRunning, setCrossCategoryRunning] = useState(false);
+
+  const previewCrossCategoryBackfill = async () => {
+    setCrossCategoryRunning(true);
+    try {
+      const response = await fetch("/api/admin/cross-category-backfill/preview?limit=100", { credentials: "include" });
+      if (!response.ok) throw new Error("Could not preview the cross-category cleanup");
+      setCrossCategoryPreview(await response.json());
+    } catch (error: any) {
+      toast({ title: "Category audit failed", description: error.message, variant: "destructive" });
+    } finally {
+      setCrossCategoryRunning(false);
+    }
+  };
+
+  const applyCrossCategoryBackfill = async () => {
+    if (!crossCategoryPreview?.proposed) return;
+    setCrossCategoryRunning(true);
+    try {
+      const response = await apiRequest("POST", "/api/admin/cross-category-backfill/apply", { limit: 100 });
+      const result = await response.json();
+      toast({
+        title: "Cross-category cleanup complete",
+        description: `${result.applied} safe corrections applied; ${result.remainingSafe} remain for another batch.`,
+      });
+      setCrossCategoryPreview(null);
+      taxonomyStatusQuery.refetch();
+      queryClient.invalidateQueries({ queryKey: ["/api/deals"] });
+      await previewCrossCategoryBackfill();
+    } catch (error: any) {
+      toast({ title: "Category cleanup failed", description: error.message, variant: "destructive" });
+      setCrossCategoryRunning(false);
+    }
+  };
 
   const previewGolfBackfill = async () => {
     setGolfBackfillRunning(true);
@@ -3244,6 +3279,59 @@ export default function AdminPage() {
                           </div>
                         ) : (
                           <div className="text-xs text-muted-foreground">No safe historical golf corrections are waiting.</div>
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-4" data-testid="cross-category-backfill">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <div className="text-sm font-semibold">Cross-category contamination audit</div>
+                        <div className="mt-1 max-w-2xl text-xs text-muted-foreground">
+                          Finds explicit bats, batting gloves, helmets, balls, bags, running shoes, fielding gloves, and golf clubs stored in conflicting categories.
+                          Locked records, manual review decisions, accessories, memorabilia, and ambiguous titles remain untouched.
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 gap-2">
+                        <Button variant="outline" size="sm" onClick={previewCrossCategoryBackfill} disabled={crossCategoryRunning}>
+                          {crossCategoryRunning ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+                          Audit all deals
+                        </Button>
+                        <Button size="sm" onClick={applyCrossCategoryBackfill} disabled={crossCategoryRunning || !crossCategoryPreview?.proposed}>
+                          Apply safe batch
+                        </Button>
+                      </div>
+                    </div>
+                    {crossCategoryPreview ? (
+                      <div className="mt-3 space-y-3">
+                        <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-5">
+                          {[
+                            ["Scanned", crossCategoryPreview.scanned],
+                            ["Safe corrections", crossCategoryPreview.proposed],
+                            ["Already correct", crossCategoryPreview.alreadyCorrect],
+                            ["Protected", crossCategoryPreview.protectedByReview],
+                            ["Ambiguous", crossCategoryPreview.ambiguous],
+                          ].map(([label, value]) => (
+                            <div key={String(label)} className="rounded-lg border border-border bg-background/70 p-2">
+                              <div className="font-bold">{Number(value).toLocaleString()}</div>
+                              <div className="text-[11px] text-muted-foreground">{label}</div>
+                            </div>
+                          ))}
+                        </div>
+                        {crossCategoryPreview.proposals?.length ? (
+                          <div className="max-h-64 overflow-y-auto rounded-lg border border-border bg-background/70">
+                            {crossCategoryPreview.proposals.map((proposal: any) => (
+                              <div key={proposal.id} className="border-b border-border px-3 py-2 text-xs last:border-b-0">
+                                <div className="truncate font-medium" title={proposal.title}>{proposal.title}</div>
+                                <div className="text-muted-foreground">
+                                  {proposal.sportId ?? "unassigned"} / {proposal.equipmentTypeId ?? "unassigned"}
+                                  {" -> "}{proposal.proposedSportId} / {proposal.proposedEquipmentTypeId} · {proposal.reason}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-xs text-muted-foreground">No safe cross-category corrections are waiting.</div>
                         )}
                       </div>
                     ) : null}
