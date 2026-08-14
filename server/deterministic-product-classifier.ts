@@ -13,11 +13,13 @@ export type DeterministicProductCategory = {
 const SIGNED_OR_DISPLAY =
   /\b(?:autograph(?:ed)?|hand[ -]?signed|signed\s+by|memorabilia|collectible|display\s+(?:case|stand|mount)|wall\s+mount)\b/i;
 const NON_FIELDING_GLOVE =
-  /\b(?:batting|golf|boxing|work|winter|rain|football|receiver|goalkeeper)\s+gloves?\b|\bsliding\s+mitt\b|\b(?:glove|mitt)\s+(?:laces?|repair\s+kits?|care|conditioner|mallet|wrap|accessor(?:y|ies))\b/i;
+  /\b(?:batting|golf|boxing|work|winter|rain|football|receiver|goalkeeper)\s+gloves?\b|\bsliding\s+mitt\b|\b(?:glove|mitt)\b.{0,45}\b(?:laces?|lacing|repair|care|condition(?:er|ing)?|break[ -]?in|mallet|wrap|kit|pad|pounding|molding|shaping|accessor(?:y|ies))\b|\b(?:laces?|lacing|repair|care|condition(?:er|ing)?|break[ -]?in|mallet|wrap|kit|pad|pounding|molding|shaping)\b.{0,45}\b(?:glove|mitt)\b/i;
 const FIELDING_GLOVE =
   /\b(?:baseball|fielding|infield|outfield|pitcher(?:'s)?|catcher(?:'s)?|first[ -]?base)\b.{0,60}\b(?:glove|mitt)s?\b|\b(?:glove|mitt)s?\b.{0,60}\b(?:baseball|fielding|infield|outfield|pitcher(?:'s)?|catcher(?:'s)?|first[ -]?base)\b/i;
 const KNOWN_BASEBALL_GLOVE_MODEL =
-  /\b(?:wilson\s+(?:a2000|a2k|staff)|a2000\s+\d{3,4}|marucci\s+cypress|rawlings\s+(?:foundation|pro\s+preferred|heart\s+of\s+the\s+hide|hoh|r9|gg\s+elite)|mizuno\s+pro)\b/i;
+  /\b(?:wilson\s+(?:a2000|a2k|staff)|a2000\s+\d{3,4}|marucci\s+cypress|rawlings\s+(?:foundation|pro\s+preferred|heart\s+of\s+the\s+hide|hoh|r9|gg\s+elite))\b/i;
+const BAT_ACCESSORY_ONLY =
+  /\b(?:bat\s+grips?|grip\s+wraps?|handle\s+grips?|replacement\s+grips?|bat\s+racks?|bat\s+holders?|bat\s+cases?|bat\s+sleeves?)\b/i;
 
 // Some Rawlings wood-bat lines reuse names that are otherwise strong glove-family
 // evidence (notably "Pro Preferred"). Product-form evidence must win over family
@@ -26,13 +28,16 @@ const EXPLICIT_BASEBALL_BAT =
   /\b(?:baseball|bb\/sb|wood(?:en)?|maple|ash|birch)\s+bats?\b|\bbats?\b.{0,60}\b(?:baseball|bb\/sb|wood(?:en)?|maple|ash|birch)\b|\b(?:woody|torpedo)\b.{0,35}\b(?:2[7-9]|3[0-4])\s*(?:["”]|in(?:ch(?:es)?)?\b)/i;
 
 export function hasExplicitBaseballBatEvidence(text: string): boolean {
-  return EXPLICIT_BASEBALL_BAT.test(text) && !/\b(?:softball|fast\s*pitch|slow\s*pitch|cricket)\b/i.test(text);
+  return EXPLICIT_BASEBALL_BAT.test(text)
+    && !BAT_ACCESSORY_ONLY.test(text)
+    && !/\b(?:softball|fast\s*pitch|slow\s*pitch|cricket)\b/i.test(text);
 }
 
 export function isKnownBaseballFieldingGloveModel(text: string): boolean {
   return KNOWN_BASEBALL_GLOVE_MODEL.test(text)
     && !SIGNED_OR_DISPLAY.test(text)
-    && !NON_FIELDING_GLOVE.test(text);
+    && !NON_FIELDING_GLOVE.test(text)
+    && !classifyGolfClubProduct(text);
 }
 const FASTPITCH_BAT =
   /\bfast\s*pitch\b.{0,60}\bbats?\b|\bbats?\b.{0,60}\bfast\s*pitch\b/i;
@@ -56,7 +61,7 @@ const FASTPITCH_CLEAT =
 const SLOWPITCH_CLEAT =
   /\bslow\s*pitch\b.{0,45}\b(?:cleats?|spikes?)\b|\b(?:cleats?|spikes?)\b.{0,45}\bslow\s*pitch\b/i;
 const TRAINING_PRODUCT =
-  /\b(?:batting\s+tees?|pitching\s+machines?|pitching\s+targets?|pitching\s+nets?|hitting\s+nets?|baseball\s+rebounders?|softball\s+rebounders?|swing\s+trainers?|batting\s+trainers?)\b/i;
+  /\b(?:batting\s+tees?|pitching\s+machines?|pitching\s+targets?|pitching\s+nets?|hitting\s+nets?|baseball\s+rebounders?|softball\s+rebounders?|swing\s+trainers?|batting\s+trainers?|weighted\s+(?:training\s+)?(?:baseballs?|softballs?)|training\s+(?:baseball|softball)\s+sets?)\b/i;
 const TRAINING_ACCESSORY_ONLY =
   /\b(?:replacement|parts?|covers?|wheels?|motors?|cords?|adapters?|hardware|attachments?)\b/i;
 const BASEBALL_TRAINING =
@@ -121,6 +126,7 @@ export function classifyDeterministicProduct(text: string): DeterministicProduct
     return category("slowpitch-softball", "sp-bats", "explicit slowpitch bat");
   }
   if (BASEBALL_BAT.test(value) && !/\b(?:softball|cricket)\b/i.test(value)) {
+    if (BAT_ACCESSORY_ONLY.test(value)) return null;
     return category("baseball", "bb-bats", "explicit baseball bat");
   }
   // Training product form wins over the ball it launches or contains. This
@@ -136,6 +142,7 @@ export function classifyDeterministicProduct(text: string): DeterministicProduct
     if (BASEBALL_TRAINING.test(value) && !/\bsoftball\b/i.test(value)) {
       return category("baseball", "bb-training", "explicit baseball training equipment");
     }
+    return null;
   }
   if (SOFTBALL_BALL.test(value) && !/\b(?:signed|autograph|display|holder|case|bucket|bag)\b/i.test(value)) {
     if (/\bslow\s*pitch\b/i.test(value)) return category("slowpitch-softball", "sp-balls", "explicit slowpitch softball");

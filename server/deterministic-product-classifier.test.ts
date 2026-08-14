@@ -95,3 +95,19 @@ test("training equipment requires a complete product and explicit sport evidence
   assert.deepEqual(classifyDeterministicProduct("Slowpitch Softball Batting Tee Swing Trainer"),
     { sportId: "slowpitch-softball", equipmentTypeId: "sp-training", confidence: "high", reason: "explicit slowpitch training equipment" });
 });
+
+test("live audit contaminants do not become clubs, gloves, bats, or balls", () => {
+  const titles = [
+    "Nike Mens Vapor Edge Pro Black/Iron Grey Football Cleats",
+    "Professional Baseball Glove Break-in Conditioning Kit - 5 Piece Set",
+    "Rawlings Baseball Glove Pounding Molding Shaping Pad",
+    "5pcs Baseball Lacing Needles Glove Repair Kit",
+    "Mizuno Pro 17.5 in Adult Leg Guards",
+    "Hot Glove Tacky Baseball Bat Handle Grip Wrap",
+    "Jugs Lite-Flite Pitching Machine w Softballs and Baseballs",
+  ];
+  for (const title of titles) assert.equal(classifyDeterministicProduct(title), null, title);
+  assert.equal(classifyDeterministicProduct("Champro Weighted Training Baseball Set")?.equipmentTypeId, "bb-training");
+  assert.equal(classifyDeterministicProduct("Wilson Staff Tab III Set of 8 Irons")?.equipmentTypeId, "golf-iron-sets");
+  assert.equal(classifyDeterministicProduct("Mizuno Pro T1 Wedge 60 Degree")?.equipmentTypeId, "golf-wedges");
+});
