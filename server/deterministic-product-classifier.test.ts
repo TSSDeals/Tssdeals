@@ -50,6 +50,8 @@ test("bats require explicit product-form evidence and preserve pitch type", () =
     { sportId: "baseball", equipmentTypeId: "bb-bats", confidence: "high", reason: "explicit baseball bat" });
   assert.deepEqual(classifyDeterministicProduct("Marucci ASURA Fastpitch Softball Bat -10"),
     { sportId: "fastpitch-softball", equipmentTypeId: "fp-bats", confidence: "high", reason: "explicit fastpitch bat" });
+  assert.deepEqual(classifyDeterministicProduct("Louisville Slugger XENO FPXN159 Baseball Bat 33 inch 24oz Composite"),
+    { sportId: "fastpitch-softball", equipmentTypeId: "fp-bats", confidence: "high", reason: "explicit fastpitch bat" });
 });
 
 test("separates common cross-category contaminants from fielding gloves", () => {
