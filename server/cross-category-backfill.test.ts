@@ -46,6 +46,12 @@ test("protects locked and curated records", () => {
   assert.equal(plan.protectedByReview, 3);
 });
 
+test("treats joined sub-filter presence as protection without needing an exact count", () => {
+  const plan = planCrossCategoryBackfill([row({ joinedSubFilterCount: 1 })]);
+  assert.equal(plan.proposed, 0);
+  assert.equal(plan.protectedByReview, 1);
+});
+
 test("leaves ambiguous products and correct classifications unchanged", () => {
   const plan = planCrossCategoryBackfill([
     row({ id: "ambiguous", title: "Wilson Sporting Goods Item" }),

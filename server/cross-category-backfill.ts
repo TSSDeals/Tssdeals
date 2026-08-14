@@ -1,4 +1,4 @@
-import { and, eq, isNull, notExists, sql } from "drizzle-orm";
+import { and, eq, isNull, notExists } from "drizzle-orm";
 import { dealSubFilters, deals } from "@shared/schema";
 import { db } from "./db";
 import { classifyDeterministicProduct } from "./deterministic-product-classifier";
@@ -55,7 +55,8 @@ export function planCrossCategoryBackfill(rows: CrossCategoryRow[]) {
 }
 
 async function loadCrossCategoryRows(): Promise<CrossCategoryRow[]> {
-  const rows = await db.select({
+  const [rows, joinedRows] = await Promise.all([
+    db.select({
     id: deals.id,
     title: deals.title,
     brand: deals.brand,
@@ -63,11 +64,11 @@ async function loadCrossCategoryRows(): Promise<CrossCategoryRow[]> {
     equipmentTypeId: deals.equipmentTypeId,
     subFilterId: deals.subFilterId,
     classificationLocked: deals.classificationLocked,
-    joinedSubFilterCount: sql<number>`(
-      SELECT count(*)::int FROM deal_sub_filters dsf WHERE dsf.deal_id = ${deals.id}
-    )`,
-  }).from(deals).orderBy(deals.id);
-  return rows.map((row) => ({ ...row, joinedSubFilterCount: Number(row.joinedSubFilterCount) || 0 }));
+    }).from(deals).orderBy(deals.id),
+    db.selectDistinct({ dealId: dealSubFilters.dealId }).from(dealSubFilters),
+  ]);
+  const joinedDealIds = new Set(joinedRows.map((row) => row.dealId));
+  return rows.map((row) => ({ ...row, joinedSubFilterCount: joinedDealIds.has(row.id) ? 1 : 0 }));
 }
 
 export async function previewCrossCategoryBackfill(sampleLimit = 100) {
