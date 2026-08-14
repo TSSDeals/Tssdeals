@@ -90,6 +90,7 @@ test("training equipment requires a complete product and explicit sport evidence
   assert.equal(classifyDeterministicProduct("Pitching Machine Replacement Wheel"), null);
   assert.equal(classifyDeterministicProduct("Portable Hitting Net"), null);
   assert.equal(classifyDeterministicProduct("Softball Pitching Machine"), null);
+  assert.equal(classifyDeterministicProduct("Golf Hitting Net 10x10ft for Golf Baseball Soccer Hockey Polyster Durable"), null);
   assert.deepEqual(classifyDeterministicProduct("Louisville Slugger Baseball Pitching Machine"),
     { sportId: "baseball", equipmentTypeId: "bb-training", confidence: "high", reason: "explicit baseball training equipment" });
   assert.deepEqual(classifyDeterministicProduct("Fastpitch Softball Pitching Target Training Net"),
@@ -118,6 +119,8 @@ test("live audit contaminants do not become clubs, gloves, bats, or balls", () =
     "| CHAOS Backpack Bag Series | Youth Baseball & Fastpitch Softball | Black",
     "Wilson Staff Performance Pant - Size 38",
     "Baseball Glove Clip, Adjustable Baseball Glove Holder Bag Clip & Light Pink",
+    "Used BAT BACKPACK BB/SB Player Backpack Pink 11732-S000370725",
+    "Softballs,Practice Softballs,Softball for Youth Teenager/Adults Players Training",
   ];
   for (const title of titles) assert.equal(classifyDeterministicProduct(title), null, title);
   assert.equal(
