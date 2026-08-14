@@ -121,6 +121,11 @@ test("live audit contaminants do not become clubs, gloves, bats, or balls", () =
     "Baseball Glove Clip, Adjustable Baseball Glove Holder Bag Clip & Light Pink",
     "Used BAT BACKPACK BB/SB Player Backpack Pink 11732-S000370725",
     "Softballs,Practice Softballs,Softball for Youth Teenager/Adults Players Training",
+    "Ip select Baseball Glove Leather Wax IP.240 Premium Maintenance 30ml Japan New",
+    "Hitting KNOB Bat Weight Training, 12 oz - Softball Fastpitch Baseball, w/ box",
+    "Rubber Base with Mounting Holes Weighted Wedge Base for Athletes",
+    "Dree 8X Golf Weights Screw Taylormade Spider Tour Putter Red Black Silver R11",
+    "Eva Plastic Baseball Training Set for Kids Durable Lightweight Bat and Ball Toy",
   ];
   for (const title of titles) assert.equal(classifyDeterministicProduct(title), null, title);
   assert.equal(
