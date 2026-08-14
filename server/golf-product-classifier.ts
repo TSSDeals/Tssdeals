@@ -55,7 +55,7 @@ export function classifyGolfClubProduct(text: string): GolfClubClassification | 
     /\b(?:golf|clubs?|degree|loft|shafts?|flex|right\s+hand|left\s+hand)\b/i.test(value);
 
   if (
-    /\b(?:complete|full)\s+(?:golf\s+)?(?:club\s+)?sets?\b/i.test(value)
+    /\b(?:complete|full)\s+(?:(?:golf\s+)?club\s+sets?|golf\s+sets?)\b/i.test(value)
     || /\biron\s+sets?\b/i.test(value)
     || /\bsets?\s+of\s+\d+\s+irons?\b/i.test(value)
     || /\b[3-9]\s*[-–]\s*(?:pw|sw|aw|gw)\b/i.test(value)
@@ -95,7 +95,8 @@ export function classifyGolfClubProduct(text: string): GolfClubClassification | 
   }
   if (
     /\b(?:golf\s+)?putters?\b/i.test(value)
-    || /\b(?:spider(?:\s+tour)?|ai-one|scotty\s+cameron\s+(?:phantom|newport))\b/i.test(value)
+    || /\b(?:spider\s+tour|ai-one|scotty\s+cameron\s+(?:phantom|newport))\b/i.test(value)
+    || (/\bspider\b/i.test(value) && /\b(?:golf|putter|taylormade)\b/i.test(value))
   ) {
     return result("golf-putters", "explicit golf putter");
   }

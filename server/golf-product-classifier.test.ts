@@ -64,6 +64,19 @@ test("rejects non-golf hybrid products and compact model collisions", () => {
   }
 });
 
+test("rejects generic set and Spider names without golf evidence", () => {
+  assert.equal(classifyGolfClubProduct("Warrior Ritual G6 E+ Custom Regular Goalie Full Set"), null);
+  assert.equal(classifyGolfClubProduct("H&H Lure 2 oz. Spider Sinker"), null);
+  assert.equal(
+    classifyGolfClubProduct("TaylorMade Spider Tour X Putter 34 inch")?.equipmentTypeId,
+    "golf-putters",
+  );
+  assert.equal(
+    classifyGolfClubProduct("Callaway Women's Complete Golf Club Set")?.equipmentTypeId,
+    "golf-iron-sets",
+  );
+});
+
 test("retains explicit golf hybrids", () => {
   assert.equal(
     classifyGolfClubProduct("Used Ping G25 Mens RH 4 Hybrid Golf Club")?.equipmentTypeId,
