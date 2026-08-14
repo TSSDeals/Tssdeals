@@ -14,6 +14,8 @@ const SIGNED_OR_DISPLAY =
   /\b(?:autograph(?:ed)?|hand[ -]?signed|signed\s+by|memorabilia|collectible|display\s+(?:case|stand|rack|shelf|mount)|wall\s+mount(?:ed|ing)?|(?:glove|mitt)\s+(?:stand|rack|shelf))\b/i;
 const NON_FIELDING_GLOVE =
   /\b(?:batting|golf|boxing|work|winter|rain|football|receiver|goalkeeper|pancake|training|trainer)\s+gloves?\b|\bsliding\s+mitt\b|\b(?:glove|mitt)\b.{0,45}\b(?:laces?|lacing|repair|care|condition(?:er|ing)?|break[ -]?in|mallet|wrap|kit|pad|pounding|molding|shaping|accessor(?:y|ies))\b|\b(?:laces?|lacing|repair|care|condition(?:er|ing)?|break[ -]?in|mallet|wrap|kit|pad|pounding|molding|shaping)\b.{0,45}\b(?:glove|mitt)\b/i;
+const NON_GLOVE_APPAREL =
+  /\b(?:pants?|trousers?|shorts?|shirts?|t[ -]?shirts?|polos?|jerseys?|jackets?|hoodies?|sweatshirts?|hats?|caps?|socks?|apparel)\b/i;
 const FIELDING_GLOVE =
   /\b(?:baseball|fielding|infield|outfield|pitcher(?:'s)?|catcher(?:'s)?|first[ -]?base)\b.{0,60}\b(?:glove|mitt)s?\b|\b(?:glove|mitt)s?\b.{0,60}\b(?:baseball|fielding|infield|outfield|pitcher(?:'s)?|catcher(?:'s)?|first[ -]?base)\b/i;
 const KNOWN_BASEBALL_GLOVE_MODEL =
@@ -37,6 +39,7 @@ export function isKnownBaseballFieldingGloveModel(text: string): boolean {
   return KNOWN_BASEBALL_GLOVE_MODEL.test(text)
     && !SIGNED_OR_DISPLAY.test(text)
     && !NON_FIELDING_GLOVE.test(text)
+    && !NON_GLOVE_APPAREL.test(text)
     && !classifyGolfClubProduct(text);
 }
 const FASTPITCH_BAT =
