@@ -11,7 +11,7 @@ export type DeterministicProductCategory = {
 };
 
 const SIGNED_OR_DISPLAY =
-  /\b(?:autograph(?:ed)?|hand[ -]?signed|signed\s+by|memorabilia|collectible|display\s+(?:case|stand|mount)|wall\s+mount)\b/i;
+  /\b(?:autograph(?:ed)?|hand[ -]?signed|signed\s+by|memorabilia|collectible|display\s+(?:case|stand|mount)|wall\s+mount(?:ed|ing)?)\b/i;
 const NON_FIELDING_GLOVE =
   /\b(?:batting|golf|boxing|work|winter|rain|football|receiver|goalkeeper)\s+gloves?\b|\bsliding\s+mitt\b|\b(?:glove|mitt)\b.{0,45}\b(?:laces?|lacing|repair|care|condition(?:er|ing)?|break[ -]?in|mallet|wrap|kit|pad|pounding|molding|shaping|accessor(?:y|ies))\b|\b(?:laces?|lacing|repair|care|condition(?:er|ing)?|break[ -]?in|mallet|wrap|kit|pad|pounding|molding|shaping)\b.{0,45}\b(?:glove|mitt)\b/i;
 const FIELDING_GLOVE =
@@ -19,7 +19,7 @@ const FIELDING_GLOVE =
 const KNOWN_BASEBALL_GLOVE_MODEL =
   /\b(?:wilson\s+(?:a2000|a2k|staff)|a2000\s+\d{3,4}|marucci\s+cypress|rawlings\s+(?:foundation|pro\s+preferred|heart\s+of\s+the\s+hide|hoh|r9|gg\s+elite))\b/i;
 const BAT_ACCESSORY_ONLY =
-  /\b(?:bat\s+grips?|grip\s+wraps?|handle\s+grips?|replacement\s+grips?|bat\s+racks?|bat\s+holders?|bat\s+cases?|bat\s+sleeves?)\b/i;
+  /\b(?:bat\s+grips?|grip\s+wraps?|handle\s+grips?|replacement\s+grips?|bat\s+racks?|bat\s+holders?|bat\s+storage|bat\s+cases?|bat\s+sleeves?)\b/i;
 
 // Some Rawlings wood-bat lines reuse names that are otherwise strong glove-family
 // evidence (notably "Pro Preferred"). Product-form evidence must win over family
@@ -47,7 +47,7 @@ const BASEBALL_BAT =
   /\b(?:baseball|bbcor|usssa|usa\s+baseball|tee[ -]?ball|t[ -]?ball)\b.{0,60}\bbats?\b|\bbats?\b.{0,60}\b(?:baseball|bbcor|usssa|usa\s+baseball)\b/i;
 const BATTING_GLOVE = /\bbatting\s+gloves?\b/i;
 const BATTING_HELMET = /\b(?:baseball|softball|fast\s*pitch|slow\s*pitch)?\s*batting\s+helmets?\b/i;
-const BASEBALL_BALL = /\bbaseballs\b|\b(?:official|practice|game|training|youth|league)\s+baseball\b|\bbaseball\s+(?:balls?|dozen|packs?|buckets?)\b/i;
+const BASEBALL_BALL = /\bbaseballs\b|\b(?:official|practice|game|training)\s+baseball\b|\bbaseball\s+(?:balls?|dozen|packs?|buckets?)\b/i;
 const SOFTBALL_BALL = /\bsoftballs\b|\b(?:official|practice|game|training)\s+softball\s+(?:balls?|dozen|packs?|buckets?)\b|\bsoftball\s+(?:balls?|dozen|packs?|buckets?)\b/i;
 const BASEBALL_BAG = /\b(?:baseball|softball|fast\s*pitch|slow\s*pitch|bat)\b.{0,35}\b(?:equipment\s+)?bags?\b|\b(?:equipment\s+)?bags?\b.{0,35}\b(?:baseball|softball|fast\s*pitch|slow\s*pitch|bat)\b/i;
 const RUNNING_SHOE =

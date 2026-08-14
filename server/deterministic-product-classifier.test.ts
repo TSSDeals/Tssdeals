@@ -105,8 +105,13 @@ test("live audit contaminants do not become clubs, gloves, bats, or balls", () =
     "Mizuno Pro 17.5 in Adult Leg Guards",
     "Hot Glove Tacky Baseball Bat Handle Grip Wrap",
     "Jugs Lite-Flite Pitching Machine w Softballs and Baseballs",
+    "Vintage Gray Wood Home Plate-Shaped Wall Mounted Baseball and Bat Storage",
   ];
   for (const title of titles) assert.equal(classifyDeterministicProduct(title), null, title);
+  assert.equal(
+    classifyDeterministicProduct("Nike Youth Baseball Softball Cleats US Size 6Y Red Black White")?.equipmentTypeId,
+    "bb-cleats",
+  );
   assert.equal(classifyDeterministicProduct("Champro Weighted Training Baseball Set")?.equipmentTypeId, "bb-training");
   assert.equal(classifyDeterministicProduct("Wilson Staff Tab III Set of 8 Irons")?.equipmentTypeId, "golf-iron-sets");
   assert.equal(classifyDeterministicProduct("Mizuno Pro T1 Wedge 60 Degree")?.equipmentTypeId, "golf-wedges");
