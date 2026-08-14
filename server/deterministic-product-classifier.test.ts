@@ -110,6 +110,9 @@ test("live audit contaminants do not become clubs, gloves, bats, or balls", () =
     "Used Rawlings GREAT HANDS BBBS2 Baseball Training Pancake Glove",
     "54cm EVA Foam Baseball Bat Comfy Grip For Indoor Outdoor Play Yellow",
     "Rawlings Baseball Stitch Crossbody Bag",
+    "Softball Pitcher's Screen 7x7 FT Fast Pitch Net with Carry Bag Portable Practice",
+    "Used PRO VELOCITY BAT 32 NO KNOB BB/SB Training Aid 11682-S000136770",
+    "Wilson T- Ball Batting Helmet Facemask for A5280 NOCSAE Compliant | A3089",
   ];
   for (const title of titles) assert.equal(classifyDeterministicProduct(title), null, title);
   assert.equal(

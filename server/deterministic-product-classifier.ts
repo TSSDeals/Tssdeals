@@ -19,7 +19,7 @@ const FIELDING_GLOVE =
 const KNOWN_BASEBALL_GLOVE_MODEL =
   /\b(?:wilson\s+(?:a2000|a2k|staff)|a2000\s+\d{3,4}|marucci\s+cypress|rawlings\s+(?:foundation|pro\s+preferred|heart\s+of\s+the\s+hide|hoh|r9|gg\s+elite))\b/i;
 const BAT_ACCESSORY_ONLY =
-  /\b(?:bat\s+grips?|grip\s+wraps?|handle\s+grips?|replacement\s+grips?|bat\s+racks?|bat\s+holders?|bat\s+storage|bat\s+cases?|bat\s+sleeves?|(?:foam|plastic)\s+(?:baseball\s+)?bats?)\b/i;
+  /\b(?:bat\s+grips?|grip\s+wraps?|handle\s+grips?|replacement\s+grips?|bat\s+racks?|bat\s+holders?|bat\s+storage|bat\s+cases?|bat\s+sleeves?|velocity\s+bats?|no[ -]?knob|training\s+aids?|(?:foam|plastic)\s+(?:baseball\s+)?bats?)\b/i;
 
 // Some Rawlings wood-bat lines reuse names that are otherwise strong glove-family
 // evidence (notably "Pro Preferred"). Product-form evidence must win over family
@@ -50,7 +50,8 @@ const BATTING_HELMET = /\b(?:baseball|softball|fast[ -]?pitch|slow\s*pitch)?\s*b
 const BASEBALL_BALL = /\bbaseballs\b|\b(?:official|practice|game|training)\s+baseball\b|\bbaseball\s+(?:balls?|dozen|packs?|buckets?)\b/i;
 const SOFTBALL_BALL = /\bsoftballs\b|\b(?:official|practice|game|training)\s+softball\s+(?:balls?|dozen|packs?|buckets?)\b|\bsoftball\s+(?:balls?|dozen|packs?|buckets?)\b/i;
 const BASEBALL_BAG = /\b(?:baseball|softball|fast[ -]?pitch|slow\s*pitch|bat)\b.{0,35}\b(?:equipment\s+)?bags?\b|\b(?:equipment\s+)?bags?\b.{0,35}\b(?:baseball|softball|fast[ -]?pitch|slow\s*pitch|bat)\b/i;
-const NON_EQUIPMENT_BAG = /\b(?:crossbody|purse|handbag|tote|lunch\s+bag|wallet)\b/i;
+const NON_EQUIPMENT_BAG = /\b(?:crossbody|purse|handbag|tote|lunch\s+bag|wallet|pitcher(?:'s)?\s+screens?|practice\s+screens?|pitching\s+nets?|hitting\s+nets?)\b/i;
+const HELMET_ACCESSORY_ONLY = /\b(?:face\s*mask|facemask|chin\s*strap|jaw\s+guard|replacement\s+pad|hardware|attachment)\b/i;
 const RUNNING_SHOE =
   /\b(?:road|trail|cross[ -]?country)?\s*running\s+(?:shoes?|sneakers?)\b|\b(?:shoes?|sneakers?)\b.{0,30}\b(?:road|trail|cross[ -]?country)\s+running\b/i;
 const CASUAL_OR_NON_SPORT_FOOTWEAR =
@@ -108,6 +109,7 @@ export function classifyDeterministicProduct(text: string): DeterministicProduct
     return category("baseball", "bb-batting-gloves", "explicit batting glove");
   }
   if (BATTING_HELMET.test(value)) {
+    if (HELMET_ACCESSORY_ONLY.test(value)) return null;
     if (/\bfast[ -]?pitch\b/i.test(value)) return category("fastpitch-softball", "fp-protective", "explicit fastpitch batting helmet");
     if (/\bslow\s*pitch\b/i.test(value)) return category("slowpitch-softball", "sp-protective", "explicit slowpitch batting helmet");
     return category("baseball", "bb-protective", "explicit batting helmet");
