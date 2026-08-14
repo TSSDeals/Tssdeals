@@ -51,6 +51,8 @@ export function classifyGolfClubProduct(text: string): GolfClubClassification | 
     /\b(?:golf|fairway|woods?|clubs?|degree|loft|mens?|womens?|right\s+hand|left\s+hand|rh|lh)\b|[Â°Âº]/i.test(value);
   const knownGolfFamily =
     /\b(?:qi35|qi10|stealth\s*2|paradym|elyte|rogue\s*st|g440|g430|tsr[1234]?|gt[1234])\b/i.test(value);
+  const individualIronContext =
+    /\b(?:golf|clubs?|degree|loft|shafts?|flex|right\s+hand|left\s+hand)\b/i.test(value);
 
   if (
     /\b(?:complete|full)\s+(?:golf\s+)?(?:club\s+)?sets?\b/i.test(value)
@@ -99,7 +101,8 @@ export function classifyGolfClubProduct(text: string): GolfClubClassification | 
   }
   if (
     /\b(?:[2-9]|pw|aw|gw|sw|lw)\s*[- ]?irons?\b/i.test(value)
-    || /\b(?:golf\s+)?irons?\b/i.test(value)
+    || /\bgolf\s+irons?\b/i.test(value)
+    || (/\birons?\b/i.test(value) && individualIronContext && !nonGolfHybrid)
   ) {
     return result("golf-irons", "explicit individual golf iron");
   }
