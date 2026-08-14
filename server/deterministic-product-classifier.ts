@@ -13,7 +13,7 @@ export type DeterministicProductCategory = {
 const SIGNED_OR_DISPLAY =
   /\b(?:autograph(?:ed)?|hand[ -]?signed|signed\s+by|memorabilia|collectible|display\s+(?:case|stand|rack|shelf|mount)|wall\s+mount(?:ed|ing)?|(?:glove|mitt)\s+(?:stand|rack|shelf))\b/i;
 const NON_FIELDING_GLOVE =
-  /\b(?:batting|golf|boxing|work|winter|rain|football|receiver|goalkeeper|pancake|training|trainer)\s+gloves?\b|\bsliding\s+mitt\b|\b(?:glove|mitt)\b.{0,45}\b(?:laces?|lacing|repair|care|condition(?:er|ing)?|break[ -]?in|mallet|wrap|kit|pad|pounding|molding|shaping|accessor(?:y|ies))\b|\b(?:laces?|lacing|repair|care|condition(?:er|ing)?|break[ -]?in|mallet|wrap|kit|pad|pounding|molding|shaping)\b.{0,45}\b(?:glove|mitt)\b/i;
+  /\b(?:batting|golf|boxing|work|winter|rain|football|receiver|goalkeeper|pancake|training|trainer)\s+gloves?\b|\bsliding\s+mitt\b|\b(?:glove|mitt)\b.{0,45}\b(?:laces?|lacing|repair|care|condition(?:er|ing)?|wax|oil|break[ -]?in|mallet|wrap|kit|pad|pounding|molding|shaping|accessor(?:y|ies))\b|\b(?:laces?|lacing|repair|care|condition(?:er|ing)?|wax|oil|break[ -]?in|mallet|wrap|kit|pad|pounding|molding|shaping)\b.{0,45}\b(?:glove|mitt)\b/i;
 const NON_GLOVE_APPAREL =
   /\b(?:pants?|trousers?|shorts?|shirts?|t[ -]?shirts?|polos?|jerseys?|jackets?|hoodies?|sweatshirts?|hats?|caps?|socks?|apparel)\b/i;
 const FIELDING_GLOVE =
@@ -21,7 +21,7 @@ const FIELDING_GLOVE =
 const KNOWN_BASEBALL_GLOVE_MODEL =
   /\b(?:wilson\s+(?:a2000|a2k|staff)|a2000\s+\d{3,4}|marucci\s+cypress|rawlings\s+(?:foundation|pro\s+preferred|heart\s+of\s+the\s+hide|hoh|r9|gg\s+elite))\b/i;
 const BAT_ACCESSORY_ONLY =
-  /\b(?:bat\s+grips?|grip\s+wraps?|handle\s+grips?|replacement\s+grips?|bat\s+racks?|bat\s+holders?|bat\s+storage|bat\s+cases?|bat\s+sleeves?|bat\s+backpacks?|backpacks?\b.{0,25}\bbats?|velocity\s+bats?|no[ -]?knob|training\s+aids?|(?:foam|plastic)\s+(?:baseball\s+)?bats?)\b/i;
+  /\b(?:bat\s+grips?|grip\s+wraps?|handle\s+grips?|replacement\s+grips?|bat\s+racks?|bat\s+holders?|bat\s+storage|bat\s+cases?|bat\s+sleeves?|bat\s+backpacks?|backpacks?\b.{0,25}\bbats?|velocity\s+bats?|no[ -]?knob|(?:hitting\s+)?knob\s+bat\s+weights?|bat\s+weights?|training\s+aids?|(?:foam|plastic)\s+(?:baseball\s+)?bats?|bat\s+(?:and|&)\s+ball\s+toys?)\b|\bplastic\s+baseball\s+training\s+sets?\b/i;
 
 // Some Rawlings wood-bat lines reuse names that are otherwise strong glove-family
 // evidence (notably "Pro Preferred"). Product-form evidence must win over family
@@ -104,6 +104,7 @@ export function classifyDeterministicProduct(text: string): DeterministicProduct
     if (/\bsoftball\b/i.test(value) && !/\bbaseball\b/i.test(value)) return null;
     return category("baseball", "bb-bags", "explicit baseball equipment bag");
   }
+  if (BAT_ACCESSORY_ONLY.test(value)) return null;
   if (hasExplicitBaseballBatEvidence(value)) {
     return category("baseball", "bb-bats", "explicit baseball bat");
   }
@@ -182,6 +183,16 @@ export function classifyDeterministicProduct(text: string): DeterministicProduct
       return category("baseball", "bb-cleats", "explicit baseball cleat");
     }
   }
+  // Hardware and weighted bases often contain a club-form word but are not
+  // playable clubs. Resolve them before both the shared golf classifier and
+  // the narrow fallback rules below.
+  if (
+    /\b(?:rubber|weighted|door)\s+wedge\s+base\b/i.test(value)
+    || /\b(?:weights?|screws?)\b.{0,45}\bputters?\b|\bputters?\b.{0,45}\b(?:weights?|screws?)\b/i.test(value)
+  ) {
+    return null;
+  }
+
   const golf = classifyGolfClubProduct(value);
   if (golf) {
     return category(golf.sportId, golf.equipmentTypeId, golf.reason);
