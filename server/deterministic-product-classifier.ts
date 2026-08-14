@@ -53,7 +53,7 @@ const BATTING_HELMET = /\b(?:baseball|softball|fast[ -]?pitch|slow\s*pitch)?\s*b
 const BASEBALL_BALL = /\bbaseballs\b|\b(?:official|practice|game|training)\s+baseball\b|\bbaseball\s+(?:balls?|dozen|packs?|buckets?)\b/i;
 const SOFTBALL_BALL = /\bsoftballs\b|\b(?:official|practice|game|training)\s+softball\s+(?:balls?|dozen|packs?|buckets?)\b|\bsoftball\s+(?:balls?|dozen|packs?|buckets?)\b/i;
 const BASEBALL_BAG = /\b(?:baseball|softball|fast[ -]?pitch|slow\s*pitch|bat)\b.{0,35}\b(?:equipment\s+)?bags?\b|\b(?:equipment\s+)?bags?\b.{0,35}\b(?:baseball|softball|fast[ -]?pitch|slow\s*pitch|bat)\b/i;
-const NON_EQUIPMENT_BAG = /\b(?:crossbody|purse|handbag|tote|lunch\s+bag|wallet|pitcher(?:'s)?\s+screens?|practice\s+screens?|pitching\s+nets?|hitting\s+nets?)\b|\b(?:glove|mitt|bag)\b.{0,35}\b(?:clips?|holders?)\b|\b(?:clips?|holders?)\b.{0,35}\b(?:glove|mitt|bag)\b/i;
+const NON_EQUIPMENT_BAG = /\b(?:crossbody|cross\s+mini\s+bag|purse|handbag|tote|lunch\s+bag|wallet|pitcher(?:'s)?\s+screens?|practice\s+screens?|pitching\s+nets?|hitting\s+nets?)\b|\b(?:glove|mitt|bag)\b.{0,35}\b(?:clips?|holders?)\b|\b(?:clips?|holders?)\b.{0,35}\b(?:glove|mitt|bag)\b/i;
 const HELMET_ACCESSORY_ONLY = /\b(?:face\s*mask|facemask|chin\s*strap|jaw\s+guard|replacement\s+pad|hardware|attachment)\b/i;
 const RUNNING_SHOE =
   /\b(?:road|trail|cross[ -]?country)?\s*running\s+(?:shoes?|sneakers?)\b|\b(?:shoes?|sneakers?)\b.{0,30}\b(?:road|trail|cross[ -]?country)\s+running\b/i;
@@ -120,6 +120,7 @@ export function classifyDeterministicProduct(text: string): DeterministicProduct
     return category("baseball", "bb-protective", "explicit batting helmet");
   }
   if (!NON_FIELDING_GLOVE.test(value) && (FIELDING_GLOVE.test(value) || isKnownBaseballFieldingGloveModel(value))) {
+    if (/\bbaseball\s*\/\s*(?:softball|fast[ -]?pitch|slow\s*pitch)\b/i.test(value)) return null;
     if (/\bfast[ -]?pitch\b/i.test(value)) {
       return category("fastpitch-softball", "fp-gloves", "explicit softball fielding glove");
     }
