@@ -117,6 +117,7 @@ test("live audit contaminants do not become clubs, gloves, bats, or balls", () =
     "Wilson T- Ball Batting Helmet Facemask for A5280 NOCSAE Compliant | A3089",
     "| CHAOS Backpack Bag Series | Youth Baseball & Fastpitch Softball | Black",
     "Wilson Staff Performance Pant - Size 38",
+    "Baseball Glove Clip, Adjustable Baseball Glove Holder Bag Clip & Light Pink",
   ];
   for (const title of titles) assert.equal(classifyDeterministicProduct(title), null, title);
   assert.equal(
