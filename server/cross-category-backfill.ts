@@ -1,4 +1,4 @@
-import { and, eq, isNull, notExists } from "drizzle-orm";
+import { and, eq, isNull, notExists, sql } from "drizzle-orm";
 import { dealSubFilters, deals } from "@shared/schema";
 import { db } from "./db";
 import { classifyDeterministicProduct } from "./deterministic-product-classifier";
