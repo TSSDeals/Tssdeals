@@ -21,7 +21,7 @@ const FIELDING_GLOVE =
 const KNOWN_BASEBALL_GLOVE_MODEL =
   /\b(?:wilson\s+(?:a2000|a2k|staff)|a2000\s+\d{3,4}|marucci\s+cypress|rawlings\s+(?:foundation|pro\s+preferred|heart\s+of\s+the\s+hide|hoh|r9|gg\s+elite))\b/i;
 const BAT_ACCESSORY_ONLY =
-  /\b(?:bat\s+grips?|grip\s+wraps?|handle\s+grips?|replacement\s+grips?|bat\s+racks?|bat\s+holders?|bat\s+storage|bat\s+cases?|bat\s+sleeves?|velocity\s+bats?|no[ -]?knob|training\s+aids?|(?:foam|plastic)\s+(?:baseball\s+)?bats?)\b/i;
+  /\b(?:bat\s+grips?|grip\s+wraps?|handle\s+grips?|replacement\s+grips?|bat\s+racks?|bat\s+holders?|bat\s+storage|bat\s+cases?|bat\s+sleeves?|bat\s+backpacks?|backpacks?\b.{0,25}\bbats?|velocity\s+bats?|no[ -]?knob|training\s+aids?|(?:foam|plastic)\s+(?:baseball\s+)?bats?)\b/i;
 
 // Some Rawlings wood-bat lines reuse names that are otherwise strong glove-family
 // evidence (notably "Pro Preferred"). Product-form evidence must win over family
@@ -141,6 +141,14 @@ export function classifyDeterministicProduct(text: string): DeterministicProduct
   // keeps pitching-machine balls and similar purpose-built training products
   // out of the ordinary game-ball category.
   if (TRAINING_PRODUCT.test(value) && !TRAINING_ACCESSORY_ONLY.test(value)) {
+    const namedSports = [
+      /\bbaseball\b/i.test(value),
+      /\b(?:softball|fast[ -]?pitch|slow\s*pitch)\b/i.test(value),
+      /\bgolf\b/i.test(value),
+      /\bsoccer\b/i.test(value),
+      /\bhockey\b/i.test(value),
+    ].filter(Boolean).length;
+    if (namedSports > 1) return null;
     if (FASTPITCH_TRAINING.test(value)) {
       return category("fastpitch-softball", "fp-training", "explicit fastpitch training equipment");
     }
@@ -154,7 +162,8 @@ export function classifyDeterministicProduct(text: string): DeterministicProduct
   }
   if (SOFTBALL_BALL.test(value) && !/\b(?:signed|autograph|display|holder|case|bucket|bag)\b/i.test(value)) {
     if (/\bslow\s*pitch\b/i.test(value)) return category("slowpitch-softball", "sp-balls", "explicit slowpitch softball");
-    return category("fastpitch-softball", "fp-balls", "explicit softball");
+    if (/\bfast[ -]?pitch\b/i.test(value)) return category("fastpitch-softball", "fp-balls", "explicit fastpitch softball");
+    return null;
   }
   if (BASEBALL_BALL.test(value) && !/\b(?:signed|autograph|display|holder|case|bucket|bag)\b/i.test(value)) {
     return category("baseball", "bb-balls", "explicit baseball");
