@@ -669,6 +669,16 @@ export const STARTUP_MIGRATIONS: readonly VersionedMigration<StartupContext>[] =
       for (const statement of statements) await context.execute(sql.raw(statement));
     },
   },
+  {
+    ...STARTUP_MIGRATION_MANIFEST[17],
+    async up(context) {
+      const statements = [
+        `ALTER TABLE deals ADD COLUMN IF NOT EXISTS classification_locked BOOLEAN NOT NULL DEFAULT false`,
+        `ALTER TABLE deals ADD COLUMN IF NOT EXISTS classification_updated_at TIMESTAMP`,
+      ];
+      for (const statement of statements) await context.execute(sql.raw(statement));
+    },
+  },
 ] as const;
 
 const ledger: MigrationLedger<StartupContext> = {

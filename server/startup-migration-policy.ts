@@ -113,6 +113,12 @@ export const STARTUP_MIGRATION_MANIFEST = [
     kind: "structural",
     description: "Independent trusted and blocked sender policies for promotion inbox review",
   },
+  {
+    id: "20260813_018_deal_classification_review_guards",
+    checksum: "e95aac21c33417a067363b69350a962234f5e0f64dd5aa5c776bea7e8c0bfe84",
+    kind: "structural",
+    description: "Explicit administrator review lock and classification update timestamp for deals",
+  },
 ] as const;
 
 export type ApprovedSeedState = "empty" | "satisfied" | "partial";

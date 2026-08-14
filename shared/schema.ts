@@ -203,6 +203,8 @@ export const deals = pgTable(
     // and rule-based rows leave these null until the daily AI pass touches them.
     classificationSource: varchar("classification_source", { length: 16 }),
     classificationConfidence: varchar("classification_confidence", { length: 16 }),
+    classificationLocked: boolean("classification_locked").notNull().default(false),
+    classificationUpdatedAt: timestamp("classification_updated_at"),
   },
   (t) => [
     index("deals_found_at_idx").on(t.foundAt),

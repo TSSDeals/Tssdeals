@@ -28,6 +28,14 @@ test("retail identity migration repairs missing private base tables before alter
   assert.ok(migrationStart >= 0 && createTable > migrationStart && alterTable > createTable);
 });
 
+test("deal classification review guards are installed by a structural migration", () => {
+  const source = readFileSync(join(process.cwd(), "server", "startup-migrations.ts"), "utf8");
+  const migrationStart = source.indexOf("...STARTUP_MIGRATION_MANIFEST[17]");
+  assert.ok(migrationStart >= 0);
+  assert.ok(source.indexOf("ADD COLUMN IF NOT EXISTS classification_locked", migrationStart) > migrationStart);
+  assert.ok(source.indexOf("ADD COLUMN IF NOT EXISTS classification_updated_at", migrationStart) > migrationStart);
+});
+
 test("restart applies each versioned startup operation once", async () => {
   const applied = new Set<string>();
   let mutationCalls = 0;
