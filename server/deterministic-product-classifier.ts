@@ -95,6 +95,7 @@ export function classifyDeterministicProduct(text: string): DeterministicProduct
   // is not mistaken for the product it carries.
   if (BASEBALL_BAG.test(value)) {
     if (NON_EQUIPMENT_BAG.test(value)) return null;
+    if (/\bbaseball\b/i.test(value) && /\b(?:softball|fast[ -]?pitch|slow\s*pitch)\b/i.test(value)) return null;
     if (/\bfast[ -]?pitch\b/i.test(value)) return category("fastpitch-softball", "fp-bags", "explicit fastpitch equipment bag");
     if (/\bslow\s*pitch\b/i.test(value)) return category("slowpitch-softball", "sp-bags", "explicit slowpitch equipment bag");
     if (/\bsoftball\b/i.test(value) && !/\bbaseball\b/i.test(value)) return null;
