@@ -106,11 +106,19 @@ test("live audit contaminants do not become clubs, gloves, bats, or balls", () =
     "Hot Glove Tacky Baseball Bat Handle Grip Wrap",
     "Jugs Lite-Flite Pitching Machine w Softballs and Baseballs",
     "Vintage Gray Wood Home Plate-Shaped Wall Mounted Baseball and Bat Storage",
+    "4pcs Baseball Glove Shelf: Acrylic Display Rack - Softball Glove Stand",
+    "Used Rawlings GREAT HANDS BBBS2 Baseball Training Pancake Glove",
+    "54cm EVA Foam Baseball Bat Comfy Grip For Indoor Outdoor Play Yellow",
+    "Rawlings Baseball Stitch Crossbody Bag",
   ];
   for (const title of titles) assert.equal(classifyDeterministicProduct(title), null, title);
   assert.equal(
     classifyDeterministicProduct("Nike Youth Baseball Softball Cleats US Size 6Y Red Black White")?.equipmentTypeId,
     "bb-cleats",
+  );
+  assert.equal(
+    classifyDeterministicProduct("Marucci 12.5 in. Oxbow Series 43A5 Fast-Pitch Fielding Glove")?.equipmentTypeId,
+    "fp-gloves",
   );
   assert.equal(classifyDeterministicProduct("Champro Weighted Training Baseball Set")?.equipmentTypeId, "bb-training");
   assert.equal(classifyDeterministicProduct("Wilson Staff Tab III Set of 8 Irons")?.equipmentTypeId, "golf-iron-sets");
