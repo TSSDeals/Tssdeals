@@ -31,7 +31,7 @@ for (const title of [
 test("fielding gloves are separated from batting, golf, rain, and sliding gloves", () => {
   assert.equal(classifyDeterministicProduct("Wilson Staff Model Golf Glove"), null);
   assert.equal(classifyDeterministicProduct("Wilson Rain Gloves"), null);
-  assert.equal(classifyDeterministicProduct("Adult Baseball Batting Gloves"), null);
+  assert.equal(classifyDeterministicProduct("Adult Baseball Batting Gloves")?.equipmentTypeId, "bb-batting-gloves");
   assert.equal(classifyDeterministicProduct("Baseball Sliding Mitt"), null);
   assert.deepEqual(
     classifyDeterministicProduct("Wilson A2000 1786 11.5 Baseball Infield Glove"),
@@ -50,6 +50,15 @@ test("bats require explicit product-form evidence and preserve pitch type", () =
     { sportId: "baseball", equipmentTypeId: "bb-bats", confidence: "high", reason: "explicit baseball bat" });
   assert.deepEqual(classifyDeterministicProduct("Marucci ASURA Fastpitch Softball Bat -10"),
     { sportId: "fastpitch-softball", equipmentTypeId: "fp-bats", confidence: "high", reason: "explicit fastpitch bat" });
+});
+
+test("separates common cross-category contaminants from fielding gloves", () => {
+  assert.equal(classifyDeterministicProduct("Wilson Adult Baseball Batting Gloves")?.equipmentTypeId, "bb-batting-gloves");
+  assert.equal(classifyDeterministicProduct("Easton Fastpitch Batting Gloves")?.equipmentTypeId, "fp-batting-gloves");
+  assert.equal(classifyDeterministicProduct("Easton Baseball Batting Helmet")?.equipmentTypeId, "bb-protective");
+  assert.equal(classifyDeterministicProduct("Rawlings Official League Baseballs 12 Pack")?.equipmentTypeId, "bb-balls");
+  assert.equal(classifyDeterministicProduct("Marucci Baseball Bat Equipment Bag")?.equipmentTypeId, "bb-bags");
+  assert.equal(classifyDeterministicProduct("Rawlings Autographed Baseball Display Case"), null);
 });
 
 test("running shoes and golf club forms receive precise destinations", () => {

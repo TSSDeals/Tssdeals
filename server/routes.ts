@@ -3854,6 +3854,27 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/admin/cross-category-backfill/preview", isAdmin, async (req: any, res) => {
+    try {
+      const { previewCrossCategoryBackfill } = await import("./cross-category-backfill");
+      const limit = Math.max(1, Math.min(Number(req.query.limit) || 100, 250));
+      res.json(await previewCrossCategoryBackfill(limit));
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/admin/cross-category-backfill/apply", isAdmin, async (req: any, res) => {
+    try {
+      const schema = z.object({ limit: z.number().int().min(1).max(250).default(100) });
+      const { limit } = schema.parse(req.body ?? {});
+      const { applyCrossCategoryBackfill } = await import("./cross-category-backfill");
+      res.json(await applyCrossCategoryBackfill(limit));
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.get("/api/admin/affiliate-relationships", isAdmin, async (_req, res) => {
     const { listAffiliateCandidates } = await import("./promotion-intelligence");
     res.json(await listAffiliateCandidates());

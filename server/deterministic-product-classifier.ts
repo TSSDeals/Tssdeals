@@ -40,6 +40,11 @@ const SLOWPITCH_BAT =
   /\bslow\s*pitch\b.{0,60}\bbats?\b|\bbats?\b.{0,60}\bslow\s*pitch\b/i;
 const BASEBALL_BAT =
   /\b(?:baseball|bbcor|usssa|usa\s+baseball|tee[ -]?ball|t[ -]?ball)\b.{0,60}\bbats?\b|\bbats?\b.{0,60}\b(?:baseball|bbcor|usssa|usa\s+baseball)\b/i;
+const BATTING_GLOVE = /\bbatting\s+gloves?\b/i;
+const BATTING_HELMET = /\b(?:baseball|softball|fast\s*pitch|slow\s*pitch)?\s*batting\s+helmets?\b/i;
+const BASEBALL_BALL = /\bbaseballs\b|\b(?:official|practice|game|training|youth|league)\s+baseball\b|\bbaseball\s+(?:balls?|dozen|packs?|buckets?)\b/i;
+const SOFTBALL_BALL = /\bsoftballs\b|\b(?:official|practice|game|training)\s+softball\s+(?:balls?|dozen|packs?|buckets?)\b|\bsoftball\s+(?:balls?|dozen|packs?|buckets?)\b/i;
+const BASEBALL_BAG = /\b(?:baseball|softball|fast\s*pitch|slow\s*pitch|bat)\b.{0,35}\b(?:equipment\s+)?bags?\b|\b(?:equipment\s+)?bags?\b.{0,35}\b(?:baseball|softball|fast\s*pitch|slow\s*pitch|bat)\b/i;
 const RUNNING_SHOE =
   /\b(?:road|trail|cross[ -]?country)?\s*running\s+(?:shoes?|sneakers?)\b|\b(?:shoes?|sneakers?)\b.{0,30}\b(?:road|trail|cross[ -]?country)\s+running\b/i;
 const CASUAL_OR_NON_SPORT_FOOTWEAR =
@@ -78,8 +83,27 @@ export function classifyDeterministicProduct(text: string): DeterministicProduct
   const value = text.replace(/\s+/g, " ").trim();
   if (!value || SIGNED_OR_DISPLAY.test(value)) return null;
 
+  // Product containers use the contained equipment word in their title. They
+  // must be resolved before bat/ball rules so "baseball bat equipment bag"
+  // is not mistaken for the product it carries.
+  if (BASEBALL_BAG.test(value)) {
+    if (/\bfast\s*pitch\b/i.test(value)) return category("fastpitch-softball", "fp-bags", "explicit fastpitch equipment bag");
+    if (/\bslow\s*pitch\b/i.test(value)) return category("slowpitch-softball", "sp-bags", "explicit slowpitch equipment bag");
+    if (/\bsoftball\b/i.test(value) && !/\bbaseball\b/i.test(value)) return null;
+    return category("baseball", "bb-bags", "explicit baseball equipment bag");
+  }
   if (hasExplicitBaseballBatEvidence(value)) {
     return category("baseball", "bb-bats", "explicit baseball bat");
+  }
+  if (BATTING_GLOVE.test(value)) {
+    if (/\bfast\s*pitch\b/i.test(value)) return category("fastpitch-softball", "fp-batting-gloves", "explicit fastpitch batting glove");
+    if (/\bslow\s*pitch\b/i.test(value)) return category("slowpitch-softball", "sp-batting-gloves", "explicit slowpitch batting glove");
+    return category("baseball", "bb-batting-gloves", "explicit batting glove");
+  }
+  if (BATTING_HELMET.test(value)) {
+    if (/\bfast\s*pitch\b/i.test(value)) return category("fastpitch-softball", "fp-protective", "explicit fastpitch batting helmet");
+    if (/\bslow\s*pitch\b/i.test(value)) return category("slowpitch-softball", "sp-protective", "explicit slowpitch batting helmet");
+    return category("baseball", "bb-protective", "explicit batting helmet");
   }
   if (!NON_FIELDING_GLOVE.test(value) && (FIELDING_GLOVE.test(value) || isKnownBaseballFieldingGloveModel(value))) {
     if (/\bfast\s*pitch\b/i.test(value)) {
@@ -99,6 +123,27 @@ export function classifyDeterministicProduct(text: string): DeterministicProduct
   if (BASEBALL_BAT.test(value) && !/\b(?:softball|cricket)\b/i.test(value)) {
     return category("baseball", "bb-bats", "explicit baseball bat");
   }
+  // Training product form wins over the ball it launches or contains. This
+  // keeps pitching-machine balls and similar purpose-built training products
+  // out of the ordinary game-ball category.
+  if (TRAINING_PRODUCT.test(value) && !TRAINING_ACCESSORY_ONLY.test(value)) {
+    if (FASTPITCH_TRAINING.test(value)) {
+      return category("fastpitch-softball", "fp-training", "explicit fastpitch training equipment");
+    }
+    if (SLOWPITCH_TRAINING.test(value)) {
+      return category("slowpitch-softball", "sp-training", "explicit slowpitch training equipment");
+    }
+    if (BASEBALL_TRAINING.test(value) && !/\bsoftball\b/i.test(value)) {
+      return category("baseball", "bb-training", "explicit baseball training equipment");
+    }
+  }
+  if (SOFTBALL_BALL.test(value) && !/\b(?:signed|autograph|display|holder|case|bucket|bag)\b/i.test(value)) {
+    if (/\bslow\s*pitch\b/i.test(value)) return category("slowpitch-softball", "sp-balls", "explicit slowpitch softball");
+    return category("fastpitch-softball", "fp-balls", "explicit softball");
+  }
+  if (BASEBALL_BALL.test(value) && !/\b(?:signed|autograph|display|holder|case|bucket|bag)\b/i.test(value)) {
+    return category("baseball", "bb-balls", "explicit baseball");
+  }
   if (RUNNING_SHOE.test(value)) {
     return category("running", "run-shoes", "explicit running shoe");
   }
@@ -113,18 +158,6 @@ export function classifyDeterministicProduct(text: string): DeterministicProduct
       return category("baseball", "bb-cleats", "explicit baseball cleat");
     }
   }
-  if (TRAINING_PRODUCT.test(value) && !TRAINING_ACCESSORY_ONLY.test(value)) {
-    if (FASTPITCH_TRAINING.test(value)) {
-      return category("fastpitch-softball", "fp-training", "explicit fastpitch training equipment");
-    }
-    if (SLOWPITCH_TRAINING.test(value)) {
-      return category("slowpitch-softball", "sp-training", "explicit slowpitch training equipment");
-    }
-    if (BASEBALL_TRAINING.test(value) && !/\bsoftball\b/i.test(value)) {
-      return category("baseball", "bb-training", "explicit baseball training equipment");
-    }
-  }
-
   const golf = classifyGolfClubProduct(value);
   if (golf) {
     return category(golf.sportId, golf.equipmentTypeId, golf.reason);

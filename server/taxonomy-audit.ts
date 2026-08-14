@@ -569,6 +569,19 @@ interface CandidateEvidence {
   signals: EvidenceSignal[];
 }
 
+function deterministicAuditFamily(equipmentTypeId: string): string {
+  if (["bb-gloves", "fp-gloves", "sp-gloves"].includes(equipmentTypeId)) return "fielding-glove";
+  if (["bb-batting-gloves", "fp-batting-gloves", "sp-batting-gloves"].includes(equipmentTypeId)) return "batting-glove";
+  if (equipmentTypeId.endsWith("-bats")) return "bat";
+  if (["bb-balls", "fp-balls", "sp-balls"].includes(equipmentTypeId)) return "ball";
+  if (["bb-cleats", "fp-cleats", "sp-cleats"].includes(equipmentTypeId)) return "cleats";
+  if (equipmentTypeId === "run-shoes") return "footwear";
+  if (["bb-protective", "fp-protective", "sp-protective"].includes(equipmentTypeId)) return "protective-equipment";
+  if (["bb-training", "fp-training", "sp-training"].includes(equipmentTypeId)) return "training-equipment";
+  if (["bb-bags", "fp-bags", "sp-bags"].includes(equipmentTypeId)) return "bag";
+  return equipmentTypeId.replace(/^golf-/, "").replace(/s$/, "");
+}
+
 interface IdentityConsensus {
   candidate: Omit<CandidateEvidence, "signals" | "priority">;
   supportingRecords: number;
@@ -769,15 +782,7 @@ function collectDirectEvidence(deal: AuditDealRow, source?: AuditSourceRow): Map
     addCandidateSignal(candidates, {
       sportId: deterministic.sportId,
       equipmentTypeId: deterministic.equipmentTypeId,
-      family: deterministic.equipmentTypeId === "bb-gloves"
-        || deterministic.equipmentTypeId === "fp-gloves"
-        || deterministic.equipmentTypeId === "sp-gloves"
-        ? "fielding-glove"
-        : deterministic.equipmentTypeId.endsWith("-bats")
-          ? "bat"
-          : deterministic.equipmentTypeId === "run-shoes"
-            ? "footwear"
-            : deterministic.equipmentTypeId.replace(/^golf-/, "").replace(/s$/, ""),
+      family: deterministicAuditFamily(deterministic.equipmentTypeId),
       priority: 150,
     }, {
       kind: "deterministic",
