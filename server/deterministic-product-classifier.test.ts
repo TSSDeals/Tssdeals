@@ -126,6 +126,8 @@ test("live audit contaminants do not become clubs, gloves, bats, or balls", () =
     "Rubber Base with Mounting Holes Weighted Wedge Base for Athletes",
     "Dree 8X Golf Weights Screw Taylormade Spider Tour Putter Red Black Silver R11",
     "Eva Plastic Baseball Training Set for Kids Durable Lightweight Bat and Ball Toy",
+    "Rawlings Baseball Stitch Cross Mini Bag",
+    "Rawlings Renegade Baseball/Slowpitch Softball Glove 12.5 R125BGS",
   ];
   for (const title of titles) assert.equal(classifyDeterministicProduct(title), null, title);
   assert.equal(
