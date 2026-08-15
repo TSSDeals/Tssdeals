@@ -86,6 +86,7 @@ export default function AdminPage() {
   const meta = useMetaConfig();
   const sources = useSources();
   const sports = useSports();
+  const allEquipmentTypes = useEquipmentTypes();
 
   const [newSourceName, setNewSourceName] = useState("");
   const [newSourceUrl, setNewSourceUrl] = useState("");
@@ -1016,6 +1017,68 @@ export default function AdminPage() {
   const [golfBackfillRunning, setGolfBackfillRunning] = useState(false);
   const [crossCategoryPreview, setCrossCategoryPreview] = useState<any | null>(null);
   const [crossCategoryRunning, setCrossCategoryRunning] = useState(false);
+  const [manualReviewChoices, setManualReviewChoices] = useState<Record<string, {
+    sportId: string;
+    equipmentTypeId: string;
+    applyExactMatches: boolean;
+  }>>({});
+  const [manualReviewSavingId, setManualReviewSavingId] = useState<string | null>(null);
+
+  const manualTaxonomyReviewQuery = useQuery<any>({
+    queryKey: ["/api/admin/manual-taxonomy-review"],
+    queryFn: async () => {
+      const response = await fetch("/api/admin/manual-taxonomy-review?limit=25", { credentials: "include" });
+      if (!response.ok) throw new Error("Could not load Justin Review Queue");
+      return response.json();
+    },
+    enabled: !!isAdmin,
+  });
+
+  const saveManualTaxonomyReview = async (item: any) => {
+    const choice = manualReviewChoices[item.id] ?? {
+      sportId: item.suggestion?.sportId ?? item.sportId ?? "",
+      equipmentTypeId: item.suggestion?.equipmentTypeId ?? item.equipmentTypeId ?? "",
+      applyExactMatches: false,
+    };
+    if (!choice.sportId || !choice.equipmentTypeId) {
+      toast({ title: "Choose a category", description: "Select both a sport and equipment category.", variant: "destructive" });
+      return;
+    }
+    setManualReviewSavingId(item.id);
+    try {
+      const response = await apiRequest("POST", `/api/admin/manual-taxonomy-review/${encodeURIComponent(item.id)}/approve`, choice);
+      const result = await response.json();
+      toast({
+        title: "Classification approved",
+        description: `${result.updated} exact ${result.updated === 1 ? "listing" : "listings"} updated; the Brain learned this product signature.`,
+      });
+      setManualReviewChoices((current) => {
+        const next = { ...current };
+        delete next[item.id];
+        return next;
+      });
+      await manualTaxonomyReviewQuery.refetch();
+      taxonomyStatusQuery.refetch();
+      queryClient.invalidateQueries({ queryKey: ["/api/deals"] });
+    } catch (error: any) {
+      toast({ title: "Could not save review", description: error.message, variant: "destructive" });
+    } finally {
+      setManualReviewSavingId(null);
+    }
+  };
+
+  const skipManualTaxonomyReview = async (item: any) => {
+    setManualReviewSavingId(item.id);
+    try {
+      await apiRequest("POST", `/api/admin/manual-taxonomy-review/${encodeURIComponent(item.id)}/skip`, {});
+      toast({ title: "Skipped", description: "This listing will not return to the review queue." });
+      await manualTaxonomyReviewQuery.refetch();
+    } catch (error: any) {
+      toast({ title: "Could not skip review", description: error.message, variant: "destructive" });
+    } finally {
+      setManualReviewSavingId(null);
+    }
+  };
 
   const previewCrossCategoryBackfill = async () => {
     setCrossCategoryRunning(true);
@@ -3335,6 +3398,126 @@ export default function AdminPage() {
                         )}
                       </div>
                     ) : null}
+                  </div>
+                  <div className="rounded-xl border border-blue-500/25 bg-blue-500/5 p-4" data-testid="justin-review-queue">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <div className="text-sm font-semibold">Justin Review Queue</div>
+                        <div className="mt-1 max-w-2xl text-xs text-muted-foreground">
+                          A small, prioritized set of genuinely ambiguous products. Approving locks the decision and teaches the Brain;
+                          “exact matches” applies only to identical normalized brand and title signatures.
+                        </div>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => manualTaxonomyReviewQuery.refetch()}
+                        disabled={manualTaxonomyReviewQuery.isFetching}
+                        data-testid="manual-review-refresh"
+                      >
+                        {manualTaxonomyReviewQuery.isFetching ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-2 h-3.5 w-3.5" />}
+                        Refresh queue
+                      </Button>
+                    </div>
+                    {manualTaxonomyReviewQuery.isLoading ? (
+                      <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Loading review queue…</div>
+                    ) : manualTaxonomyReviewQuery.isError ? (
+                      <div className="mt-3 text-xs text-destructive">Could not load the review queue.</div>
+                    ) : (manualTaxonomyReviewQuery.data?.items ?? []).length === 0 ? (
+                      <div className="mt-3 text-xs text-muted-foreground">No unresolved items currently need manual review.</div>
+                    ) : (
+                      <div className="mt-3 space-y-3">
+                        <div className="text-xs text-muted-foreground">
+                          Showing {(manualTaxonomyReviewQuery.data?.items ?? []).length} prioritized items from {Number(manualTaxonomyReviewQuery.data?.candidateCount ?? 0).toLocaleString()} screened candidates.
+                        </div>
+                        {(manualTaxonomyReviewQuery.data?.items ?? []).map((item: any) => {
+                          const choice = manualReviewChoices[item.id] ?? {
+                            sportId: item.suggestion?.sportId ?? item.sportId ?? "",
+                            equipmentTypeId: item.suggestion?.equipmentTypeId ?? item.equipmentTypeId ?? "",
+                            applyExactMatches: false,
+                          };
+                          const availableEquipment = (allEquipmentTypes.data ?? []).filter((equipment: any) => equipment.sportId === choice.sportId);
+                          return (
+                            <div key={item.id} className="rounded-xl border border-border bg-background/70 p-3" data-testid={`manual-review-item-${item.id}`}>
+                              <div className="flex flex-col gap-3 lg:flex-row">
+                                <div className="flex min-w-0 flex-1 gap-3">
+                                  <div className="h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-border bg-muted">
+                                    {item.imageUrl ? <img src={item.imageUrl} alt="" className="h-full w-full object-contain" /> : <div className="grid h-full place-items-center text-[10px] text-muted-foreground">No image</div>}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <div className="text-sm font-medium" title={item.title}>{item.title}</div>
+                                    <div className="mt-1 text-xs text-muted-foreground">
+                                      {item.brand ?? "Unknown brand"} · {item.sourceId} · ${(Number(item.priceCents ?? 0) / 100).toFixed(2)}
+                                    </div>
+                                    <div className="mt-1 text-xs text-muted-foreground">
+                                      Current: {item.sportId ?? "unassigned"} / {item.equipmentTypeId ?? "unassigned"}
+                                    </div>
+                                    {item.suggestion ? (
+                                      <div className="mt-1 text-xs text-blue-600 dark:text-blue-400">
+                                        Brain suggestion: {item.suggestion.sportId ?? "unknown"} / {item.suggestion.equipmentTypeId ?? "unknown"} · {item.suggestion.confidence}
+                                        {item.suggestion.reasoning ? ` — ${item.suggestion.reasoning}` : ""}
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                </div>
+                                <div className="grid min-w-0 gap-2 sm:grid-cols-2 lg:w-[420px]">
+                                  <Select
+                                    value={choice.sportId}
+                                    onValueChange={(sportId) => setManualReviewChoices((current) => ({
+                                      ...current,
+                                      [item.id]: { sportId, equipmentTypeId: "", applyExactMatches: choice.applyExactMatches },
+                                    }))}
+                                  >
+                                    <SelectTrigger data-testid={`manual-review-sport-${item.id}`}><SelectValue placeholder="Choose sport" /></SelectTrigger>
+                                    <SelectContent>{(sports.data ?? []).map((sport: any) => <SelectItem key={sport.id} value={sport.id}>{sport.name}</SelectItem>)}</SelectContent>
+                                  </Select>
+                                  <Select
+                                    value={choice.equipmentTypeId}
+                                    onValueChange={(equipmentTypeId) => setManualReviewChoices((current) => ({
+                                      ...current,
+                                      [item.id]: { ...choice, equipmentTypeId },
+                                    }))}
+                                    disabled={!choice.sportId}
+                                  >
+                                    <SelectTrigger data-testid={`manual-review-equipment-${item.id}`}><SelectValue placeholder="Choose equipment" /></SelectTrigger>
+                                    <SelectContent>{availableEquipment.map((equipment: any) => <SelectItem key={equipment.id} value={equipment.id}>{equipment.name}</SelectItem>)}</SelectContent>
+                                  </Select>
+                                  <label className="flex items-center gap-2 text-xs text-muted-foreground sm:col-span-2">
+                                    <Checkbox
+                                      checked={choice.applyExactMatches}
+                                      onCheckedChange={(checked) => setManualReviewChoices((current) => ({
+                                        ...current,
+                                        [item.id]: { ...choice, applyExactMatches: checked === true },
+                                      }))}
+                                      data-testid={`manual-review-exact-${item.id}`}
+                                    />
+                                    Also update existing exact brand/title matches (future imports are always taught)
+                                  </label>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => saveManualTaxonomyReview(item)}
+                                    disabled={manualReviewSavingId === item.id || !choice.sportId || !choice.equipmentTypeId}
+                                    data-testid={`manual-review-approve-${item.id}`}
+                                  >
+                                    {manualReviewSavingId === item.id ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-2 h-3.5 w-3.5" />}
+                                    Approve
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => skipManualTaxonomyReview(item)}
+                                    disabled={manualReviewSavingId === item.id}
+                                    data-testid={`manual-review-skip-${item.id}`}
+                                  >
+                                    Skip
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : (

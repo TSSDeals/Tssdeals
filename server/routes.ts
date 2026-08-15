@@ -3875,6 +3875,40 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/admin/manual-taxonomy-review", isAdmin, async (req: any, res) => {
+    try {
+      const { listManualTaxonomyReviewQueue } = await import("./manual-taxonomy-review");
+      const limit = Math.max(1, Math.min(Number(req.query.limit) || 25, 50));
+      res.json(await listManualTaxonomyReviewQueue(limit));
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/admin/manual-taxonomy-review/:dealId/approve", isAdmin, async (req: any, res) => {
+    try {
+      const schema = z.object({
+        sportId: z.string().min(1),
+        equipmentTypeId: z.string().min(1),
+        applyExactMatches: z.boolean().optional().default(false),
+      });
+      const input = schema.parse(req.body ?? {});
+      const { approveManualTaxonomyReview } = await import("./manual-taxonomy-review");
+      res.json(await approveManualTaxonomyReview({ dealId: req.params.dealId, ...input }));
+    } catch (err: any) {
+      res.status(400).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/admin/manual-taxonomy-review/:dealId/skip", isAdmin, async (req: any, res) => {
+    try {
+      const { skipManualTaxonomyReview } = await import("./manual-taxonomy-review");
+      res.json(await skipManualTaxonomyReview(req.params.dealId));
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   app.get("/api/admin/affiliate-relationships", isAdmin, async (_req, res) => {
     const { listAffiliateCandidates } = await import("./promotion-intelligence");
     res.json(await listAffiliateCandidates());
