@@ -40,19 +40,19 @@ test("digest does not backfill ordinary inventory when no verified deal evidence
   assert.deepEqual(selectDigestDeals([ordinaryOwnListing, ordinaryRetailListing]).map((c) => c.deals), [[], [], []]);
 });
 
-test("digest requires a meaningful verified saving, confirmed drop, or 90-day low", () => {
+test("digest requires a meaningful verified saving, confirmed drop, or 30-day low", () => {
   const weakDiscount = deal("Wilson A2K Baseball Glove", 27999, "bb-gloves", "baseball", { msrpCents: 29999 });
   const verifiedDiscount = deal("Rawlings Pro Preferred Baseball Glove", 23999, "bb-gloves", "baseball", { msrpCents: 29999 });
   const confirmedDrop = deal("Marucci CATX BBCOR Baseball Bat", 26999, "bb-bats", "baseball", {
     msrpCents: null,
     msrpVerified: false,
     hasPriceDrop: true,
-    priceDropPercent: "12",
+    priceDropPercent: "6",
   });
   const historicalLow = deal("Easton Hype Fire Baseball Bat", 29999, "bb-bats", "baseball", {
     msrpCents: null,
     msrpVerified: false,
-    isLow90d: true,
+    isLow30d: true,
   });
 
   const selected = selectDigestDeals([weakDiscount, verifiedDiscount, confirmedDrop, historicalLow]);

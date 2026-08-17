@@ -4,10 +4,10 @@ import { rankTopDeals } from "./top-deals-ranking";
 
 const DIGEST_STATE_KEY = "owner_deal_digest_state_v1";
 const PRICE_FLOOR_CENTS = 8_500;
-const CATEGORY_LIMIT = 3;
-const MIN_VERIFIED_SAVINGS_PERCENT = 15;
-const MIN_VERIFIED_PRICE_DROP_PERCENT = 10;
-const MIN_HISTORICAL_LOW_DAYS = 90;
+const CATEGORY_LIMIT = 7;
+const MIN_VERIFIED_SAVINGS_PERCENT = 10;
+const MIN_VERIFIED_PRICE_DROP_PERCENT = 5;
+const MIN_HISTORICAL_LOW_DAYS = 30;
 const FIELDING_EXCLUSIONS = /\b(?:batting\s+gloves?|sliding\s+mitts?|golf|winter|work|training\s+(?:gloves?|mitts?)|glove\s+(?:care|oil|conditioner|lace|repair)|signed|autograph|memorabilia)\b/i;
 const FIELDING_EVIDENCE = /\b(?:baseball|softball|fastpitch|fielding|infield|outfield|pitcher|catcher|first[ -]?base)\b.*\b(?:gloves?|mitts?)\b|\b(?:a2k|a2000|pro preferred|heart of the hide|marucci cypress)\b/i;
 const BAT_EXCLUSIONS = /\b(?:softball|fastpitch|slowpitch|batting gloves?|helmet|bat (?:bag|rack|grip|tape|weight|cover)|signed|autograph|memorabilia)\b/i;
@@ -93,7 +93,7 @@ function htmlDigest(categories: DigestCategory[], slot: DigestSlot): string {
     <h2 style="color:#172033">${category.name}</h2>
     ${category.deals.map((deal) => `<p><strong>${deal.title}</strong><br>${money(deal)} · ${deal.sourceId}<br><a href="${deal.url}">View deal</a></p>`).join("")}
     <p><a href="https://www.tssdeals.com${category.path}">See all ${category.name.toLowerCase()}</a></p>`).join("");
-  return `<div style="font-family:Arial,sans-serif;max-width:640px;margin:auto"><h1>TSSDeals ${slot === "10am" ? "morning" : "afternoon"} picks</h1><p>Strictly screened deals over $85 with a verified discount, a confirmed price drop, or a 90+ day historical low.</p>${sections}</div>`;
+  return `<div style="font-family:Arial,sans-serif;max-width:640px;margin:auto"><h1>TSSDeals ${slot === "10am" ? "morning" : "afternoon"} picks</h1><p>Screened deals over $85 with verified savings, a confirmed price drop, or a 30+ day historical low.</p>${sections}</div>`;
 }
 
 function smsDigest(categories: DigestCategory[], slot: DigestSlot): string {
