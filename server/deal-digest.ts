@@ -4,7 +4,10 @@ import { rankTopDeals } from "./top-deals-ranking";
 
 const DIGEST_STATE_KEY = "owner_deal_digest_state_v1";
 const PRICE_FLOOR_CENTS = 8_500;
-const CATEGORY_LIMIT = 5;
+const CATEGORY_LIMIT = 3;
+const MIN_VERIFIED_SAVINGS_PERCENT = 15;
+const MIN_VERIFIED_PRICE_DROP_PERCENT = 10;
+const MIN_HISTORICAL_LOW_DAYS = 90;
 const FIELDING_EXCLUSIONS = /\b(?:batting\s+gloves?|sliding\s+mitts?|golf|winter|work|training\s+(?:gloves?|mitts?)|glove\s+(?:care|oil|conditioner|lace|repair)|signed|autograph|memorabilia)\b/i;
 const FIELDING_EVIDENCE = /\b(?:baseball|softball|fastpitch|fielding|infield|outfield|pitcher|catcher|first[ -]?base)\b.*\b(?:gloves?|mitts?)\b|\b(?:a2k|a2000|pro preferred|heart of the hide|marucci cypress)\b/i;
 const BAT_EXCLUSIONS = /\b(?:softball|fastpitch|slowpitch|batting gloves?|helmet|bat (?:bag|rack|grip|tape|weight|cover)|signed|autograph|memorabilia)\b/i;
@@ -53,16 +56,27 @@ export function selectDigestDeals(pool: Deal[]): DigestCategory[] {
     !BAT_EXCLUSIONS.test(deal.title) &&
     (deal.equipmentTypeId === "bb-bats" || BAT_EVIDENCE.test(deal.title)));
 
-  const ranked = (deals: Deal[], category: { name: string; slug: string; sportId: string; equipmentTypeId: string }) => {
-    const top = rankTopDeals(deals, { category, limit: CATEGORY_LIMIT });
-    if (top.length >= CATEGORY_LIMIT || top.length === deals.length) return top;
-    const selected = new Set(top.map((deal) => deal.id));
-    const currentValue = deals
-      .filter((deal) => !selected.has(deal.id))
-      .sort((a, b) => Number(b.percentOff ?? 0) - Number(a.percentOff ?? 0) || b.priceCents - a.priceCents)
-      .slice(0, CATEGORY_LIMIT - top.length);
-    return [...top, ...currentValue];
+  const verifiedSavingsPercent = (deal: Deal) => {
+    if (!deal.msrpVerified) return 0;
+    const reference = Math.max(Number(deal.manufacturerMsrpCents ?? 0), Number(deal.msrpCents ?? 0));
+    if (reference <= deal.priceCents) return 0;
+    return ((reference - deal.priceCents) / reference) * 100;
   };
+  const historicalLowDays = (deal: Deal) =>
+    deal.isLow365d ? 365 : deal.isLow180d ? 180 : deal.isLow90d ? 90 : deal.isLow60d ? 60 : deal.isLow30d ? 30 : 0;
+  const digestWorthy = (deal: Deal) =>
+    verifiedSavingsPercent(deal) >= MIN_VERIFIED_SAVINGS_PERCENT
+    || (
+      deal.hasPriceDrop
+      && Boolean(deal.lastPriceConfirmedAt)
+      && Number(deal.priceDropPercent ?? 0) >= MIN_VERIFIED_PRICE_DROP_PERCENT
+    )
+    || historicalLowDays(deal) >= MIN_HISTORICAL_LOW_DAYS;
+
+  const ranked = (deals: Deal[], category: { name: string; slug: string; sportId: string; equipmentTypeId: string }) =>
+    rankTopDeals(deals, { category, limit: Math.max(CATEGORY_LIMIT * 4, 12) })
+      .filter(digestWorthy)
+      .slice(0, CATEGORY_LIMIT);
   return [
     { name: "Baseball gloves", path: "/app/top-deals/baseball-softball-gloves", deals: ranked(baseballGloves, { name: "Baseball fielding gloves", slug: "baseball-softball-gloves", sportId: "baseball", equipmentTypeId: "bb-gloves" }) },
     { name: "Fastpitch gloves", path: "/app/deals?sport=fastpitch-softball&equipment=fp-gloves", deals: ranked(fastpitchGloves, { name: "Fastpitch fielding gloves", slug: "fastpitch-fielding-gloves", sportId: "fastpitch-softball", equipmentTypeId: "fp-gloves" }) },
@@ -79,7 +93,7 @@ function htmlDigest(categories: DigestCategory[], slot: DigestSlot): string {
     <h2 style="color:#172033">${category.name}</h2>
     ${category.deals.map((deal) => `<p><strong>${deal.title}</strong><br>${money(deal)} · ${deal.sourceId}<br><a href="${deal.url}">View deal</a></p>`).join("")}
     <p><a href="https://www.tssdeals.com${category.path}">See all ${category.name.toLowerCase()}</a></p>`).join("");
-  return `<div style="font-family:Arial,sans-serif;max-width:640px;margin:auto"><h1>TSSDeals ${slot === "10am" ? "morning" : "afternoon"} picks</h1><p>Current high-value deals over $85, ranked after the latest feed.</p>${sections}</div>`;
+  return `<div style="font-family:Arial,sans-serif;max-width:640px;margin:auto"><h1>TSSDeals ${slot === "10am" ? "morning" : "afternoon"} picks</h1><p>Strictly screened deals over $85 with a verified discount, a confirmed price drop, or a 90+ day historical low.</p>${sections}</div>`;
 }
 
 function smsDigest(categories: DigestCategory[], slot: DigestSlot): string {
@@ -87,7 +101,7 @@ function smsDigest(categories: DigestCategory[], slot: DigestSlot): string {
     const best = category.deals[0];
     return `${category.name}: ${best.title.slice(0, 52)} ${money(best)} ${best.url}`;
   });
-  return `TSSDeals ${slot === "10am" ? "AM" : "PM"} picks (> $85)\n${lines.join("\n")}\nReply STOP to opt out.`;
+  return `TSSDeals ${slot === "10am" ? "AM" : "PM"} verified picks (> $85)\n${lines.join("\n")}\nReply STOP to opt out.`;
 }
 
 function parseState(raw: string | null): DigestState {
