@@ -3,8 +3,8 @@ import test from "node:test";
 import type { Deal } from "@shared/schema";
 import { dueDigestSlots, selectDigestDeals } from "./deal-digest";
 
-function deal(title: string, priceCents: number, equipmentTypeId: string, sportId = "baseball"): Deal {
-  return { id: title, sourceId: "test", title, url: `https://example.com/${encodeURIComponent(title)}`, imageUrl: null, sportId, equipmentTypeId, condition: "new", currency: "USD", priceCents, msrpCents: null, manufacturerMsrpCents: null, normalSellingPriceCents: null, msrpSource: null, msrpVerified: false, percentOff: "20", isBuyItNow: true, foundAt: new Date(), lastSeenAt: new Date(), lastPriceConfirmedAt: new Date(), availabilityStatus: "active", unavailableAt: null, subFilterId: null, dropWeight: null, sizeNumber: null, autoIncluded: false, autoIncludeRuleId: null, raw: {}, originalPriceCents: null, highestPriceCents: null, priceDropPercent: null, hasPriceDrop: false, isFeatured: false, isLow30d: false, isLow60d: false, isLow90d: false, isLow180d: false, isLow365d: false, classificationSource: null, classificationConfidence: null, classificationLocked: false, classificationUpdatedAt: null, aiClassifiedAt: null } as Deal;
+function deal(title: string, priceCents: number, equipmentTypeId: string, sportId = "baseball", overrides: Partial<Deal> = {}): Deal {
+  return { id: title, sourceId: "test", title, url: `https://example.com/${encodeURIComponent(title)}`, imageUrl: null, sportId, equipmentTypeId, condition: "new", currency: "USD", priceCents, msrpCents: 30000, manufacturerMsrpCents: null, normalSellingPriceCents: null, msrpSource: "retailer", msrpVerified: true, percentOff: "20", isBuyItNow: true, foundAt: new Date(), lastSeenAt: new Date(), lastPriceConfirmedAt: new Date(), availabilityStatus: "active", unavailableAt: null, subFilterId: null, dropWeight: null, sizeNumber: null, autoIncluded: false, autoIncludeRuleId: null, raw: {}, originalPriceCents: null, highestPriceCents: null, priceDropPercent: null, hasPriceDrop: false, isFeatured: false, isLow30d: false, isLow60d: false, isLow90d: false, isLow180d: false, isLow365d: false, classificationSource: null, classificationConfidence: null, classificationLocked: false, classificationUpdatedAt: null, aiClassifiedAt: null, ...overrides } as Deal;
 }
 
 test("digest enforces price floor and category boundaries", () => {
@@ -21,6 +21,46 @@ test("digest enforces price floor and category boundaries", () => {
     ["Rawlings Fastpitch Softball Fielding Glove"],
     ["Louisville Slugger BBCOR Baseball Bat"],
   ]);
+});
+
+test("digest does not backfill ordinary inventory when no verified deal evidence exists", () => {
+  const ordinaryOwnListing = deal("Wilson A2K Baseball Glove", 27999, "bb-gloves", "baseball", {
+    sourceId: "twin-seam-sports",
+    msrpCents: null,
+    msrpVerified: false,
+    percentOff: "40",
+    raw: { submittedVia: "email-deal-inbox" },
+  });
+  const ordinaryRetailListing = deal("Louisville Slugger BBCOR Baseball Bat", 24999, "bb-bats", "baseball", {
+    msrpCents: null,
+    msrpVerified: false,
+    percentOff: "35",
+  });
+
+  assert.deepEqual(selectDigestDeals([ordinaryOwnListing, ordinaryRetailListing]).map((c) => c.deals), [[], [], []]);
+});
+
+test("digest requires a meaningful verified saving, confirmed drop, or 90-day low", () => {
+  const weakDiscount = deal("Wilson A2K Baseball Glove", 27999, "bb-gloves", "baseball", { msrpCents: 29999 });
+  const verifiedDiscount = deal("Rawlings Pro Preferred Baseball Glove", 23999, "bb-gloves", "baseball", { msrpCents: 29999 });
+  const confirmedDrop = deal("Marucci CATX BBCOR Baseball Bat", 26999, "bb-bats", "baseball", {
+    msrpCents: null,
+    msrpVerified: false,
+    hasPriceDrop: true,
+    priceDropPercent: "12",
+  });
+  const historicalLow = deal("Easton Hype Fire Baseball Bat", 29999, "bb-bats", "baseball", {
+    msrpCents: null,
+    msrpVerified: false,
+    isLow90d: true,
+  });
+
+  const selected = selectDigestDeals([weakDiscount, verifiedDiscount, confirmedDrop, historicalLow]);
+  assert.deepEqual(selected[0].deals.map((d) => d.title), ["Rawlings Pro Preferred Baseball Glove"]);
+  assert.deepEqual(new Set(selected[2].deals.map((d) => d.title)), new Set([
+    "Marucci CATX BBCOR Baseball Bat",
+    "Easton Hype Fire Baseball Bat",
+  ]));
 });
 
 test("digest catch-up exposes only elapsed Eastern windows", () => {
