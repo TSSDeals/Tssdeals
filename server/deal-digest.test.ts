@@ -91,6 +91,22 @@ test("SMS digest links to the complete summary instead of truncating individual 
   assert.doesNotMatch(body, /Wilson A2K Model/);
 });
 
+test("fastpitch model targets add real fielding values and exclude digest artifacts", () => {
+  const ordinary = { msrpCents: null, manufacturerMsrpCents: null, msrpVerified: false, percentOff: "0" };
+  const selected = selectDigestDeals([
+    deal("2024 Wilson A2000 MA14 Fastpitch Softball Glove", 22995, "bb-gloves", "baseball", ordinary),
+    deal("Closeout Rawlings Heart of the Hide Fastpitch Softball Glove", 17999, "bb-gloves", "baseball", ordinary),
+    deal("Easton Professional Collection Fastpitch Infield Glove", 21164, "bb-gloves", "baseball", ordinary),
+    deal("Rawlings Liberty Advanced Fastpitch Softball Glove", 13297, "bb-gloves", "baseball", ordinary),
+    deal("Mizuno Prime Elite X Fastpitch Outfield Glove", 17995, "bb-gloves", "baseball", ordinary),
+    deal("Wilson A1000 V125 Fastpitch Glove", 14999, "bb-gloves", "baseball", ordinary),
+    deal("TSSDeals morning high-value picks Fastpitch gloves", 12999, "fp-gloves", "fastpitch-softball", { ...ordinary, isLow30d: true }),
+    deal("Wilson A2000 Slowpitch Softball Glove", 19999, "fp-gloves", "fastpitch-softball", ordinary),
+  ])[1].deals;
+  assert.equal(selected.length, 6);
+  assert.ok(selected.every((item) => !/TSSDeals|Slowpitch/i.test(item.title)));
+});
+
 test("digest catch-up exposes only elapsed Eastern windows", () => {
   assert.deepEqual(dueDigestSlots(new Date("2026-08-13T13:59:00Z")), []); // 9:59 ET
   assert.deepEqual(dueDigestSlots(new Date("2026-08-13T14:10:00Z")), ["10am"]);
