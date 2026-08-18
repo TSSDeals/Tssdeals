@@ -66,7 +66,7 @@ import { registerAdminOperationsRoutes } from "./admin-operations";
 import { registerAdminFinancialRoutes } from "./admin-financials";
 import { registerOneDriveLedgerRoutes } from "./onedrive-ledger-sync";
 import { registerGmailPromotionRoutes } from "./gmail-promotion-sync";
-import { sendOwnerDealDigest } from "./deal-digest";
+import { selectDigestDeals, sendOwnerDealDigest } from "./deal-digest";
 import { projectDealSearchClassification } from "./deal-search";
 import {
   LEGACY_SHOPPER_MEMORABILIA_SPORT_IDS,
@@ -3852,6 +3852,11 @@ export async function registerRoutes(
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
+  });
+
+  app.get("/api/todays-picks", async (_req, res) => {
+    const categories = selectDigestDeals(await storage.listDeals({ limit: 2_000 }));
+    res.json({ generatedAt: new Date().toISOString(), categories });
   });
 
   app.get("/api/admin/cross-category-backfill/preview", isAdmin, async (req: any, res) => {
