@@ -3855,7 +3855,7 @@ export async function registerRoutes(
   });
 
   app.get("/api/todays-picks", async (_req, res) => {
-    const categories = selectDigestDeals(await storage.listDeals({ limit: 2_000 }));
+    const categories = selectDigestDeals(await storage.listDeals({ limit: "all" }));
     res.json({ generatedAt: new Date().toISOString(), categories });
   });
 

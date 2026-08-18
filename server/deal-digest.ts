@@ -146,7 +146,7 @@ export async function sendOwnerDealDigest(storage: IStorage, slot: DigestSlot, n
   const key = `${easternDate(now)}:${slot}`;
   const state = parseState(await storage.getAppSetting(DIGEST_STATE_KEY));
   const previous = state[key] ?? {};
-  const categories = selectDigestDeals(await storage.listDeals({ limit: 2_000 }));
+  const categories = selectDigestDeals(await storage.listDeals({ limit: "all" }));
   if (!categories.some((category) => category.deals.length)) return { skipped: "no-deals", email: false, sms: false };
 
   let email = previous.email === true;
