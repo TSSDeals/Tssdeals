@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Deal } from "@shared/schema";
-import { dueDigestSlots, formatSmsDigest, selectDigestDeals } from "./deal-digest";
+import { dueDigestSlots, formatSmsDigest, loadDigestPool, selectDigestDeals } from "./deal-digest";
 
 function deal(title: string, priceCents: number, equipmentTypeId: string, sportId = "baseball", overrides: Partial<Deal> = {}): Deal {
   return { id: title, sourceId: "test", title, url: `https://example.com/${encodeURIComponent(title)}`, imageUrl: null, sportId, equipmentTypeId, condition: "new", currency: "USD", priceCents, msrpCents: 30000, manufacturerMsrpCents: null, normalSellingPriceCents: null, msrpSource: "retailer", msrpVerified: true, percentOff: "20", isBuyItNow: true, foundAt: new Date(), lastSeenAt: new Date(), lastPriceConfirmedAt: new Date(), availabilityStatus: "active", unavailableAt: null, subFilterId: null, dropWeight: null, sizeNumber: null, autoIncluded: false, autoIncludeRuleId: null, raw: {}, originalPriceCents: null, highestPriceCents: null, priceDropPercent: null, hasPriceDrop: false, isFeatured: false, isLow30d: false, isLow60d: false, isLow90d: false, isLow180d: false, isLow365d: false, classificationSource: null, classificationConfidence: null, classificationLocked: false, classificationUpdatedAt: null, aiClassifiedAt: null, ...overrides } as Deal;
@@ -111,4 +111,19 @@ test("digest catch-up exposes only elapsed Eastern windows", () => {
   assert.deepEqual(dueDigestSlots(new Date("2026-08-13T13:59:00Z")), []); // 9:59 ET
   assert.deepEqual(dueDigestSlots(new Date("2026-08-13T14:10:00Z")), ["10am"]);
   assert.deepEqual(dueDigestSlots(new Date("2026-08-13T18:10:00Z")), ["10am", "2pm"]);
+});
+
+test("digest pool combines targeted cohorts and deduplicates overlapping records", async () => {
+  const shared = deal("Wilson A2000 Fastpitch Softball Glove", 22995, "fp-gloves", "fastpitch-softball");
+  const distinct = deal("Louisville Slugger BBCOR Baseball Bat", 19999, "bb-bats");
+  let calls = 0;
+  const storage = {
+    async listDeals(params: any) {
+      calls += 1;
+      return params.q === "baseball bat" ? [shared, distinct] : [shared];
+    },
+  };
+  const pool = await loadDigestPool(storage as any);
+  assert.equal(calls, 7);
+  assert.deepEqual(new Set(pool.map((item) => item.id)), new Set([shared.id, distinct.id]));
 });
