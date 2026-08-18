@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Deal } from "@shared/schema";
-import { dueDigestSlots, selectDigestDeals } from "./deal-digest";
+import { dueDigestSlots, formatSmsDigest, selectDigestDeals } from "./deal-digest";
 
 function deal(title: string, priceCents: number, equipmentTypeId: string, sportId = "baseball", overrides: Partial<Deal> = {}): Deal {
   return { id: title, sourceId: "test", title, url: `https://example.com/${encodeURIComponent(title)}`, imageUrl: null, sportId, equipmentTypeId, condition: "new", currency: "USD", priceCents, msrpCents: 30000, manufacturerMsrpCents: null, normalSellingPriceCents: null, msrpSource: "retailer", msrpVerified: true, percentOff: "20", isBuyItNow: true, foundAt: new Date(), lastSeenAt: new Date(), lastPriceConfirmedAt: new Date(), availabilityStatus: "active", unavailableAt: null, subFilterId: null, dropWeight: null, sizeNumber: null, autoIncluded: false, autoIncludeRuleId: null, raw: {}, originalPriceCents: null, highestPriceCents: null, priceDropPercent: null, hasPriceDrop: false, isFeatured: false, isLow30d: false, isLow60d: false, isLow90d: false, isLow180d: false, isLow365d: false, classificationSource: null, classificationConfidence: null, classificationLocked: false, classificationUpdatedAt: null, aiClassifiedAt: null, ...overrides } as Deal;
@@ -61,6 +61,34 @@ test("digest requires a meaningful verified saving, confirmed drop, or 30-day lo
     "Marucci CATX BBCOR Baseball Bat",
     "Easton Hype Fire Baseball Bat",
   ]));
+});
+
+test("new fielding-glove model targets qualify without discount evidence and enforce strict ceilings", () => {
+  const ordinary = { msrpCents: null, manufacturerMsrpCents: null, msrpVerified: false, percentOff: "0" };
+  const selected = selectDigestDeals([
+    deal("New Wilson A2K 1786 Baseball Glove", 25999, "bb-gloves", "baseball", ordinary),
+    deal("New Wilson A2000 1786 Baseball Glove", 19999, "bb-gloves", "baseball", ordinary),
+    deal("New Rawlings Heart of the Hide HOH Baseball Glove", 21499, "bb-gloves", "baseball", ordinary),
+    deal("New Mizuno Pro Baseball Glove", 24999, "bb-gloves", "baseball", ordinary),
+    deal("New Mizuno Pro Select Baseball Glove", 19999, "bb-gloves", "baseball", ordinary),
+    deal("New Marucci Capitol Baseball Glove", 15999, "bb-gloves", "baseball", ordinary),
+    deal("New Marucci Cypress Baseball Glove", 13999, "bb-gloves", "baseball", ordinary),
+    deal("Wilson A2K Baseball Glove at ceiling", 26000, "bb-gloves", "baseball", ordinary),
+    deal("Used Wilson A2K Baseball Glove", 19999, "bb-gloves", "baseball", { ...ordinary, condition: "used" }),
+  ])[0].deals;
+  assert.equal(selected.length, 7);
+  assert.ok(selected.every((item) => !item.title.includes("ceiling") && !item.title.startsWith("Used")));
+});
+
+test("SMS digest links to the complete summary instead of truncating individual deals", () => {
+  const categoryDeals = Array.from({ length: 6 }, (_, index) =>
+    deal(`Wilson A2K Model ${index + 1} Baseball Glove`, 20000 + index, "bb-gloves"));
+  const body = formatSmsDigest([
+    { name: "Baseball gloves", path: "/app/top-deals/baseball-softball-gloves", deals: categoryDeals },
+  ], "10am");
+  assert.match(body, /Baseball gloves: 6/);
+  assert.match(body, /\/app\/todays-picks/);
+  assert.doesNotMatch(body, /Wilson A2K Model/);
 });
 
 test("digest catch-up exposes only elapsed Eastern windows", () => {

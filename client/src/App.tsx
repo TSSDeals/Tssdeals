@@ -12,6 +12,7 @@ import Notifications from "@/pages/Notifications";
 import Admin from "@/pages/Admin";
 import TopDeals from "@/pages/TopDeals";
 import TwinSeamPicks from "@/pages/TwinSeamPicks";
+import TodaysPicks from "@/pages/TodaysPicks";
 import Blog from "@/pages/Blog";
 import { PrivacyPolicy, AboutUs, Contact, TermsOfService, Disclaimer, SmsTerms } from "@/pages/Legal";
 import NotificationsInfo from "@/pages/NotificationsInfo";
@@ -62,6 +63,7 @@ function Router() {
       <Route path="/app/top-deals/:slug" component={TopDeals} />
       <Route path="/app/top-deals" component={TopDeals} />
       <Route path="/app/twin-seam-picks" component={TwinSeamPicks} />
+      <Route path="/app/todays-picks" component={TodaysPicks} />
       <Route path="/app/preferences" component={Preferences} />
       <Route path="/app/notifications" component={Notifications} />
       <Route path="/app/blog/:slug" component={Blog} />
