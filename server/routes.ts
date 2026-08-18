@@ -66,7 +66,7 @@ import { registerAdminOperationsRoutes } from "./admin-operations";
 import { registerAdminFinancialRoutes } from "./admin-financials";
 import { registerOneDriveLedgerRoutes } from "./onedrive-ledger-sync";
 import { registerGmailPromotionRoutes } from "./gmail-promotion-sync";
-import { selectDigestDeals, sendOwnerDealDigest } from "./deal-digest";
+import { loadDigestPool, selectDigestDeals, sendOwnerDealDigest } from "./deal-digest";
 import { projectDealSearchClassification } from "./deal-search";
 import {
   LEGACY_SHOPPER_MEMORABILIA_SPORT_IDS,
@@ -3855,7 +3855,7 @@ export async function registerRoutes(
   });
 
   app.get("/api/todays-picks", async (_req, res) => {
-    const categories = selectDigestDeals(await storage.listDeals({ limit: "all" }));
+    const categories = selectDigestDeals(await loadDigestPool(storage));
     res.json({ generatedAt: new Date().toISOString(), categories });
   });
 

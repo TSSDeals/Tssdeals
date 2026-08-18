@@ -158,6 +158,21 @@ export function selectDigestDeals(pool: Deal[]): DigestCategory[] {
   ];
 }
 
+export async function loadDigestPool(storage: Pick<IStorage, "listDeals">): Promise<Deal[]> {
+  const cohorts = await Promise.all([
+    storage.listDeals({ sportId: "baseball", equipmentTypeId: "bb-gloves", limit: "all" }),
+    storage.listDeals({ sportId: "fastpitch-softball", equipmentTypeId: "fp-gloves", limit: "all" }),
+    storage.listDeals({ sportId: "baseball", equipmentTypeId: "bb-bats", limit: "all" }),
+    storage.listDeals({ q: "baseball glove", limit: "all" }),
+    storage.listDeals({ q: "fastpitch glove", limit: "all" }),
+    storage.listDeals({ q: "softball glove", limit: "all" }),
+    storage.listDeals({ q: "baseball bat", limit: "all" }),
+  ]);
+  const byId = new Map<string, Deal>();
+  for (const deal of cohorts.flat()) byId.set(deal.id, deal);
+  return [...byId.values()];
+}
+
 function money(deal: Deal): string {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: deal.currency || "USD", maximumFractionDigits: 2 }).format(deal.priceCents / 100);
 }
@@ -184,7 +199,7 @@ export async function sendOwnerDealDigest(storage: IStorage, slot: DigestSlot, n
   const key = `${easternDate(now)}:${slot}`;
   const state = parseState(await storage.getAppSetting(DIGEST_STATE_KEY));
   const previous = state[key] ?? {};
-  const categories = selectDigestDeals(await storage.listDeals({ limit: "all" }));
+  const categories = selectDigestDeals(await loadDigestPool(storage));
   if (!categories.some((category) => category.deals.length)) return { skipped: "no-deals", email: false, sms: false };
 
   let email = previous.email === true;
