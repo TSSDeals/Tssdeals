@@ -8,7 +8,7 @@ const CATEGORY_LIMIT = 20;
 const MIN_VERIFIED_SAVINGS_PERCENT = 10;
 const MIN_VERIFIED_PRICE_DROP_PERCENT = 5;
 const MIN_HISTORICAL_LOW_DAYS = 30;
-const FIELDING_EXCLUSIONS = /\b(?:batting\s+gloves?|sliding\s+mitts?|golf|winter|work|training\s+(?:gloves?|mitts?)|glove\s+(?:care|oil|conditioner|lace|repair)|signed|autograph|memorabilia)\b/i;
+const FIELDING_EXCLUSIONS = /\b(?:batting\s+gloves?|sliding\s+mitts?|golf|winter|work|training\s+(?:gloves?|mitts?)|glove\s+(?:care|oil|conditioner|lace|repair)|signed|autograph|memorabilia|TSSDeals\s+(?:morning|afternoon|AM|PM|high-value|picks))\b/i;
 const FIELDING_EVIDENCE = /\b(?:baseball|softball|fastpitch|fielding|infield|outfield|pitcher|catcher|first[ -]?base)\b.*\b(?:gloves?|mitts?)\b|\b(?:a2k|a2000|pro preferred|heart of the hide|marucci cypress)\b/i;
 const BAT_EXCLUSIONS = /\b(?:softball|fastpitch|slowpitch|batting gloves?|helmet|bat (?:bag|rack|grip|tape|weight|cover)|signed|autograph|memorabilia)\b/i;
 const BAT_EVIDENCE = /\b(?:baseball bat|bbcor|usssa|usa baseball|wood bat|maple bat|youth bat)\b/i;
@@ -21,6 +21,17 @@ const NEW_GLOVE_PRICE_TARGETS: GlovePriceTarget[] = [
   { label: "Mizuno Pro under $250", maxExclusiveCents: 25_000, matches: (text) => /\bmizuno\b[\s\S]*\bpro\b|\bpro\b[\s\S]*\bmizuno\b/i.test(text) },
   { label: "Marucci Capitol under $160", maxExclusiveCents: 16_000, matches: (text) => /\bmarucci\b[\s\S]*\bcapitol\b|\bcapitol\b[\s\S]*\bmarucci\b/i.test(text) },
   { label: "Marucci Cypress under $140", maxExclusiveCents: 14_000, matches: (text) => /\bmarucci\b[\s\S]*\bcypress\b|\bcypress\b[\s\S]*\bmarucci\b/i.test(text) },
+];
+const NEW_FASTPITCH_GLOVE_PRICE_TARGETS: GlovePriceTarget[] = [
+  { label: "Wilson A2000 fastpitch under $240", maxExclusiveCents: 24_000, matches: (text) => /\bwilson\b[\s\S]*\ba2000\b|\ba2000\b[\s\S]*\bwilson\b/i.test(text) },
+  { label: "Rawlings HOH fastpitch under $240", maxExclusiveCents: 24_000, matches: (text) => /\brawlings\b[\s\S]*(?:heart\s+of\s+the\s+hide|\bhoh\b)|(?:heart\s+of\s+the\s+hide|\bhoh\b)[\s\S]*\brawlings\b/i.test(text) },
+  { label: "Mizuno Pro Select fastpitch under $230", maxExclusiveCents: 23_000, matches: (text) => /\bmizuno\b[\s\S]*\bpro\s+select\b|\bpro\s+select\b[\s\S]*\bmizuno\b/i.test(text) },
+  { label: "Easton Professional Collection fastpitch under $220", maxExclusiveCents: 22_000, matches: (text) => /\beaston\b[\s\S]*\b(?:professional|pro)\s+collection\b/i.test(text) },
+  { label: "Rawlings Liberty Advanced under $190", maxExclusiveCents: 19_000, matches: (text) => /\brawlings\b[\s\S]*\bliberty\s+advanced\b|\bliberty\s+advanced\b[\s\S]*\brawlings\b/i.test(text) },
+  { label: "Mizuno Prime Elite under $180", maxExclusiveCents: 18_000, matches: (text) => /\bmizuno\b[\s\S]*\bprime\s+elite(?:\s+x)?\b/i.test(text) },
+  { label: "Wilson A1000 fastpitch under $150", maxExclusiveCents: 15_000, matches: (text) => /\bwilson\b[\s\S]*\ba1000\b|\ba1000\b[\s\S]*\bwilson\b/i.test(text) },
+  { label: "Marucci Ascension fastpitch under $160", maxExclusiveCents: 16_000, matches: (text) => /\bmarucci\b[\s\S]*\bascension\b|\bascension\b[\s\S]*\bmarucci\b/i.test(text) },
+  { label: "Marucci Palmetto fastpitch under $140", maxExclusiveCents: 14_000, matches: (text) => /\bmarucci\b[\s\S]*\bpalmetto\b|\bpalmetto\b[\s\S]*\bmarucci\b/i.test(text) },
 ];
 
 export type DigestSlot = "10am" | "2pm";
@@ -60,6 +71,7 @@ export function selectDigestDeals(pool: Deal[]): DigestCategory[] {
     !/\bfast[ -]?pitch\b/i.test(deal.title));
   const fastpitchGloves = current.filter((deal) =>
     !FIELDING_EXCLUSIONS.test(deal.title) &&
+    !/\bslow[ -]?pitch\b/i.test(deal.title) &&
     /\bfast[ -]?pitch|softball\b/i.test(deal.title) &&
     (/(?:gloves?|mitts?)/i.test(deal.title) || deal.equipmentTypeId === "fp-gloves"));
   const baseballBats = current.filter((deal) =>
@@ -83,11 +95,11 @@ export function selectDigestDeals(pool: Deal[]): DigestCategory[] {
     )
     || historicalLowDays(deal) >= MIN_HISTORICAL_LOW_DAYS;
 
-  const glovePriceTarget = (deal: Deal) => {
+  const priceTarget = (deal: Deal, targets: GlovePriceTarget[]) => {
     const condition = String(deal.condition ?? "").toLowerCase();
     const title = `${deal.title} ${String((deal as Deal & { brand?: string | null }).brand ?? "")}`;
     if (condition !== "new" || /\b(?:used|pre[ -]?owned|open box|demo)\b/i.test(title)) return null;
-    return NEW_GLOVE_PRICE_TARGETS.find((target) =>
+    return targets.find((target) =>
       deal.priceCents < target.maxExclusiveCents && target.matches(title)) ?? null;
   };
 
@@ -97,7 +109,7 @@ export function selectDigestDeals(pool: Deal[]): DigestCategory[] {
       .slice(0, CATEGORY_LIMIT);
   const rankedGloves = () => {
     const targets = baseballGloves
-      .map((deal) => ({ deal, target: glovePriceTarget(deal) }))
+      .map((deal) => ({ deal, target: priceTarget(deal, NEW_GLOVE_PRICE_TARGETS) }))
       .filter((entry): entry is { deal: Deal; target: GlovePriceTarget } => Boolean(entry.target))
       .sort((a, b) =>
         (a.deal.priceCents / a.target.maxExclusiveCents) - (b.deal.priceCents / b.target.maxExclusiveCents)
@@ -113,9 +125,35 @@ export function selectDigestDeals(pool: Deal[]): DigestCategory[] {
     }
     return selected;
   };
+  const rankedFastpitchGloves = () => {
+    const targets = fastpitchGloves
+      .map((deal) => ({ deal, target: priceTarget(deal, NEW_FASTPITCH_GLOVE_PRICE_TARGETS) }))
+      .filter((entry): entry is { deal: Deal; target: GlovePriceTarget } => Boolean(entry.target))
+      .sort((a, b) =>
+        (a.deal.priceCents / a.target.maxExclusiveCents) - (b.deal.priceCents / b.target.maxExclusiveCents)
+        || a.deal.priceCents - b.deal.priceCents);
+    const standard = ranked(fastpitchGloves, { name: "Fastpitch fielding gloves", slug: "fastpitch-fielding-gloves", sportId: "fastpitch-softball", equipmentTypeId: "fp-gloves" });
+    const selected: Deal[] = [];
+    const seen = new Set<string>();
+    const familyCounts = new Map<string, number>();
+    for (const entry of targets) {
+      const count = familyCounts.get(entry.target.label) ?? 0;
+      if (count >= 2 || seen.has(entry.deal.id)) continue;
+      familyCounts.set(entry.target.label, count + 1);
+      seen.add(entry.deal.id);
+      selected.push(entry.deal);
+    }
+    for (const deal of standard) {
+      if (seen.has(deal.id)) continue;
+      seen.add(deal.id);
+      selected.push(deal);
+      if (selected.length >= CATEGORY_LIMIT) break;
+    }
+    return selected.slice(0, CATEGORY_LIMIT);
+  };
   return [
     { name: "Baseball gloves", path: "/app/top-deals/baseball-softball-gloves", deals: rankedGloves() },
-    { name: "Fastpitch gloves", path: "/app/deals?sport=fastpitch-softball&equipment=fp-gloves", deals: ranked(fastpitchGloves, { name: "Fastpitch fielding gloves", slug: "fastpitch-fielding-gloves", sportId: "fastpitch-softball", equipmentTypeId: "fp-gloves" }) },
+    { name: "Fastpitch gloves", path: "/app/deals?sport=fastpitch-softball&equipment=fp-gloves", deals: rankedFastpitchGloves() },
     { name: "Baseball bats", path: "/app/top-deals/baseball-bats", deals: ranked(baseballBats, { name: "Baseball bats", slug: "baseball-bats", sportId: "baseball", equipmentTypeId: "bb-bats" }) },
   ];
 }
