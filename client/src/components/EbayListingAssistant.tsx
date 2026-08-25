@@ -10,11 +10,12 @@ import { Camera, Sparkles, Loader2, X, Upload, Send, Edit, Package, DollarSign, 
 interface GeneratedListing {
   title: string;
   description: string;
-  suggestedPrice: number;
+  suggestedPrice: null;
   category: string;
   conditionId: string;
   conditionLabel: string;
   itemSpecifics: Record<string, string>;
+  missingFacts: string[];
 }
 
 const SPORTS = [
@@ -109,15 +110,15 @@ export default function EbayListingAssistant() {
         description: description.trim(),
         imageUrls,
         sport: sport || undefined,
-        condition: condition || undefined,
+        condition: CONDITIONS.find((candidate) => candidate.id === condition)?.label,
       });
 
       const listing = await generateRes.json();
       setGenerated(listing);
       setEditTitle(listing.title || "");
       setEditDescription(listing.description || "");
-      setEditPrice(String(listing.suggestedPrice || ""));
-      setEditConditionId(listing.conditionId || "3000");
+      setEditPrice("");
+      setEditConditionId(listing.conditionId || condition);
       setEditCategory(listing.category || "");
       setEditSpecifics(listing.itemSpecifics || {});
       setStep("review");
@@ -278,7 +279,7 @@ export default function EbayListingAssistant() {
                 </SelectTrigger>
                 <SelectContent>
                   {CONDITIONS.map((c) => (
-                    <SelectItem key={c.id} value={c.label}>{c.label}</SelectItem>
+                    <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -316,6 +317,16 @@ export default function EbayListingAssistant() {
             <Button variant="ghost" size="sm" onClick={() => setStep("input")} data-testid="back-to-input-button">
               Back
             </Button>
+          </div>
+
+          <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100" data-testid="listing-confirmation-notice">
+            <p className="font-semibold">Seller confirmation required</p>
+            <p className="mt-1">AI does not estimate price or fill uncertain facts. Confirm every field before creating the unpublished eBay offer.</p>
+            {generated.missingFacts.length > 0 && (
+              <ul className="mt-2 list-disc space-y-1 pl-5">
+                {generated.missingFacts.map((fact) => <li key={fact}>{fact}</li>)}
+              </ul>
+            )}
           </div>
 
           {photoPreviewUrls.length > 0 && (
@@ -369,6 +380,7 @@ export default function EbayListingAssistant() {
                 className="rounded-xl"
                 data-testid="edit-price-input"
               />
+              <p className="mt-1 text-xs text-muted-foreground">Enter a seller-confirmed price; AI pricing is disabled.</p>
             </div>
             <div>
               <label className="text-sm font-medium mb-1.5 block">Condition</label>
@@ -432,9 +444,12 @@ export default function EbayListingAssistant() {
           </div>
 
           <div className="flex gap-3">
+            <p className="flex-1 self-center text-xs text-muted-foreground">
+              This writes an inventory item and unpublished offer to your connected eBay account. It does not publish the offer.
+            </p>
             <Button
               onClick={handleCreateListing}
-              disabled={creating || !editTitle || !editPrice}
+              disabled={creating || photos.length === 0 || !editTitle.trim() || editTitle.length > 80 || !editDescription.trim() || !editPrice || Number(editPrice) <= 0 || !editConditionId || !editCategory.trim()}
               className="flex-1 rounded-xl"
               data-testid="create-listing-button"
             >
@@ -446,7 +461,7 @@ export default function EbayListingAssistant() {
               ) : (
                 <>
                   <Send className="mr-2 h-4 w-4" />
-                  Create eBay Listing
+                  Create Unpublished eBay Offer
                 </>
               )}
             </Button>
@@ -465,7 +480,7 @@ export default function EbayListingAssistant() {
               )}
               <div>
                 <h3 className="font-bold text-base" data-testid="listing-result-title">
-                  {result.success ? "Listing Created!" : "Listing Failed"}
+                  {result.success ? "Unpublished eBay Offer Created" : result.sku ? "Inventory Item Created; Offer Failed" : "Listing Failed"}
                 </h3>
                 {result.sku && (
                   <p className="text-sm text-muted-foreground mt-1">SKU: <code className="bg-background/60 px-1.5 py-0.5 rounded text-xs">{result.sku}</code></p>

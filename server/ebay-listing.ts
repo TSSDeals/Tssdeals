@@ -103,7 +103,7 @@ export async function createEbayDraftListing(
           quantity: input.quantity || 1,
         },
       },
-      condition: input.condition || "USED_EXCELLENT",
+      condition: input.condition,
       product: {
         title: input.title,
         description: input.description,
@@ -202,7 +202,7 @@ export async function createEbayDraftListing(
     if (!createOfferRes.ok) {
       const errorText = await createOfferRes.text();
       return {
-        success: true,
+        success: false,
         sku,
         error: `Inventory item created but offer creation failed: ${createOfferRes.status} ${errorText.slice(0, 500)}. You may need to set up business policies on eBay first.`,
       };
@@ -248,10 +248,3 @@ export async function publishEbayOffer(
   }
 }
 
-export const EBAY_CONDITION_MAP: Record<string, string> = {
-  "1000": "NEW",
-  "1500": "NEW_OTHER",
-  "2500": "SELLER_REFURBISHED",
-  "3000": "USED_EXCELLENT",
-  "7000": "FOR_PARTS_OR_NOT_WORKING",
-};

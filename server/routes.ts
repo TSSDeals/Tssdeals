@@ -3339,27 +3339,16 @@ export async function registerRoutes(
 
   app.post("/api/ebay-listing/create", isAdmin, async (req: any, res) => {
     try {
-      const { createEbayDraftListing, EBAY_CONDITION_MAP } = await import("./ebay-listing");
+      const { createEbayDraftListing } = await import("./ebay-listing");
+      const { validateListingCreatePayload } = await import("./ebay-listing-validation");
       const userId = getAuthedUserId(req);
-      const { title, description, price, conditionId, categoryName, imageUrls, itemSpecifics, quantity } = req.body;
+      const validation = validateListingCreatePayload(req.body);
+      if (!validation.ok) return res.status(400).json({ message: "Listing preflight failed", errors: validation.errors });
+      const result = await createEbayDraftListing(userId, storage, validation.value);
 
-      if (!title || !description || !price) {
-        return res.status(400).json({ message: "Title, description, and price are required" });
-      }
-
-      const condition = EBAY_CONDITION_MAP[conditionId || "3000"] || "USED_EXCELLENT";
-
-      const result = await createEbayDraftListing(userId, storage, {
-        title,
-        description,
-        price: parseFloat(price),
-        condition,
-        categoryName: categoryName || title,
-        imageUrls: imageUrls || [],
-        itemSpecifics: itemSpecifics || {},
-        quantity: quantity || 1,
-      });
-
+      // A failed result may include an SKU when the inventory write succeeded but
+      // offer creation failed. Return the structured state so the UI can show the
+      // partial failure instead of incorrectly collapsing it into a generic toast.
       res.json(result);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
