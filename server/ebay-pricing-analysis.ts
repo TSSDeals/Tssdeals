@@ -12,9 +12,10 @@ import {
 } from "./ebay-browse-client";
 import {
   calculateSuggestedPrice as auditedSuggestedPrice,
+  buildComparableSearchTiers,
+  type ComparableEvidenceTier,
   determineCompetitiveness as auditedCompetitiveness,
   estimateEbayFees as auditedEbayFees,
-  extractSearchKeywords as auditedSearchKeywords,
   isRelevantComparable as auditedComparableMatch,
   summarizeComparablePrices as auditedPriceSummary,
 } from "./ebay-pricing-math";
@@ -72,6 +73,7 @@ export interface PricingReportItem {
   profitMarginPercent: number | null;
   estimatedFeesCents: number | null;
   pricingConfidence: "none" | "low" | "medium" | "high";
+  evidenceTier: ComparableEvidenceTier | "none";
   competitiveness: "underpriced" | "competitive" | "slightly_high" | "overpriced" | "no_data";
 }
 
@@ -291,56 +293,60 @@ async function findComparableActiveListings(
   categoryId: string | null,
   budget: EbayBrowseBudget,
   cache: Map<string, Promise<EbaySearchResponse>>,
-): Promise<{ items: EbayItemSummary[]; avgPriceCents: number | null; medianPriceCents: number | null; lowestPriceCents: number | null; highestPriceCents: number | null }> {
-  const keywords = auditedSearchKeywords(sourceItem.title);
-  if (!keywords) return { items: [], avgPriceCents: null, medianPriceCents: null, lowestPriceCents: null, highestPriceCents: null };
+): Promise<{ items: EbayItemSummary[]; avgPriceCents: number | null; medianPriceCents: number | null; lowestPriceCents: number | null; highestPriceCents: number | null; evidenceTier: ComparableEvidenceTier | "none" }> {
+  const tiers = buildComparableSearchTiers(sourceItem.title);
+  let bestItems: EbayItemSummary[] = [];
+  let evidenceTier: ComparableEvidenceTier | "none" = "none";
 
-  const params = new URLSearchParams({
-    q: keywords,
-    limit: "50",
-    fieldgroups: "EXTENDED",
-    filter: `buyingOptions:{FIXED_PRICE},deliveryCountry:US`,
-    sort: "price",
-  });
+  for (const tier of tiers) {
+    const params = new URLSearchParams({
+      q: tier.query,
+      limit: "50",
+      fieldgroups: "EXTENDED",
+      filter: `buyingOptions:{FIXED_PRICE},deliveryCountry:US`,
+      sort: "price",
+    });
+    if (categoryId && tier.useCategory) params.set("category_ids", categoryId);
 
-  if (categoryId) {
-    params.set("category_ids", categoryId);
+    try {
+      const cacheKey = params.toString();
+      let request = cache.get(cacheKey);
+      if (!request) {
+        request = searchEbay(token, params, budget);
+        cache.set(cacheKey, request);
+      }
+      const data = await request;
+      const items = (data.itemSummaries || []).filter((item) =>
+        item.seller?.username?.toLowerCase() !== MY_SELLER_USERNAME.toLowerCase()
+        && auditedComparableMatch(sourceItem, item)
+      );
+      if (items.length > bestItems.length) {
+        bestItems = items;
+        evidenceTier = tier.evidenceTier;
+      }
+      if (items.length >= 3) break;
+    } catch (err: any) {
+      if (isEbayRateLimitError(err)) throw err;
+      log(`Comparable ${tier.evidenceTier} search failed for "${tier.query}": ${err.message}`, "ebay-pricing");
+    }
   }
 
-  try {
-    const cacheKey = params.toString();
-    let request = cache.get(cacheKey);
-    if (!request) {
-      request = searchEbay(token, params, budget);
-      cache.set(cacheKey, request);
-    }
-    const data = await request;
-    const items = (data.itemSummaries || []).filter((item) =>
-      item.seller?.username?.toLowerCase() !== MY_SELLER_USERNAME.toLowerCase()
-      && auditedComparableMatch(sourceItem, item)
-    );
-
-    if (items.length === 0) {
-      return { items: [], avgPriceCents: null, medianPriceCents: null, lowestPriceCents: null, highestPriceCents: null };
-    }
-
-    const summary = auditedPriceSummary(
-      items.map((item) => Math.round(parseFloat(item.price.value) * 100)),
-    );
-    const retainedPrices = new Set(summary.prices);
-    const retainedItems = items.filter((item) => retainedPrices.has(Math.round(parseFloat(item.price.value) * 100)));
-    return {
-      items: retainedItems,
-      avgPriceCents: summary.average,
-      medianPriceCents: summary.median,
-      lowestPriceCents: summary.lowest,
-      highestPriceCents: summary.highest,
-    };
-  } catch (err: any) {
-    if (isEbayRateLimitError(err)) throw err;
-    log(`Comparable search failed for "${keywords}": ${err.message}`, "ebay-pricing");
-    return { items: [], avgPriceCents: null, medianPriceCents: null, lowestPriceCents: null, highestPriceCents: null };
+  if (!bestItems.length) {
+    return { items: [], avgPriceCents: null, medianPriceCents: null, lowestPriceCents: null, highestPriceCents: null, evidenceTier: "none" };
   }
+  const summary = auditedPriceSummary(
+    bestItems.map((item) => Math.round(parseFloat(item.price.value) * 100)),
+  );
+  const retainedPrices = new Set(summary.prices);
+  const retainedItems = bestItems.filter((item) => retainedPrices.has(Math.round(parseFloat(item.price.value) * 100)));
+  return {
+    items: retainedItems,
+    avgPriceCents: summary.average,
+    medianPriceCents: summary.median,
+    lowestPriceCents: summary.lowest,
+    highestPriceCents: summary.highest,
+    evidenceTier,
+  };
 }
 
 export function determineCompetitiveness(
@@ -506,6 +512,7 @@ export async function generatePricingReport(): Promise<string> {
         profitMarginPercent,
         estimatedFeesCents,
         pricingConfidence,
+        evidenceTier: comparables.evidenceTier,
         competitiveness,
       });
 

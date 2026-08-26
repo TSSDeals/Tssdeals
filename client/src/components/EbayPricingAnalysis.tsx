@@ -44,6 +44,7 @@ interface PricingReportItem {
   profitMarginPercent: number | null;
   estimatedFeesCents: number | null;
   pricingConfidence: "none" | "low" | "medium" | "high";
+  evidenceTier?: "exact" | "model" | "broad" | "none";
   competitiveness: "underpriced" | "competitive" | "slightly_high" | "overpriced" | "no_data";
 }
 
@@ -337,7 +338,10 @@ export default function EbayPricingAnalysis() {
                             Comparable Median: <strong className="text-foreground">{formatCents(item.medianListedPriceCents)}</strong>
                             {item.comparableCount > 0 && <span className="opacity-50"> ({item.comparableCount})</span>}
                           </span>
-                          <span className="text-muted-foreground">Confidence: <strong className="capitalize text-foreground">{item.pricingConfidence || "none"}</strong></span>
+                          <span className="text-muted-foreground">
+                            Confidence: <strong className="capitalize text-foreground">{item.pricingConfidence || "none"}</strong>
+                            {item.evidenceTier && item.evidenceTier !== "none" && <span className="opacity-60"> · {item.evidenceTier} match</span>}
+                          </span>
                           {item.suggestedPriceCents && (
                             <span className="text-emerald-400">
                               Suggested: <strong>{formatCents(item.suggestedPriceCents)}</strong>
@@ -410,7 +414,7 @@ export default function EbayPricingAnalysis() {
                         </div>
                         <div>
                           <span className="text-muted-foreground block">Evidence quality</span>
-                          <span className="capitalize">{item.pricingConfidence || "none"} · active listings only</span>
+                          <span className="capitalize">{item.pricingConfidence || "none"} · {item.evidenceTier || "no"} match · active listings only</span>
                         </div>
                         <div>
                           <span className="text-muted-foreground block">Category</span>

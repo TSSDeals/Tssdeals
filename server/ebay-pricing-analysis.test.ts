@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   calculateSuggestedPrice,
+  buildComparableSearchTiers,
   determineCompetitiveness,
   estimateEbayFees,
   extractSearchKeywords,
@@ -16,6 +17,18 @@ test("pricing search keeps model and size terms while removing listing filler", 
   assert.match(query, /1786/);
   assert.match(query, /11\.5/);
   assert.doesNotMatch(query, /ships|free|new/);
+});
+
+test("pricing search broadens in bounded evidence tiers", () => {
+  const tiers = buildComparableSearchTiers('NEW Wilson A2000 1786 11.5" Baseball Glove RHT - Ships Free!');
+  assert.deepEqual(tiers.map((tier) => tier.evidenceTier), ["exact", "model", "broad"]);
+  assert.equal(tiers[0].useCategory, true);
+  assert.equal(tiers[1].useCategory, true);
+  assert.equal(tiers[2].useCategory, false);
+  assert.match(tiers[2].query, /wilson/);
+  assert.match(tiers[2].query, /a2000|1786|11\.5/);
+  assert.match(tiers[2].query, /baseball|glove/);
+  assert.ok(tiers.every((tier) => tier.query.split(/\s+/).length <= 9));
 });
 
 test("comparable filtering rejects wrong equipment, condition, and throw hand", () => {

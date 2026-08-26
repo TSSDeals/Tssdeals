@@ -22,6 +22,54 @@ export function extractSearchKeywords(title: string): string {
   return Array.from(new Set([...distinctive, ...words])).slice(0, 9).join(" ");
 }
 
+export type ComparableEvidenceTier = "exact" | "model" | "broad";
+
+export type ComparableSearchTier = {
+  evidenceTier: ComparableEvidenceTier;
+  query: string;
+  useCategory: boolean;
+};
+
+function familySearchTerms(title: string): string[] {
+  const family = equipmentFamily(title);
+  if (family === "fielding-gloves") return ["baseball", "glove"];
+  if (family === "batting-gloves") return ["batting", "gloves"];
+  if (family === "bats") return ["baseball", "bat"];
+  if (family === "footwear") return ["cleats"];
+  if (family === "protective") return ["baseball", "gear"];
+  return [];
+}
+
+export function buildComparableSearchTiers(title: string): ComparableSearchTier[] {
+  const words = normalizedTitleWords(title);
+  if (!words.length) return [];
+
+  const exact = extractSearchKeywords(title);
+  const identifiers = words.filter((word) => /\d/.test(word));
+  const descriptive = words.filter((word) => word.length >= 4);
+  const model = Array.from(new Set([words[0], ...identifiers, ...descriptive]))
+    .slice(0, 5)
+    .join(" ");
+  const broad = Array.from(new Set([
+    words[0],
+    ...identifiers.slice(0, 1),
+    ...familySearchTerms(title),
+  ])).slice(0, 4).join(" ");
+
+  const candidates: ComparableSearchTier[] = [
+    { evidenceTier: "exact", query: exact, useCategory: true },
+    { evidenceTier: "model", query: model, useCategory: true },
+    { evidenceTier: "broad", query: broad, useCategory: false },
+  ];
+  const seen = new Set<string>();
+  return candidates.filter((tier) => {
+    const key = `${tier.query}|${tier.useCategory}`;
+    if (!tier.query || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 export type ComparableCandidate = {
   title: string;
   condition?: string;
