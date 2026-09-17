@@ -18,22 +18,16 @@ import { useToast } from "@/hooks/use-toast";
 import { ArrowRight, Lock, LogIn, Mail, MapPin, Phone, Sparkles, CheckCircle2 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useMagicLink } from "@/components/MagicLinkDialog";
+import { useAuth } from "@/hooks/use-auth";
 import tssLogo from "@assets/TSS_Logo_1779117500363.png";
 import knoxStarLogo from "@assets/Knox_Star_Logo_transparent.png";
 import dirtDawgsLogo from "@assets/Dirt_Dawgs_Logo_1779116645720.png";
 
 function AdminLink() {
-  const { data } = useQuery<{ email?: string }>({
-    queryKey: ["/api/auth/me"],
-    queryFn: async () => {
-      const r = await fetch("/api/auth/me", { credentials: "include" });
-      if (!r.ok) return {};
-      return r.json();
-    },
-  });
-  if ((data?.email || "").toLowerCase() !== "justin@twinseamsports.com") return null;
+  const { user } = useAuth();
+  if ((user as any)?.isAdmin !== true) return null;
   return (
-    <a href="/admin/invoices" className="block hover:underline" data-testid="link-admin-invoices">Admin: Invoices →</a>
+    <a href="/team-admin" className="block hover:underline" data-testid="link-team-admin">Admin: Team setup →</a>
   );
 }
 

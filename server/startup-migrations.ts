@@ -679,6 +679,40 @@ export const STARTUP_MIGRATIONS: readonly VersionedMigration<StartupContext>[] =
       for (const statement of statements) await context.execute(sql.raw(statement));
     },
   },
+  {
+    ...STARTUP_MIGRATION_MANIFEST[18],
+    async up(context) {
+      const statements = [
+        `ALTER TABLE bb_teams ADD COLUMN IF NOT EXISTS age_group VARCHAR(40)`,
+        `ALTER TABLE bb_teams ADD COLUMN IF NOT EXISTS head_coach VARCHAR(120)`,
+        `ALTER TABLE bb_teams ADD COLUMN IF NOT EXISTS city VARCHAR(80)`,
+        `ALTER TABLE bb_teams ADD COLUMN IF NOT EXISTS state VARCHAR(40)`,
+        `CREATE TABLE IF NOT EXISTS bb_team_signup_requests (
+          id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+          team_name VARCHAR(120) NOT NULL,
+          head_coach VARCHAR(120) NOT NULL,
+          administrator VARCHAR(120),
+          season VARCHAR(60),
+          age_group VARCHAR(40),
+          city VARCHAR(80),
+          state VARCHAR(40),
+          contact_name VARCHAR(120) NOT NULL,
+          contact_email VARCHAR(200) NOT NULL,
+          contact_phone VARCHAR(40) NOT NULL,
+          address VARCHAR(240),
+          notes TEXT,
+          status VARCHAR(20) NOT NULL DEFAULT 'pending',
+          fulfilled_team_id VARCHAR REFERENCES bb_teams(id) ON DELETE SET NULL,
+          reviewed_by_email VARCHAR(200),
+          reviewed_at TIMESTAMP,
+          created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )`,
+        `CREATE INDEX IF NOT EXISTS bb_team_signup_requests_status_idx
+          ON bb_team_signup_requests(status, created_at)`,
+      ];
+      for (const statement of statements) await context.execute(sql.raw(statement));
+    },
+  },
 ] as const;
 
 const ledger: MigrationLedger<StartupContext> = {

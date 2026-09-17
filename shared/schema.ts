@@ -1116,11 +1116,42 @@ export const bbTeams = pgTable("bb_teams", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   slug: varchar("slug", { length: 100 }).notNull().unique(),
   name: text("name").notNull(),
+  ageGroup: varchar("age_group", { length: 40 }),
   season: varchar("season", { length: 50 }),
+  headCoach: varchar("head_coach", { length: 120 }),
+  city: varchar("city", { length: 80 }),
+  state: varchar("state", { length: 40 }),
   passwordHash: text("password_hash").notNull(),
   passwordSalt: text("password_salt").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
+
+export const bbTeamSignupRequests = pgTable(
+  "bb_team_signup_requests",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    teamName: varchar("team_name", { length: 120 }).notNull(),
+    headCoach: varchar("head_coach", { length: 120 }).notNull(),
+    administrator: varchar("administrator", { length: 120 }),
+    season: varchar("season", { length: 60 }),
+    ageGroup: varchar("age_group", { length: 40 }),
+    city: varchar("city", { length: 80 }),
+    state: varchar("state", { length: 40 }),
+    contactName: varchar("contact_name", { length: 120 }).notNull(),
+    contactEmail: varchar("contact_email", { length: 200 }).notNull(),
+    contactPhone: varchar("contact_phone", { length: 40 }).notNull(),
+    address: varchar("address", { length: 240 }),
+    notes: text("notes"),
+    status: varchar("status", { length: 20 }).notNull().default("pending"),
+    fulfilledTeamId: varchar("fulfilled_team_id").references(() => bbTeams.id, { onDelete: "set null" }),
+    reviewedByEmail: varchar("reviewed_by_email", { length: 200 }),
+    reviewedAt: timestamp("reviewed_at"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("bb_team_signup_requests_status_idx").on(t.status, t.createdAt),
+  ],
+);
 
 export const bbPlayers = pgTable(
   "bb_players",
@@ -1323,6 +1354,7 @@ export const bbTeamAdmins = pgTable(
 );
 
 export type BbTeam = typeof bbTeams.$inferSelect;
+export type BbTeamSignupRequest = typeof bbTeamSignupRequests.$inferSelect;
 export type BbPlayer = typeof bbPlayers.$inferSelect;
 export type BbGame = typeof bbGames.$inferSelect;
 export type BbPlayerGame = typeof bbPlayerGame.$inferSelect;

@@ -22,6 +22,7 @@ import Fanatics from "@/pages/Fanatics";
 import AppIndex from "@/pages/AppIndex";
 import TeamPage from "@/pages/TeamPage";
 import TeamStatsLanding from "@/pages/TeamStatsLanding";
+import TeamAdmin from "@/pages/TeamAdmin";
 import AdminInvoices from "@/pages/AdminInvoices";
 import AdminTaxonomyReview from "@/pages/AdminTaxonomyReview";
 import AdminOperations from "@/pages/AdminOperations";
@@ -93,6 +94,7 @@ function Router() {
       <Route path="/d/:slug" component={DealBlastPage} />
 
       {/* Private team stats (password-gated, hidden from nav) */}
+      <Route path="/team-admin" component={TeamAdmin} />
       <Route path="/team/:slug" component={TeamPage} />
 
       {/* Shareable source storefronts (intentionally omitted from navigation) */}

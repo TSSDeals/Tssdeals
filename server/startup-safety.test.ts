@@ -36,6 +36,24 @@ test("deal classification review guards are installed by a structural migration"
   assert.ok(source.indexOf("ADD COLUMN IF NOT EXISTS classification_updated_at", migrationStart) > migrationStart);
 });
 
+test("team signup provisioning schema is installed by an additive structural migration", () => {
+  const source = readFileSync(join(process.cwd(), "server", "startup-migrations.ts"), "utf8");
+  const migrationStart = source.indexOf("...STARTUP_MIGRATION_MANIFEST[18]");
+  assert.ok(migrationStart >= 0);
+  assert.ok(source.indexOf("CREATE TABLE IF NOT EXISTS bb_team_signup_requests", migrationStart) > migrationStart);
+  assert.ok(source.indexOf("ALTER TABLE bb_teams ADD COLUMN IF NOT EXISTS age_group", migrationStart) > migrationStart);
+});
+
+test("team provisioning mutations require owner auth and same-origin requests", () => {
+  const source = readFileSync(join(process.cwd(), "server", "team-stats.ts"), "utf8");
+  assert.match(source, /app\.post\("\/api\/admin\/team-provisioning", requireTssAdmin/);
+  assert.match(source, /app\.patch\("\/api\/admin\/team-signups\/:id", requireTssAdmin/);
+  const provisionRoute = source.indexOf('app.post("/api/admin/team-provisioning"');
+  const dismissRoute = source.indexOf('app.patch("/api/admin/team-signups/:id"');
+  assert.ok(source.indexOf("enforceSameOrigin(req, res)", provisionRoute) > provisionRoute);
+  assert.ok(source.indexOf("enforceSameOrigin(req, res)", dismissRoute) > dismissRoute);
+});
+
 test("restart applies each versioned startup operation once", async () => {
   const applied = new Set<string>();
   let mutationCalls = 0;
