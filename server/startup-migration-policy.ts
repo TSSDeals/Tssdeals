@@ -119,6 +119,12 @@ export const STARTUP_MIGRATION_MANIFEST = [
     kind: "structural",
     description: "Explicit administrator review lock and classification update timestamp for deals",
   },
+  {
+    id: "20260917_019_team_signup_provisioning",
+    checksum: "5b7eb4d946e2a6eb02f75e4476375e720a7eba974597e23421a434fbd38d0d29",
+    kind: "structural",
+    description: "Durable team signup queue and team provisioning metadata",
+  },
 ] as const;
 
 export type ApprovedSeedState = "empty" | "satisfied" | "partial";

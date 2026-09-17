@@ -19,6 +19,7 @@ import {
   bbTeamFielding,
   bbCoachPollResponses,
   bbTeamAdmins,
+  bbTeamSignupRequests,
   type BbTeam,
   type BbPlayer,
   type BbGame,
@@ -27,6 +28,7 @@ import {
   type BbCoachPollResponse,
   type BbTeamAdmin,
 } from "@shared/schema";
+import { buildTeamCopyPlan } from "./team-provisioning";
 
 const defaultTeamStatsDatabase = db;
 
@@ -74,6 +76,33 @@ export async function ensureTeamStatsSchema(database?: any): Promise<void> {
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     )
   `));
+  await db.execute(dsql.raw(`ALTER TABLE bb_teams ADD COLUMN IF NOT EXISTS age_group VARCHAR(40)`));
+  await db.execute(dsql.raw(`ALTER TABLE bb_teams ADD COLUMN IF NOT EXISTS head_coach VARCHAR(120)`));
+  await db.execute(dsql.raw(`ALTER TABLE bb_teams ADD COLUMN IF NOT EXISTS city VARCHAR(80)`));
+  await db.execute(dsql.raw(`ALTER TABLE bb_teams ADD COLUMN IF NOT EXISTS state VARCHAR(40)`));
+  await db.execute(dsql.raw(`
+    CREATE TABLE IF NOT EXISTS bb_team_signup_requests (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      team_name VARCHAR(120) NOT NULL,
+      head_coach VARCHAR(120) NOT NULL,
+      administrator VARCHAR(120),
+      season VARCHAR(60),
+      age_group VARCHAR(40),
+      city VARCHAR(80),
+      state VARCHAR(40),
+      contact_name VARCHAR(120) NOT NULL,
+      contact_email VARCHAR(200) NOT NULL,
+      contact_phone VARCHAR(40) NOT NULL,
+      address VARCHAR(240),
+      notes TEXT,
+      status VARCHAR(20) NOT NULL DEFAULT 'pending',
+      fulfilled_team_id VARCHAR REFERENCES bb_teams(id) ON DELETE SET NULL,
+      reviewed_by_email VARCHAR(200),
+      reviewed_at TIMESTAMP,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )
+  `));
+  await db.execute(dsql.raw(`CREATE INDEX IF NOT EXISTS bb_team_signup_requests_status_idx ON bb_team_signup_requests(status, created_at)`));
   await db.execute(dsql.raw(`CREATE INDEX IF NOT EXISTS bb_players_team_idx ON bb_players(team_id)`));
   await db.execute(dsql.raw(`
     CREATE TABLE IF NOT EXISTS bb_games (
@@ -1646,6 +1675,200 @@ export function registerTeamStatsRoutes(app: Express): void {
     next();
   };
 
+  const requireTssAdmin: RequestHandler = (req, res, next) => {
+    if (!req.isAuthenticated || !req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    if (!isTssAdmin(req as any)) return res.status(403).json({ message: "Admin only" });
+    next();
+  };
+
+  // ---- TSS administrator: signup review + atomic team provisioning ----
+  app.get("/api/admin/team-provisioning", requireTssAdmin, async (_req, res) => {
+    const [requests, teams, games, playerCounts, playerFieldingCounts, teamFieldingCounts] = await Promise.all([
+      db.select().from(bbTeamSignupRequests).orderBy(desc(bbTeamSignupRequests.createdAt)),
+      db.select().from(bbTeams).orderBy(asc(bbTeams.name)),
+      db.select().from(bbGames).orderBy(desc(bbGames.gameDate), desc(bbGames.createdAt)),
+      db.select({ gameId: bbPlayerGame.gameId, count: dsql<number>`count(*)::int` })
+        .from(bbPlayerGame).groupBy(bbPlayerGame.gameId),
+      db.select({ gameId: bbPlayerFielding.gameId, count: dsql<number>`count(*)::int` })
+        .from(bbPlayerFielding).groupBy(bbPlayerFielding.gameId),
+      db.select({ gameId: bbTeamFielding.gameId, count: dsql<number>`count(*)::int` })
+        .from(bbTeamFielding).groupBy(bbTeamFielding.gameId),
+    ]);
+    const toCountMap = (rows: { gameId: string; count: number }[]) =>
+      new Map(rows.map((row) => [row.gameId, Number(row.count)]));
+    const playerCountMap = toCountMap(playerCounts);
+    const playerFieldingCountMap = toCountMap(playerFieldingCounts);
+    const teamFieldingCountMap = toCountMap(teamFieldingCounts);
+
+    res.json({
+      requests,
+      teams: teams.map((team) => ({
+        id: team.id,
+        slug: team.slug,
+        name: team.name,
+        ageGroup: team.ageGroup,
+        season: team.season,
+        games: games.filter((game) => game.teamId === team.id).map((game) => {
+          const playerStatRows = playerCountMap.get(game.id) ?? 0;
+          const playerFieldingRows = playerFieldingCountMap.get(game.id) ?? 0;
+          const teamFieldingRows = teamFieldingCountMap.get(game.id) ?? 0;
+          return {
+            id: game.id,
+            gameDate: game.gameDate,
+            opponent: game.opponent,
+            ourScore: game.ourScore,
+            oppScore: game.oppScore,
+            season: game.season,
+            playerStatRows,
+            playerFieldingRows,
+            teamFieldingRows,
+            hasStats: playerStatRows + playerFieldingRows + teamFieldingRows > 0,
+          };
+        }),
+      })),
+    });
+  });
+
+  const provisionTeamSchema = z.object({
+    requestId: z.string().uuid().optional(),
+    name: z.string().trim().min(1).max(120),
+    slug: z.string().trim().min(2).max(100).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase letters, numbers, and hyphens"),
+    ageGroup: z.string().trim().max(40).optional().default(""),
+    season: z.string().trim().min(1).max(50),
+    password: z.string().min(8).max(128),
+    headCoach: z.string().trim().max(120).optional().default(""),
+    city: z.string().trim().max(80).optional().default(""),
+    state: z.string().trim().max(40).optional().default(""),
+    adminEmail: z.union([z.string().trim().email().max(200), z.literal("")]).optional().default(""),
+    sourceTeamId: z.string().uuid().optional(),
+    sourceSeason: z.string().trim().max(50).optional(),
+    gameIds: z.array(z.string().uuid()).max(100).default([]),
+  }).superRefine((data, ctx) => {
+    if (data.gameIds.length > 0 && (!data.sourceTeamId || !data.sourceSeason)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Source team and season are required when copying games" });
+    }
+  });
+
+  app.post("/api/admin/team-provisioning", requireTssAdmin, async (req, res) => {
+    if (!enforceSameOrigin(req, res)) return;
+    const parsed = provisionTeamSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Invalid team setup" });
+    }
+    const data = parsed.data;
+    try {
+      const result = await db.transaction(async (tx) => {
+        if (data.requestId) {
+          const requestRows = await tx.select().from(bbTeamSignupRequests)
+            .where(eq(bbTeamSignupRequests.id, data.requestId)).limit(1);
+          if (!requestRows[0]) throw Object.assign(new Error("Signup request not found"), { statusCode: 404 });
+          if (requestRows[0].status === "fulfilled") {
+            throw Object.assign(new Error("Signup request has already been fulfilled"), { statusCode: 409 });
+          }
+        }
+
+        const { hash, salt } = await hashPassword(data.password);
+        const teamId = crypto.randomUUID();
+        await tx.insert(bbTeams).values({
+          id: teamId,
+          slug: data.slug,
+          name: data.name,
+          ageGroup: data.ageGroup || null,
+          season: data.season,
+          headCoach: data.headCoach || null,
+          city: data.city || null,
+          state: data.state || null,
+          passwordHash: hash,
+          passwordSalt: salt,
+        });
+
+        let copied = { games: 0, players: 0, playerStats: 0, playerFielding: 0, teamFielding: 0 };
+        if (data.gameIds.length > 0) {
+          const sourceTeamRows = await tx.select().from(bbTeams)
+            .where(eq(bbTeams.id, data.sourceTeamId!)).limit(1);
+          if (!sourceTeamRows[0]) throw Object.assign(new Error("Source team not found"), { statusCode: 404 });
+
+          const sourceGames = await tx.select().from(bbGames).where(inArray(bbGames.id, data.gameIds));
+          const sourcePlayerGames = await tx.select().from(bbPlayerGame)
+            .where(inArray(bbPlayerGame.gameId, data.gameIds));
+          const sourcePlayerFielding = await tx.select().from(bbPlayerFielding)
+            .where(inArray(bbPlayerFielding.gameId, data.gameIds));
+          const sourceTeamFielding = await tx.select().from(bbTeamFielding)
+            .where(inArray(bbTeamFielding.gameId, data.gameIds));
+          const sourcePlayerIds = Array.from(new Set([
+            ...sourcePlayerGames.map((row) => row.playerId),
+            ...sourcePlayerFielding.map((row) => row.playerId),
+          ]));
+          const sourcePlayers = sourcePlayerIds.length > 0
+            ? await tx.select().from(bbPlayers).where(inArray(bbPlayers.id, sourcePlayerIds))
+            : [];
+
+          const plan = buildTeamCopyPlan(teamId, data.season, {
+            sourceTeamId: data.sourceTeamId!,
+            sourceSeason: data.sourceSeason!,
+            selectedGameIds: data.gameIds,
+            games: sourceGames,
+            players: sourcePlayers,
+            playerGames: sourcePlayerGames,
+            playerFielding: sourcePlayerFielding,
+            teamFielding: sourceTeamFielding,
+          });
+          if (plan.players.length > 0) await tx.insert(bbPlayers).values(plan.players as any);
+          if (plan.games.length > 0) await tx.insert(bbGames).values(plan.games as any);
+          if (plan.playerGames.length > 0) await tx.insert(bbPlayerGame).values(plan.playerGames as any);
+          if (plan.playerFielding.length > 0) await tx.insert(bbPlayerFielding).values(plan.playerFielding as any);
+          if (plan.teamFielding.length > 0) await tx.insert(bbTeamFielding).values(plan.teamFielding as any);
+          copied = {
+            games: plan.games.length,
+            players: plan.players.length,
+            playerStats: plan.playerGames.length,
+            playerFielding: plan.playerFielding.length,
+            teamFielding: plan.teamFielding.length,
+          };
+        }
+
+        if (data.adminEmail) {
+          await tx.insert(bbTeamAdmins).values({
+            teamId,
+            email: data.adminEmail.toLowerCase(),
+            grantedByEmail: getReqEmail(req as any),
+          });
+        }
+        if (data.requestId) {
+          await tx.update(bbTeamSignupRequests).set({
+            status: "fulfilled",
+            fulfilledTeamId: teamId,
+            reviewedByEmail: getReqEmail(req as any),
+            reviewedAt: new Date(),
+          }).where(eq(bbTeamSignupRequests.id, data.requestId));
+        }
+        return { team: { id: teamId, slug: data.slug, name: data.name, season: data.season }, copied };
+      });
+      res.status(201).json(result);
+    } catch (error: any) {
+      if (error?.code === "23505") return res.status(409).json({ message: "That team slug or administrator already exists" });
+      const status = Number(error?.statusCode) || 500;
+      console.error("[team-provisioning] Could not create team:", error);
+      res.status(status).json({ message: status === 500 ? "Could not create team" : error.message });
+    }
+  });
+
+  app.patch("/api/admin/team-signups/:id", requireTssAdmin, async (req, res) => {
+    if (!enforceSameOrigin(req, res)) return;
+    const parsed = z.object({ status: z.enum(["pending", "dismissed"]) }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Invalid request status" });
+    const requestId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const rows = await db.update(bbTeamSignupRequests).set({
+      status: parsed.data.status,
+      reviewedByEmail: getReqEmail(req as any),
+      reviewedAt: new Date(),
+    }).where(eq(bbTeamSignupRequests.id, requestId)).returning({ id: bbTeamSignupRequests.id });
+    if (!rows[0]) return res.status(404).json({ message: "Signup request not found" });
+    res.json({ ok: true });
+  });
+
   // ---- Public-ish (after password): meta + auth -----
   app.get("/api/team/:slug/meta", async (req, res) => {
     const team = await getTeamBySlug(req.params.slug);
@@ -1692,11 +1915,9 @@ export function registerTeamStatsRoutes(app: Express): void {
     res.json({ teams: rows });
   });
 
-  // Public: "Add Your Team" signup form. Fires an email to justin@twinseamsports.com
-  // via SendGrid so leads land in his inbox. Rate-limited per IP to deter spam,
-  // and a hidden honeypot field traps simple bots. We deliberately don't store
-  // these submissions in the DB — Justin handles them by hand and adds a team
-  // record once he's spoken with the lead.
+  // Public: "Add Your Team" signup form. Requests are persisted for the admin
+  // fulfillment queue, then an email notification is attempted. Rate limiting
+  // and the hidden honeypot remain in place to deter spam.
   const teamSignupSchema = z.object({
     teamName: z.string().trim().min(1, "Team name required").max(120),
     headCoach: z.string().trim().min(1, "Head coach required").max(120),
@@ -1770,6 +1991,20 @@ export function registerTeamStatsRoutes(app: Express): void {
         message: "We've already received a recent signup with this email. Please wait a few minutes before trying again.",
       });
     }
+    await db.insert(bbTeamSignupRequests).values({
+      teamName: d.teamName,
+      headCoach: d.headCoach,
+      administrator: d.administrator || null,
+      season: d.season || null,
+      ageGroup: d.ageGroup || null,
+      city: d.city || null,
+      state: d.state || null,
+      contactName: d.contactName,
+      contactEmail: d.contactEmail.toLowerCase(),
+      contactPhone: d.contactPhone,
+      address: d.address || null,
+      notes: d.notes || null,
+    });
     const rows: [string, string][] = [
       ["Team Name", d.teamName],
       ["Head Coach", d.headCoach],
@@ -1801,7 +2036,7 @@ export function registerTeamStatsRoutes(app: Express): void {
       </div>
     `;
     if (!process.env.SENDGRID_API_KEY) {
-      console.log("[team-signup] SendGrid not configured. Payload:\n" + textBody);
+      console.log("[team-signup] Request saved; SendGrid not configured. Payload:\n" + textBody);
       return res.json({ ok: true, dev: true });
     }
     try {
@@ -1817,7 +2052,9 @@ export function registerTeamStatsRoutes(app: Express): void {
       res.json({ ok: true });
     } catch (err) {
       console.error("[team-signup] SendGrid error:", err);
-      res.status(500).json({ message: "Could not send signup. Please email justin@twinseamsports.com directly." });
+      // The durable admin request is the source of truth; a notification outage
+      // must not make the submitter retry and create duplicate requests.
+      res.json({ ok: true, notificationPending: true });
     }
   });
 
